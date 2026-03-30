@@ -1715,12 +1715,17 @@ function rPagar(){
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''} — Total: ${fmtR(total)} | Pago: ${fmtR(paid)}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
     ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.arrowOut}</div><h3>Nenhum lançamento registrado</h3><p>Cadastre seus pagamentos</p><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div>`:`
-    <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Descrição</th><th>Fornecedor</th><th>Tipo</th><th>Vencimento</th><th>Valor</th><th>Parcelas</th><th>Status</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td>${fmtD(i.vencimento)}</td><td><strong>${fmtR(i.valor)}</strong></td><td>${i.parcelado==='sim'?(i.parcela||'1')+'/'+( i.totalParcelas||'1'):'À vista'}</td><td><span class="badge ${i.status==='pago'?'badge-oliva':'badge-rose'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':'Pendente'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+    <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Descrição</th><th>Fornecedor</th><th>Tipo</th><th>Vencimento</th><th>Valor</th><th>Detalhes</th><th>Status</th><th></th></tr></thead><tbody>${items.map(i=>{
+      let detalhes='À vista';
+      if(i.parcelado==='sim') detalhes=(i.parcela||'1')+'/'+(i.totalParcelas||'1');
+      if(i.recorrente&&i.recorrente!=='nao') detalhes=({mensal:'Mensal',semanal:'Semanal',personalizado:'Recorrente'})[i.recorrente]||detalhes;
+      return `<tr><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td>${fmtD(i.vencimento)}</td><td><strong>${fmtR(i.valor)}</strong></td><td><span style="font-size:11px;color:var(--text-muted)">${detalhes}</span></td><td><span class="badge ${i.status==='pago'?'badge-oliva':'badge-rose'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':'Pendente'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;
+    }).join('')}</tbody></table></div></div>`}`;
 }
 
 function openPagarModal(id){
   const items=DB.get('pagar');const suppliers=DB.get('suppliers');const types=getPagTypes();
-  const p=id?items.find(x=>x.id===id):{id:'',descricao:'',fornecedor:'',tipo:'',vencimento:'',valor:'',parcelado:'nao',parcela:'',totalParcelas:'',status:'pendente',obs:''};
+  const p=id?items.find(x=>x.id===id):{id:'',descricao:'',fornecedor:'',tipo:'',vencimento:'',valor:'',parcelado:'nao',parcela:'',totalParcelas:'',recorrente:'nao',recorrDias:'',status:'pendente',obs:''};
   openModal(id?'Editar Lançamento':'Novo Lançamento',`
     <div class="form-group"><label class="form-label">Descrição</label><input class="form-input" id="pgDesc" value="${p.descricao}" placeholder="Ex: Compra de embalagens"></div>
     <div class="form-row form-row-2">
@@ -1731,36 +1736,104 @@ function openPagarModal(id){
     </div>
     <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
       <div class="form-group"><label class="form-label">Vencimento</label><input class="form-input" id="pgVenc" type="date" value="${p.vencimento||''}"></div>
-      <div class="form-group"><label class="form-label">Valor Total (R$)</label><input class="form-input" id="pgVal" type="number" step="0.01" value="${p.valor||''}" placeholder="0.00"></div>
-      <div class="form-group"><label class="form-label">Parcelado?</label><select class="form-select" id="pgParc" onchange="toggleParcFields()"><option value="nao" ${p.parcelado!=='sim'?'selected':''}>Não</option><option value="sim" ${p.parcelado==='sim'?'selected':''}>Sim</option></select></div>
+      <div class="form-group"><label class="form-label">Valor ${id?'':'(total se parcelado)'} (R$)</label><input class="form-input" id="pgVal" type="number" step="0.01" value="${p.valor||''}" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Parcelado?</label><select class="form-select" id="pgParc" onchange="togglePagExtras()"><option value="nao" ${p.parcelado!=='sim'?'selected':''}>Não</option><option value="sim" ${p.parcelado==='sim'?'selected':''}>Sim</option></select></div>
     </div>
     <div id="parcFields" style="display:${p.parcelado==='sim'?'grid':'none'}" class="form-row form-row-2">
-      <div class="form-group"><label class="form-label">Parcela atual</label><input class="form-input" id="pgParcN" type="number" value="${p.parcela||''}" placeholder="1"></div>
       <div class="form-group"><label class="form-label">Total de parcelas</label><input class="form-input" id="pgParcT" type="number" value="${p.totalParcelas||''}" placeholder="3"></div>
+      <div class="form-group"><label class="form-label">Valor por parcela</label><div class="form-input" id="pgParcVal" style="background:var(--bg-warm);color:var(--oliva);font-weight:600">—</div></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr;margin-top:4px">
+      <div class="form-group"><label class="form-label">Recorrente?</label><select class="form-select" id="pgRecorr" onchange="togglePagExtras()"><option value="nao" ${p.recorrente!=='mensal'&&p.recorrente!=='semanal'&&p.recorrente!=='personalizado'?'selected':''}>Não</option><option value="mensal" ${p.recorrente==='mensal'?'selected':''}>Mensal</option><option value="semanal" ${p.recorrente==='semanal'?'selected':''}>Semanal</option><option value="personalizado" ${p.recorrente==='personalizado'?'selected':''}>Personalizado</option></select></div>
+      <div class="form-group" id="recorrDiasField" style="display:${p.recorrente==='personalizado'?'block':'none'}"><label class="form-label">A cada quantos dias?</label><input class="form-input" id="pgRecorrDias" type="number" value="${p.recorrDias||''}" placeholder="15"></div>
     </div>
     <div class="form-group"><label class="form-label">Observações</label><input class="form-input" id="pgObs" value="${p.obs||''}" placeholder="Opcional"></div>
   `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delPagar('${p.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePagar('${p.id||''}')">Salvar</button>`);
+  togglePagExtras();
+  // Auto-calculate parcela value
+  const calcParcVal=()=>{
+    const total=parseFloat(document.getElementById('pgVal')?.value)||0;
+    const n=parseInt(document.getElementById('pgParcT')?.value)||1;
+    const el=document.getElementById('pgParcVal');
+    if(el&&document.getElementById('pgParc').value==='sim') el.textContent=fmtR(total/n)+' /parcela';
+  };
+  document.getElementById('pgVal')?.addEventListener('input',calcParcVal);
+  document.getElementById('pgParcT')?.addEventListener('input',calcParcVal);
+  calcParcVal();
 }
 
-function toggleParcFields(){document.getElementById('parcFields').style.display=document.getElementById('pgParc').value==='sim'?'grid':'none';}
-
-function searchSupplier(q){
-  const list=document.getElementById('pgFornList');
-  if(!q){list.style.display='none';return;}
-  const sups=DB.get('suppliers').filter(s=>s.name.toLowerCase().includes(q.toLowerCase()));
-  if(sups.length===0){list.style.display='none';return;}
-  list.style.display='block';
-  list.innerHTML=sups.map(s=>`<div style="padding:8px 12px;cursor:pointer;font-size:13px;transition:background 0.15s" onmouseover="this.style.background='var(--bg-warm)'" onmouseout="this.style.background=''" onclick="document.getElementById('pgForn').value='${s.name}';document.getElementById('pgFornList').style.display='none'">${s.name}</div>`).join('');
+function togglePagExtras(){
+  const parc=document.getElementById('pgParc').value;
+  const recorr=document.getElementById('pgRecorr').value;
+  document.getElementById('parcFields').style.display=parc==='sim'?'grid':'none';
+  document.getElementById('recorrDiasField').style.display=recorr==='personalizado'?'block':'none';
+  // Parcelado e recorrente são mutuamente exclusivos
+  if(parc==='sim'){document.getElementById('pgRecorr').value='nao';document.getElementById('recorrDiasField').style.display='none';}
+  if(recorr!=='nao'){document.getElementById('pgParc').value='nao';document.getElementById('parcFields').style.display='none';}
 }
-// Close supplier dropdown on outside click
-document.addEventListener('click',e=>{const l=document.getElementById('pgFornList');if(l&&!e.target.closest('#pgForn')&&!e.target.closest('#pgFornList'))l.style.display='none';});
+
+function addMonths(dateStr,months){
+  const d=new Date(dateStr+'T12:00:00');
+  d.setMonth(d.getMonth()+months);
+  return d.toISOString().split('T')[0];
+}
+function addDays(dateStr,days){
+  const d=new Date(dateStr+'T12:00:00');
+  d.setDate(d.getDate()+days);
+  return d.toISOString().split('T')[0];
+}
 
 function savePagar(id){
   const items=DB.get('pagar');
-  const d={id:id||uid(),descricao:document.getElementById('pgDesc').value,fornecedor:document.getElementById('pgForn').value,tipo:document.getElementById('pgTipo').value,vencimento:document.getElementById('pgVenc').value,valor:document.getElementById('pgVal').value,parcelado:document.getElementById('pgParc').value,parcela:document.getElementById('pgParcN')?.value||'',totalParcelas:document.getElementById('pgParcT')?.value||'',obs:document.getElementById('pgObs').value,status:id?(items.find(x=>x.id===id)?.status||'pendente'):'pendente'};
-  if(!d.descricao){toast('Preencha a descrição');return;}
-  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
-  DB.set('pagar',items);closeModal();rPagar();toast(id?'Atualizado':'Cadastrado');
+  const desc=document.getElementById('pgDesc').value;
+  const forn=document.getElementById('pgForn').value;
+  const tipo=document.getElementById('pgTipo').value;
+  const venc=document.getElementById('pgVenc').value;
+  const valorTotal=document.getElementById('pgVal').value;
+  const parc=document.getElementById('pgParc').value;
+  const totalParcelas=parseInt(document.getElementById('pgParcT')?.value)||1;
+  const recorr=document.getElementById('pgRecorr').value;
+  const recorrDias=document.getElementById('pgRecorrDias')?.value||'';
+  const obs=document.getElementById('pgObs').value;
+
+  if(!desc){toast('Preencha a descrição');return;}
+  if(!venc){toast('Preencha o vencimento');return;}
+
+  if(id){
+    // Editing existing: update only this item
+    const i=items.findIndex(x=>x.id===id);
+    if(i>=0) items[i]={...items[i],descricao:desc,fornecedor:forn,tipo:tipo,vencimento:venc,valor:valorTotal,parcelado:parc,totalParcelas:String(totalParcelas),recorrente:recorr,recorrDias:recorrDias,obs:obs};
+    DB.set('pagar',items);closeModal();rPagar();toast('Atualizado');
+    return;
+  }
+
+  // New entry: handle parcelas and recurrence
+  if(parc==='sim'&&totalParcelas>1){
+    // Generate one entry per installment
+    const valorParcela=(parseFloat(valorTotal)/totalParcelas).toFixed(2);
+    for(let p=1;p<=totalParcelas;p++){
+      const parcVenc=addMonths(venc,p-1);
+      items.push({id:uid(),descricao:desc+(totalParcelas>1?' ('+p+'/'+totalParcelas+')':''),fornecedor:forn,tipo:tipo,vencimento:parcVenc,valor:valorParcela,parcelado:'sim',parcela:String(p),totalParcelas:String(totalParcelas),recorrente:'nao',recorrDias:'',obs:obs,status:'pendente'});
+    }
+    DB.set('pagar',items);closeModal();rPagar();toast(totalParcelas+' parcelas geradas');
+  } else if(recorr!=='nao'){
+    // Generate recurring entries (12 months for mensal, 12 weeks for semanal, or custom)
+    let count=12;
+    let addFn;
+    if(recorr==='mensal'){addFn=(d,i)=>addMonths(d,i);}
+    else if(recorr==='semanal'){addFn=(d,i)=>addDays(d,i*7);count=12;}
+    else{const dias=parseInt(recorrDias)||30;addFn=(d,i)=>addDays(d,i*dias);count=12;}
+
+    for(let r=0;r<count;r++){
+      const recVenc=addFn(venc,r);
+      items.push({id:uid(),descricao:desc,fornecedor:forn,tipo:tipo,vencimento:recVenc,valor:valorTotal,parcelado:'nao',parcela:'',totalParcelas:'',recorrente:recorr,recorrDias:recorrDias,obs:obs+(r===0?'':' (recorrência '+(r+1)+'/'+count+')'),status:'pendente'});
+    }
+    DB.set('pagar',items);closeModal();rPagar();toast(count+' lançamentos recorrentes gerados');
+  } else {
+    // Single entry
+    items.push({id:uid(),descricao:desc,fornecedor:forn,tipo:tipo,vencimento:venc,valor:valorTotal,parcelado:'nao',parcela:'',totalParcelas:'',recorrente:'nao',recorrDias:'',obs:obs,status:'pendente'});
+    DB.set('pagar',items);closeModal();rPagar();toast('Cadastrado');
+  }
 }
 function togglePagar(id){const items=DB.get('pagar');const i=items.find(x=>x.id===id);if(i)i.status=i.status==='pago'?'pendente':'pago';DB.set('pagar',items);rPagar();}
 function delPagar(id){if(!confirm('Excluir lançamento?'))return;DB.set('pagar',DB.get('pagar').filter(x=>x.id!==id));rPagar();toast('Excluído');}
