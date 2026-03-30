@@ -806,15 +806,22 @@ const TYPES=['Hidratante Corporal','Manteiga Corporal','Esfoliante Corporal','Le
 
 // ========== DASHBOARD ==========
 function rDash(){
-  const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots');
+  const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots'),pagar=DB.get('pagar');
   const today=new Date(),todayStr=today.toISOString().split('T')[0];
   const y=S.calY,m=S.calM,fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),dip=new Date(y,m,0).getDate();
   let cal='';
   for(let i=fd-1;i>=0;i--)cal+=`<div class="cal-day other-month">${dip-i}</div>`;
   for(let d=1;d<=dim;d++){
+    const dt=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isT=d===today.getDate()&&m===today.getMonth()&&y===today.getFullYear();
-    const hasE=lots.some(l=>{const ld=new Date(l.date);return ld.getDate()===d&&ld.getMonth()===m&&ld.getFullYear()===y;});
-    cal+=`<div class="cal-day ${isT?'today':''} ${hasE?'has-event':''}">${d}</div>`;
+    const hasLot=lots.some(l=>l.date===dt);
+    const hasPag=pagar.some(p=>p.vencimento===dt&&p.status!=='pago');
+    const hasPagPaid=pagar.some(p=>p.vencimento===dt&&p.status==='pago');
+    let dots='';
+    if(hasPag) dots+=`<span style="width:5px;height:5px;border-radius:50%;background:var(--rosa-antigo)"></span>`;
+    if(hasPagPaid) dots+=`<span style="width:5px;height:5px;border-radius:50%;background:var(--oliva)"></span>`;
+    if(hasLot) dots+=`<span style="width:5px;height:5px;border-radius:50%;background:var(--lavanda)"></span>`;
+    cal+=`<div class="cal-day ${isT?'today':''}" style="position:relative">${d}${dots?`<div style="display:flex;gap:2px;justify-content:center;margin-top:2px">${dots}</div>`:''}</div>`;
   }
   const rem=(7-(fd+dim)%7)%7;
   for(let i=1;i<=rem;i++)cal+=`<div class="cal-day other-month">${i}</div>`;
@@ -858,6 +865,11 @@ function rDash(){
         <div class="cal-container anim d2">
           <div class="cal-header"><h3>${MO[m]} ${y}</h3><div class="cal-nav"><button onclick="S.calM--;if(S.calM<0){S.calM=11;S.calY--;}rDash()">${I.chevL}</button><button onclick="S.calM++;if(S.calM>11){S.calM=0;S.calY++;}rDash()">${I.chevR}</button></div></div>
           <div class="cal-grid">${DA.map(d=>`<div class="cal-day-name">${d}</div>`).join('')}${cal}</div>
+          <div style="display:flex;gap:14px;margin-top:12px;font-size:10px;color:var(--text-muted)">
+            <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--rosa-antigo)"></span> Pgto pendente</div>
+            <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--oliva)"></span> Pgto pago</div>
+            <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--lavanda)"></span> Lote</div>
+          </div>
         </div>
         ${ (()=>{
           const stock=DB.get('stockmp');const formulas=DB.get('formulas');
