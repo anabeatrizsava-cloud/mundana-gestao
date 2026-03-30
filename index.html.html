@@ -597,7 +597,8 @@ async function sbFetch(path,opts={}){
 const DB={
   get(k){try{return JSON.parse(localStorage.getItem('mundana_'+k))||[];}catch{return[];}},
   set(k,d){
-    localStorage.setItem('mundana_'+k,JSON.stringify(d));
+    try{localStorage.setItem('mundana_'+k,JSON.stringify(d));}
+    catch(e){console.warn('localStorage full for',k,', syncing to Supabase only');}
     DB._syncToSupabase(k,d);
   },
   async _syncToSupabase(k,data){
@@ -638,30 +639,30 @@ async function loadFromSupabase(){
     for(const[k,map] of Object.entries(TABLE_MAP)){
       if(map.isJsonStore){
         const rows=await sbFetch('app_data?key=eq.'+k+'&select=value');
-        if(rows&&rows[0]&&rows[0].value){
-          localStorage.setItem('mundana_'+k,JSON.stringify(rows[0].value));
+        if(rows&&Array.isArray(rows)&&rows[0]&&rows[0].value){
+          try{localStorage.setItem('mundana_'+k,JSON.stringify(rows[0].value));}catch(e){}
         }
       } else {
         const rows=await sbFetch(map.table+'?select=*');
-        if(rows&&rows.length>0){
+        if(rows&&Array.isArray(rows)&&rows.length>0){
           const data=map.fromRow?rows.map(map.fromRow):rows;
-          localStorage.setItem('mundana_'+k,JSON.stringify(data));
+          try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
         }
       }
     }
     // Load simple array tables
     for(const k of SIMPLE_ARRAY_TABLES){
       const rows=await sbFetch(k+'?select=name');
-      if(rows&&rows.length>0){
-        localStorage.setItem('mundana_'+k,JSON.stringify(rows.map(r=>r.name)));
+      if(rows&&Array.isArray(rows)&&rows.length>0){
+        try{localStorage.setItem('mundana_'+k,JSON.stringify(rows.map(r=>r.name)));}catch(e){}
       }
     }
     // Load app_data entries (config, empresa, pricing_lines, alerts_read, etc)
     const appRows=await sbFetch('app_data?select=key,value');
-    if(appRows){
+    if(appRows&&Array.isArray(appRows)){
       appRows.forEach(r=>{
         if(!TABLE_MAP[r.key]){
-          localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));
+          try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));}catch(e){}
         }
       });
     }
@@ -920,7 +921,29 @@ function openProdModal(id){
     <div class="form-group"><label class="form-label">Pasta</label><select class="form-select" id="pF"><option value="">Sem pasta</option>${folders.map(f=>`<option value="${f.id}" ${p.folder===f.id?'selected':''}>${f.name}</option>`).join('')}</select></div>
   `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delProd('${p.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveProd('${p.id||''}')">Salvar</button>`);
 }
-function handlePh(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{tmpPhoto=ev.target.result;document.getElementById('phPrev').innerHTML=`<img src="${tmpPhoto}"><input type="file" id="phIn" accept="image/*" onchange="handlePh(event)">`};r.readAsDataURL(f);}
+// ========== IMAGE COMPRESSION ==========
+function compressImage(dataUrl,maxW,quality,cb){
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement('canvas');
+    let w=img.width,h=img.height;
+    if(w>maxW){h=h*(maxW/w);w=maxW;}
+    c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',quality));
+  };
+  img.src=dataUrl;
+}
+
+function handlePh(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{
+  const raw=ev.target.result;
+  if(f.type.startsWith('image/')){
+    compressImage(raw,400,0.7,compressed=>{
+      tmpPhoto=compressed;
+      document.getElementById('phPrev').innerHTML=`<img src="${tmpPhoto}"><input type="file" id="phIn" accept="image/*" onchange="handlePh(event)">`;
+    });
+  } else { tmpPhoto=raw; document.getElementById('phPrev').innerHTML=`<img src="${tmpPhoto}"><input type="file" id="phIn" accept="image/*" onchange="handlePh(event)">`; }
+};r.readAsDataURL(f);}
 function saveProd(id){const prods=DB.get('products');const d={id:id||uid(),name:document.getElementById('pN').value,line:document.getElementById('pL').value,type:document.getElementById('pT').value,ml:document.getElementById('pMl').value,price:document.getElementById('pP').value,notes:document.getElementById('pNo').value,description:document.getElementById('pD').value,folder:document.getElementById('pF').value,photo:tmpPhoto};if(!d.name){toast('Preencha o nome do produto');return;}if(id){const i=prods.findIndex(p=>p.id===id);if(i>=0)prods[i]=d;}else prods.push(d);DB.set('products',prods);tmpPhoto='';closeModal();rProds();toast(id?'Produto atualizado':'Produto cadastrado');}
 function delProd(id){if(!confirm('Excluir este produto?'))return;DB.set('products',DB.get('products').filter(p=>p.id!==id));rProds();toast('Produto excluído');}
 function openFolderModal(){const folders=DB.get('product_folders');openModal('Gerenciar Pastas',`<div id="fList">${folders.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f.name}" onchange="updFolder('${f.id}',this.value)" style="flex:1"><button class="remove-btn" onclick="delFolder('${f.id}')">${I.trash}</button></div>`).join('')}</div><div style="display:flex;gap:8px;margin-top:14px"><input class="form-input" id="nfN" placeholder="Nome da nova pasta" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addFolder()">Criar</button></div>`,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');}
@@ -1582,7 +1605,11 @@ function renderEmpresaDados(){
 
 function handleLogo(ev){
   const f=ev.target.files[0];if(!f)return;
-  const r=new FileReader();r.onload=e=>{const d=getEmpresaData();d.logo=e.target.result;setEmpresaData(d);rEmpresa();toast('Logo atualizada');};r.readAsDataURL(f);
+  const r=new FileReader();r.onload=e=>{
+    compressImage(e.target.result,200,0.7,compressed=>{
+      const d=getEmpresaData();d.logo=compressed;setEmpresaData(d);rEmpresa();toast('Logo atualizada');
+    });
+  };r.readAsDataURL(f);
 }
 
 function editEmpresa(){
@@ -1993,7 +2020,11 @@ function openIdeiaModal(id){
   `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delIdeia('${i.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveIdeia('${i.id||''}')">Salvar</button>`,true);
 }
 
-function handleIdeiaAttach(e){const f=e.target.files[0];if(!f)return;window._ideiaAttachName=f.name;const r=new FileReader();r.onload=ev=>{window._ideiaAttach=ev.target.result;const isImg=f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);document.getElementById('idAttArea').innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${isImg?`<img src="${window._ideiaAttach}" style="height:60px;border-radius:6px;margin-right:8px">`:I.file+' '}${f.name}</span><button class="remove-btn" onclick="clearIdeiaAttach()">${I.trash}</button></div>`;};r.readAsDataURL(f);}
+function handleIdeiaAttach(e){const f=e.target.files[0];if(!f)return;window._ideiaAttachName=f.name;const r=new FileReader();r.onload=ev=>{
+  const raw=ev.target.result;const isImg=f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  const done=(data)=>{window._ideiaAttach=data;document.getElementById('idAttArea').innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${isImg?`<img src="${data}" style="height:60px;border-radius:6px;margin-right:8px">`:I.file+' '}${f.name}</span><button class="remove-btn" onclick="clearIdeiaAttach()">${I.trash}</button></div>`;};
+  if(isImg){compressImage(raw,600,0.7,done);}else{done(raw);}
+};r.readAsDataURL(f);}
 function clearIdeiaAttach(){window._ideiaAttach='';window._ideiaAttachName='';document.getElementById('idAttArea').innerHTML=`<div class="photo-upload" onclick="document.getElementById('idAttIn').click()" style="height:80px">${I.camera}<span>Clique para anexar</span><input type="file" id="idAttIn" onchange="handleIdeiaAttach(event)"></div>`;}
 
 function saveIdeia(id){
