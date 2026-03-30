@@ -1,0 +1,2036 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mundana · Sistema de Gestão</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+/* ========== DESIGN TOKENS — Mundana brand palette ========== */
+:root {
+  /* Brand colors from identity manual p.07 */
+  --carvao: #252829;
+  --grafite: #383a37;
+  --oliva: #5c7161;
+  --musgo: #6f8473;
+  --menta: #93a597;
+  --algodao: #ece4d9;
+  --baunilha: #dacdbd;
+  --areia: #c7baae;
+  --sol-ancestral: #be9c60;
+  --luz: #caab78;
+  --rosa-antigo: #b17a7f;
+  --rose: #cca2a6;
+  --espuma: #e1c2c3;
+  --violeta-suave: #998ea2;
+  --lavanda: #b2aec3;
+  --lua: #d8d6dd;
+
+  /* Derived */
+  --rose-pale: #f5e8e9;
+  --oliva-pale: #e8efe9;
+  --lavanda-pale: #edeaf2;
+  --sol-pale: #f5eed8;
+
+  /* Layout */
+  --bg: #f8f5f1;
+  --bg-warm: #f3ede6;
+  --surface: #ffffff;
+  --sidebar-bg: #000000;
+  --sidebar-hover: #141414;
+  --sidebar-active: var(--grafite);
+  --sidebar-text: #8a8a8a;
+  --sidebar-text-active: #ffffff;
+  --text-primary: #252829;
+  --text-secondary: #5a5550;
+  --text-muted: #9a9490;
+  --border: #e8e2da;
+  --border-light: #f0ebe4;
+
+  --shadow-sm: 0 2px 8px rgba(37,40,41,0.04);
+  --shadow-md: 0 4px 16px rgba(37,40,41,0.06);
+  --shadow-lg: 0 8px 32px rgba(37,40,41,0.08);
+  --shadow-card: 0 2px 12px rgba(37,40,41,0.03);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-full: 50px;
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+  --transition-spring: 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  --sidebar-w: 250px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Montserrat', sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== LAYOUT ========== */
+.app { display: flex; height: 100vh; }
+
+/* ========== SIDEBAR ========== */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 10;
+  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+}
+
+.sidebar-brand {
+  padding: 28px 24px 28px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.sidebar-brand h1 {
+  font-size: 22px;
+  letter-spacing: 3px;
+  color: var(--espuma);
+  font-weight: 300;
+  text-transform: lowercase;
+}
+.sidebar-brand span {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: rgba(255,255,255,0.3);
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 12px;
+}
+.sidebar-nav::-webkit-scrollbar { width: 0; }
+
+.nav-module { margin-bottom: 4px; }
+
+.nav-module-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  color: #ffffff;
+  cursor: default;
+  user-select: none;
+}
+.nav-module-header svg {
+  width: 15px; height: 15px; opacity: 0.7;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 14px 9px 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: rgba(255,255,255,0.7);
+  transition: var(--transition);
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+  position: relative;
+}
+.nav-item:hover {
+  background: var(--sidebar-hover);
+  color: #ffffff;
+}
+.nav-item.active {
+  background: rgba(204,162,166,0.1);
+  color: var(--rose);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 20px;
+  background: var(--rose);
+  border-radius: 0 3px 3px 0;
+}
+.nav-item svg {
+  width: 17px; height: 17px; flex-shrink: 0; opacity: 0.55;
+}
+.nav-item.active svg { opacity: 1; color: var(--rose); }
+
+.sidebar-footer {
+  padding: 18px 20px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.sidebar-user { display: flex; align-items: center; gap: 10px; }
+.sidebar-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--rosa-antigo), var(--lavanda));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 13px; font-weight: 700;
+}
+.sidebar-user-info .name { color: #ddd; font-size: 12px; font-weight: 600; }
+.sidebar-user-info .role { color: #666; font-size: 10px; font-weight: 500; }
+
+/* ========== MAIN ========== */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.content { flex: 1; overflow-y: auto; padding: 32px 36px; }
+.content::-webkit-scrollbar { width: 5px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Page header */
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; }
+.page-header-left h2 { font-size: 24px; font-weight: 700; line-height: 1.2; color: var(--carvao); }
+.page-header-left p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.page-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ========== BUTTONS ========== */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px; border-radius: var(--radius-full);
+  border: none; cursor: pointer;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12.5px; font-weight: 600;
+  transition: var(--transition); white-space: nowrap;
+}
+.btn svg { width: 15px; height: 15px; }
+.btn-primary { background: var(--carvao); color: #fff; }
+.btn-primary:hover { background: var(--grafite); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.btn-secondary { background: var(--surface); color: var(--text-secondary); border: 1.5px solid var(--border); }
+.btn-secondary:hover { background: var(--bg-warm); border-color: var(--rosa-antigo); }
+.btn-ghost { background: transparent; color: var(--text-secondary); padding: 9px 12px; }
+.btn-ghost:hover { background: rgba(0,0,0,0.04); }
+.btn-sm { padding: 6px 14px; font-size: 11.5px; }
+.btn-icon {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer;
+  transition: var(--transition); color: var(--text-muted);
+}
+.btn-icon:hover { background: var(--bg-warm); border-color: var(--rosa-antigo); color: var(--rosa-antigo); }
+.btn-icon svg { width: 16px; height: 16px; }
+
+/* ========== CARDS ========== */
+.card {
+  background: var(--surface); border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden;
+}
+.card-header { padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; }
+.card-header h3 { font-size: 14px; font-weight: 700; color: var(--carvao); }
+.card-body { padding: 0 22px 22px; }
+
+/* Stat cards — Mundana colors */
+.stat-card {
+  border-radius: var(--radius-lg); padding: 20px 22px;
+  position: relative; overflow: hidden; transition: var(--transition);
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.stat-card .stat-icon {
+  width: 38px; height: 38px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 14px;
+}
+.stat-card .stat-icon svg { width: 18px; height: 18px; }
+.stat-card .stat-value { font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.stat-card .stat-label { font-size: 11px; font-weight: 600; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .stat-deco { position: absolute; right: -10px; top: -10px; width: 70px; height: 70px; border-radius: 50%; opacity: 0.1; }
+
+.stat-rose { background: #e8a0a6; color: #5a1a20; }
+.stat-rose .stat-icon { background: rgba(90,26,32,0.12); }
+.stat-rose .stat-deco { background: #5a1a20; }
+
+.stat-oliva { background: #7aab82; color: #1a3a1e; }
+.stat-oliva .stat-icon { background: rgba(26,58,30,0.12); }
+.stat-oliva .stat-deco { background: #1a3a1e; }
+
+.stat-lavanda { background: #a68ec4; color: #2e1a4a; }
+.stat-lavanda .stat-icon { background: rgba(46,26,74,0.12); }
+.stat-lavanda .stat-deco { background: #2e1a4a; }
+
+.stat-sol { background: #d4a94e; color: #4a3510; }
+.stat-sol .stat-icon { background: rgba(74,53,16,0.12); }
+.stat-sol .stat-deco { background: #4a3510; }
+
+/* ========== FORMS ========== */
+.form-group { margin-bottom: 18px; }
+.form-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.8px; }
+.form-input, .form-select, .form-textarea {
+  width: 100%; padding: 10px 14px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-family: 'Montserrat', sans-serif; font-size: 13px;
+  color: var(--text-primary); background: var(--surface);
+  transition: var(--transition); outline: none;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--rosa-antigo); box-shadow: 0 0 0 3px rgba(177,122,127,0.1); }
+.form-input::placeholder { color: var(--text-muted); }
+.form-textarea { resize: vertical; min-height: 80px; }
+.form-row { display: grid; gap: 14px; }
+.form-row-2 { grid-template-columns: 1fr 1fr; }
+.form-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+/* ========== TABLE ========== */
+table { width: 100%; border-collapse: collapse; }
+table th { text-align: left; padding: 12px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700; border-bottom: 1.5px solid var(--border); }
+table td { padding: 13px 16px; border-bottom: 1px solid var(--border-light); font-size: 13px; vertical-align: middle; }
+table tr { transition: var(--transition); }
+table tr:hover td { background: var(--bg-warm); }
+
+/* ========== BADGES ========== */
+.badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
+.badge-oliva { background: var(--oliva-pale); color: var(--oliva); }
+.badge-rose { background: var(--rose-pale); color: var(--rosa-antigo); }
+.badge-lavanda { background: var(--lavanda-pale); color: var(--violeta-suave); }
+
+/* ========== MODAL ========== */
+.modal-overlay { position: fixed; inset: 0; background: rgba(37,40,41,0.45); backdrop-filter: blur(6px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal { background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); width: 92%; max-width: 640px; max-height: 85vh; overflow-y: auto; transform: translateY(12px) scale(0.98); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+.modal-overlay.open .modal { transform: translateY(0) scale(1); }
+.modal-wide { max-width: 900px; }
+.modal-header { padding: 22px 26px 18px; display: flex; align-items: center; justify-content: space-between; }
+.modal-header h2 { font-size: 17px; font-weight: 700; }
+.modal-close { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: none; background: var(--bg-warm); cursor: pointer; color: var(--text-muted); border-radius: 50%; transition: var(--transition); }
+.modal-close:hover { background: var(--border); color: var(--text-primary); }
+.modal-close svg { width: 16px; height: 16px; }
+.modal-body { padding: 0 26px 22px; }
+.modal-footer { padding: 16px 26px; border-top: 1.5px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ========== SEARCH ========== */
+.search-box { position: relative; }
+.search-box svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--text-muted); }
+.search-box input { padding-left: 34px; border-radius: var(--radius-full); background: var(--bg-warm); border-color: transparent; }
+.search-box input:focus { background: var(--surface); border-color: var(--rosa-antigo); }
+
+/* ========== GRID ========== */
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+/* ========== PRODUCT CARD ========== */
+.product-card { background: var(--surface); border: 1.5px solid var(--border-light); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: var(--transition); }
+.product-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); border-color: var(--espuma); }
+.product-card-img { height: 170px; background: linear-gradient(135deg, var(--algodao), var(--rose-pale)); display: flex; align-items: center; justify-content: center; color: var(--areia); position: relative; overflow: hidden; }
+.product-card-img img { width: 100%; height: 100%; object-fit: cover; }
+.product-card-img svg { width: 28px; height: 28px; opacity: 0.35; }
+.product-card-body { padding: 16px 18px; }
+.product-card-body .product-line { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 2px; }
+.product-card-body h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px; color: var(--carvao); }
+.product-card-body .product-type { font-size: 12px; color: var(--text-muted); }
+.product-card-body .product-price { font-size: 16px; font-weight: 800; color: var(--oliva); margin-top: 8px; }
+
+/* ========== FOLDER CHIPS ========== */
+.folder-bar { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
+.folder-chip { display: flex; align-items: center; gap: 6px; padding: 7px 16px; border-radius: var(--radius-full); cursor: pointer; transition: var(--transition); font-size: 12px; font-weight: 600; background: var(--surface); border: 1.5px solid var(--border); color: var(--text-secondary); }
+.folder-chip:hover { border-color: var(--rosa-antigo); color: var(--text-primary); }
+.folder-chip.active { background: var(--carvao); color: #fff; border-color: var(--carvao); }
+.folder-chip .count { background: rgba(0,0,0,0.06); padding: 1px 7px; border-radius: 10px; font-size: 10px; }
+.folder-chip.active .count { background: rgba(255,255,255,0.18); }
+
+/* ========== CALENDAR ========== */
+.cal-container { background: var(--surface); border: 1.5px solid var(--border-light); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow-card); }
+.cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.cal-header h3 { font-size: 15px; font-weight: 700; color: var(--carvao); }
+.cal-nav { display: flex; gap: 4px; }
+.cal-nav button { width: 30px; height: 30px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); transition: var(--transition); }
+.cal-nav button:hover { background: var(--bg-warm); border-color: var(--rosa-antigo); }
+.cal-nav button svg { width: 15px; height: 15px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; text-align: center; }
+.cal-day-name { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 6px 0; font-weight: 700; }
+.cal-day { padding: 8px 4px; font-size: 13px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); font-weight: 500; }
+.cal-day:hover { background: var(--bg-warm); }
+.cal-day.today { background: var(--carvao); color: #fff; font-weight: 700; }
+.cal-day.other-month { color: var(--text-muted); opacity: 0.3; }
+.cal-day.has-event::after { content: ''; display: block; margin: 2px auto 0; width: 4px; height: 4px; border-radius: 50%; background: var(--rosa-antigo); }
+
+/* ========== ACTIVITY ========== */
+.activity-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--radius-sm); transition: var(--transition); margin-bottom: 2px; }
+.activity-item:hover { background: var(--bg-warm); }
+.activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.activity-text { font-size: 13px; flex: 1; }
+.activity-time { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+
+/* ========== INGREDIENT ROW ========== */
+.ingredient-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.ingredient-row input { padding: 8px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 12.5px; font-family: 'Montserrat', sans-serif; outline: none; transition: var(--transition); width: 100%; }
+.ingredient-row input:focus { border-color: var(--rosa-antigo); }
+.remove-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer; color: var(--text-muted); border-radius: 50%; transition: var(--transition); }
+.remove-btn:hover { background: var(--rose-pale); color: var(--rosa-antigo); }
+.remove-btn svg { width: 14px; height: 14px; }
+
+/* ========== PRODUCTION ========== */
+.prod-info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.prod-info-card { background: var(--bg-warm); border-radius: var(--radius-md); padding: 18px; text-align: center; }
+.prod-info-card label { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); font-weight: 700; margin-bottom: 6px; }
+.prod-info-card .value { font-size: 24px; font-weight: 800; color: var(--carvao); }
+.production-step { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border-light); }
+.production-step:last-child { border-bottom: none; }
+.step-check { width: 24px; height: 24px; border: 2px solid var(--border); border-radius: 7px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition-spring); margin-top: 1px; }
+.step-check:hover { border-color: var(--oliva); }
+.step-check.checked { background: var(--oliva); border-color: var(--oliva); color: #fff; }
+.step-check svg { display: none; width: 13px; height: 13px; }
+.step-check.checked svg { display: block; }
+.step-content { flex: 1; }
+.step-content .step-num { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 2px; }
+.step-content.done .step-text { text-decoration: line-through; color: var(--text-muted); }
+.progress-bar { width: 100%; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 12px 0; }
+.progress-fill { height: 100%; background: var(--oliva); border-radius: 3px; transition: width 0.5s ease; }
+
+.calc-row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border-light); align-items: center; font-size: 13px; }
+.calc-row:last-child { border-bottom: none; }
+.calc-row .qty { text-align: right; font-weight: 700; color: var(--oliva); }
+.calc-row .pct { text-align: center; color: var(--text-muted); }
+
+.lot-result { background: var(--oliva-pale); border: 1.5px solid var(--oliva); border-radius: var(--radius-xl); padding: 32px; text-align: center; }
+.lot-result .lot-number { font-size: 30px; font-weight: 800; color: var(--oliva); }
+.lot-result .lot-dates { display: flex; justify-content: center; gap: 32px; margin-top: 12px; font-size: 13px; color: var(--musgo); }
+
+/* Formula select */
+.formula-select-card { background: var(--surface); border: 1.5px solid var(--border-light); border-radius: var(--radius-lg); padding: 22px; cursor: pointer; transition: var(--transition); position: relative; overflow: hidden; }
+.formula-select-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, var(--rosa-antigo), var(--lavanda)); opacity: 0; transition: var(--transition); }
+.formula-select-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--espuma); }
+.formula-select-card:hover::before { opacity: 1; }
+.formula-select-card h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px; color: var(--carvao); }
+.formula-select-card .sub { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+
+/* Empty */
+.empty-state { text-align: center; padding: 70px 20px; }
+.empty-state .empty-icon { width: 60px; height: 60px; margin: 0 auto 18px; border-radius: 50%; background: var(--bg-warm); display: flex; align-items: center; justify-content: center; }
+.empty-state .empty-icon svg { width: 26px; height: 26px; color: var(--areia); }
+.empty-state h3 { font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
+.empty-state p { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+
+/* View toggle */
+.view-toggle { display: flex; border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.view-toggle button { padding: 6px 10px; border: none; background: var(--surface); cursor: pointer; color: var(--text-muted); transition: var(--transition); display: flex; align-items: center; justify-content: center; }
+.view-toggle button.active { background: var(--carvao); color: #fff; }
+.view-toggle button svg { width: 14px; height: 14px; }
+
+/* Photo */
+.photo-upload { width: 100%; height: 140px; border: 2px dashed var(--border); border-radius: var(--radius-md); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); color: var(--text-muted); font-size: 12px; position: relative; overflow: hidden; background: var(--bg-warm); }
+.photo-upload:hover { border-color: var(--rosa-antigo); background: var(--rose-pale); }
+.photo-upload img { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+.photo-upload svg { width: 22px; height: 22px; margin-bottom: 6px; opacity: 0.4; }
+.photo-upload input { display: none; }
+
+/* Toast */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--carvao); color: #fff; padding: 13px 22px; border-radius: var(--radius-full); font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); animation: toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.anim { animation: fadeUp 0.35s ease forwards; }
+.d1 { animation-delay: 0.04s; opacity: 0; }
+.d2 { animation-delay: 0.08s; opacity: 0; }
+.d3 { animation-delay: 0.12s; opacity: 0; }
+.d4 { animation-delay: 0.16s; opacity: 0; }
+
+/* TOP BAR */
+.top-bar {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 12px 36px 0; gap: 10px; flex-shrink: 0;
+}
+.alert-btn {
+  position: relative; width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer;
+  transition: var(--transition); color: var(--text-muted);
+}
+.alert-btn:hover { background: var(--bg-warm); border-color: var(--rosa-antigo); color: var(--rosa-antigo); }
+.alert-btn svg { width: 18px; height: 18px; }
+.alert-btn .alert-badge {
+  position: absolute; top: -2px; right: -2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--rosa-antigo); color: #fff;
+  font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--bg);
+}
+.alert-panel {
+  position: absolute; top: 46px; right: 0;
+  width: 340px; background: var(--surface);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); z-index: 50;
+  max-height: 400px; overflow-y: auto;
+  display: none;
+}
+.alert-panel.open { display: block; }
+.alert-panel-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border-light);
+  font-size: 13px; font-weight: 700; color: var(--carvao);
+}
+.alert-item {
+  display: flex; gap: 10px; padding: 12px 18px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 12px; align-items: flex-start;
+}
+.alert-item:last-child { border-bottom: none; }
+.alert-item .alert-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 4px;
+}
+.alert-item .alert-text { flex: 1; color: var(--text-secondary); line-height: 1.5; }
+.alert-item .alert-text strong { color: var(--carvao); }
+
+/* USER CARD (Empresa) */
+.empresa-card {
+  background: var(--surface); border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-lg); padding: 28px;
+  box-shadow: var(--shadow-card);
+}
+.empresa-logo {
+  width: 80px; height: 80px; border-radius: var(--radius-md);
+  background: var(--bg-warm); display: flex; align-items: center; justify-content: center;
+  overflow: hidden; cursor: pointer; transition: var(--transition);
+  border: 2px dashed var(--border); position: relative;
+}
+.empresa-logo:hover { border-color: var(--rosa-antigo); }
+.empresa-logo img { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+.empresa-logo svg { width: 28px; height: 28px; color: var(--areia); }
+.empresa-logo input { display: none; }
+
+/* Tab bar reusable */
+.tab-bar {
+  display: flex; gap: 2px; border-bottom: 1.5px solid var(--border); margin-bottom: 22px;
+}
+.tab-item {
+  padding: 9px 18px; font-size: 13px; cursor: pointer;
+  font-weight: 500; color: var(--text-muted);
+  border-bottom: 2px solid transparent; transition: var(--transition);
+}
+.tab-item.active { font-weight: 700; color: var(--rosa-antigo); border-bottom-color: var(--rosa-antigo); }
+.tab-item:hover { color: var(--text-secondary); }
+
+/* User role badges */
+.role-admin { background: var(--rose-pale); color: var(--rosa-antigo); }
+.role-viewer { background: var(--oliva-pale); color: var(--oliva); }
+.role-editor { background: var(--lavanda-pale); color: var(--violeta-suave); }
+
+@media (max-width: 900px) { .sidebar { display: none; } .content { padding: 20px 16px; } .top-bar { padding: 10px 16px 0; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand"><h1>mundana</h1><span>sistema de gestão</span></div>
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
+    <div class="sidebar-footer"><div class="sidebar-user"><div class="sidebar-avatar">A</div><div class="sidebar-user-info"><div class="name">Ana</div><div class="role">Administradora</div></div></div></div>
+  </aside>
+  <div class="main">
+    <div class="top-bar" id="topBar"></div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-header"><h2 id="modalTitle"></h2><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ========== SUPABASE CONFIG ==========
+const SUPABASE_URL='https://ffutgdqhmtjmooayxyxr.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmdXRnZHFobXRqbW9vYXl4eXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwMzEyNDYsImV4cCI6MjA4OTYwNzI0Nn0.reSkQscPVXQ5ntfKzgANrpe1LhtY7oFnq5i7QVAbZuI';
+
+// Table mapping: localStorage key -> supabase table + column mapping
+const TABLE_MAP={
+  products:{table:'products',cols:['id','name','line','type','ml','description','notes','price','photo','folder']},
+  product_folders:{table:'product_folders',cols:['id','name']},
+  formulas:{table:'formulas',cols:['id','name'],isJsonStore:true},
+  lots:{table:'lots',cols:['id','lot_number','formula_id','formula_name','quantity','date','validity','status'],
+    toRow:r=>({id:r.id,lot_number:r.lotNumber,formula_id:r.formulaId,formula_name:r.formulaName,quantity:r.quantity,date:r.date,validity:r.validity,status:r.status}),
+    fromRow:r=>({id:r.id,lotNumber:r.lot_number,formulaId:r.formula_id,formulaName:r.formula_name,quantity:r.quantity,date:r.date,validity:r.validity,status:r.status})},
+  stockmp:{table:'stockmp',cols:['id','name','supplier','purchase_date','quantity','unit','price','supplier_link'],
+    toRow:r=>({id:r.id,name:r.name,supplier:r.supplier,purchase_date:r.purchaseDate,quantity:r.quantity,unit:r.unit,price:r.price,supplier_link:r.supplierLink}),
+    fromRow:r=>({id:r.id,name:r.name,supplier:r.supplier,purchaseDate:r.purchase_date,quantity:r.quantity,unit:r.unit,price:r.price,supplierLink:r.supplier_link})},
+  fixed_costs:{table:'fixed_costs',cols:['id','name','value','obs']},
+  suppliers:{table:'suppliers',cols:['id','name','phone','email','site','doc','doc_name'],
+    toRow:r=>({id:r.id,name:r.name,phone:r.phone,email:r.email,site:r.site,doc:r.doc,doc_name:r.docName}),
+    fromRow:r=>({id:r.id,name:r.name,phone:r.phone,email:r.email,site:r.site,doc:r.doc,docName:r.doc_name})},
+  receber:{table:'receber',cols:['id','descricao','cliente','vencimento','valor','obs','status']},
+  pagar:{table:'pagar',cols:['id','descricao','fornecedor','tipo','vencimento','valor','parcelado','parcela','total_parcelas','obs','status'],
+    toRow:r=>({id:r.id,descricao:r.descricao,fornecedor:r.fornecedor,tipo:r.tipo,vencimento:r.vencimento,valor:r.valor,parcelado:r.parcelado,parcela:r.parcela,total_parcelas:r.totalParcelas,obs:r.obs,status:r.status}),
+    fromRow:r=>({id:r.id,descricao:r.descricao,fornecedor:r.fornecedor,tipo:r.tipo,vencimento:r.vencimento,valor:r.valor,parcelado:r.parcelado,parcela:r.parcela,totalParcelas:r.total_parcelas,obs:r.obs,status:r.status})},
+  ideias:{table:'ideias',cols:['id','titulo'],isJsonStore:true},
+  ideia_folders:{table:'ideia_folders',cols:['id','name']},
+  mydocs:{table:'mydocs',cols:['id','name'],isJsonStore:true},
+  doc_folders:{table:'doc_folders',cols:['id','name']},
+  empresa_users:{table:'empresa_users',cols:['id','name','email','role']},
+  empresa_docs:{table:'empresa_docs',cols:['id','name'],isJsonStore:true},
+};
+
+// Simple tables that store as name-only arrays
+const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types'];
+
+// Supabase REST helper
+async function sbFetch(path,opts={}){
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':opts.prefer||'return=minimal',...(opts.headers||{})},
+    method:opts.method||'GET',
+    body:opts.body?JSON.stringify(opts.body):undefined
+  });
+  if(opts.method==='GET'||opts.prefer==='return=representation'){
+    try{return await res.json();}catch{return[];}
+  }
+  return res.ok;
+}
+
+// ========== DB (localStorage cache + Supabase sync) ==========
+const DB={
+  get(k){try{return JSON.parse(localStorage.getItem('mundana_'+k))||[];}catch{return[];}},
+  set(k,d){
+    localStorage.setItem('mundana_'+k,JSON.stringify(d));
+    DB._syncToSupabase(k,d);
+  },
+  async _syncToSupabase(k,data){
+    try{
+      const map=TABLE_MAP[k];
+      if(map){
+        if(map.isJsonStore){
+          // Store entire array as JSON in app_data
+          await sbFetch('app_data?key=eq.'+k,{method:'DELETE'});
+          await sbFetch('app_data',{method:'POST',body:{key:k,value:data}});
+        } else {
+          // Full table sync: delete all, then upsert
+          await sbFetch(map.table+'?id=neq.___never___',{method:'DELETE'});
+          if(data.length>0){
+            const rows=map.toRow?data.map(map.toRow):data;
+            await sbFetch(map.table,{method:'POST',body:rows});
+          }
+        }
+      } else if(SIMPLE_ARRAY_TABLES.includes(k)){
+        // Name-only arrays stored in their table
+        await sbFetch(k+'?id=gt.0',{method:'DELETE'});
+        if(data.length>0){
+          await sbFetch(k,{method:'POST',body:data.map(n=>({name:n}))});
+        }
+      } else {
+        // Everything else goes to app_data as JSON
+        await sbFetch('app_data?key=eq.'+k,{method:'DELETE'});
+        await sbFetch('app_data',{method:'POST',body:{key:k,value:data}});
+      }
+    }catch(e){console.warn('Sync error:',k,e);}
+  }
+};
+
+// ========== INITIAL LOAD FROM SUPABASE ==========
+async function loadFromSupabase(){
+  try{
+    // Load mapped tables
+    for(const[k,map] of Object.entries(TABLE_MAP)){
+      if(map.isJsonStore){
+        const rows=await sbFetch('app_data?key=eq.'+k+'&select=value');
+        if(rows&&rows[0]&&rows[0].value){
+          localStorage.setItem('mundana_'+k,JSON.stringify(rows[0].value));
+        }
+      } else {
+        const rows=await sbFetch(map.table+'?select=*');
+        if(rows&&rows.length>0){
+          const data=map.fromRow?rows.map(map.fromRow):rows;
+          localStorage.setItem('mundana_'+k,JSON.stringify(data));
+        }
+      }
+    }
+    // Load simple array tables
+    for(const k of SIMPLE_ARRAY_TABLES){
+      const rows=await sbFetch(k+'?select=name');
+      if(rows&&rows.length>0){
+        localStorage.setItem('mundana_'+k,JSON.stringify(rows.map(r=>r.name)));
+      }
+    }
+    // Load app_data entries (config, empresa, pricing_lines, alerts_read, etc)
+    const appRows=await sbFetch('app_data?select=key,value');
+    if(appRows){
+      appRows.forEach(r=>{
+        if(!TABLE_MAP[r.key]){
+          localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));
+        }
+      });
+    }
+    // Special: empresa data
+    const empRow=await sbFetch('app_data?key=eq.empresa&select=value');
+    if(empRow&&empRow[0]&&empRow[0].value){
+      localStorage.setItem('mundana_empresa',JSON.stringify(empRow[0].value));
+    }
+    // Special: pricing_lines
+    const plRow=await sbFetch('app_data?key=eq.pricing_lines&select=value');
+    if(plRow&&plRow[0]&&plRow[0].value){
+      localStorage.setItem('mundana_pricing_lines',JSON.stringify(plRow[0].value));
+    }
+    // Special: alerts_read
+    const arRow=await sbFetch('app_data?key=eq.alerts_read&select=value');
+    if(arRow&&arRow[0]&&arRow[0].value){
+      localStorage.setItem('mundana_alerts_read',JSON.stringify(arRow[0].value));
+    }
+  }catch(e){console.warn('Load from Supabase failed, using local cache:',e);}
+  // Re-render after load
+  renderNav();render();
+}
+
+// Override special setters to also sync
+const _origSetEmpresaData=function(d){
+  localStorage.setItem('mundana_empresa',JSON.stringify(d));
+  sbFetch('app_data?key=eq.empresa',{method:'DELETE'}).then(()=>sbFetch('app_data',{method:'POST',body:{key:'empresa',value:d}})).catch(()=>{});
+};
+
+const _origSetPricingLines=function(lines){
+  localStorage.setItem('mundana_pricing_lines',JSON.stringify(lines));
+  sbFetch('app_data?key=eq.pricing_lines',{method:'DELETE'}).then(()=>sbFetch('app_data',{method:'POST',body:{key:'pricing_lines',value:lines}})).catch(()=>{});
+};
+
+const _origSetAlertsRead=function(data){
+  localStorage.setItem('mundana_alerts_read',JSON.stringify(data));
+  sbFetch('app_data?key=eq.alerts_read',{method:'DELETE'}).then(()=>sbFetch('app_data',{method:'POST',body:{key:'alerts_read',value:data}})).catch(()=>{});
+};
+
+// ========== ICONS (sober, stroke-only) ==========
+const I={
+  dashboard:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  products:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  formula:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.18A1 1 0 0 0 5.61 21.5h12.78a1 1 0 0 0 .89-1.32l-5.069-9.757A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/></svg>',
+  production:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+  grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="9" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="9" y1="18" x2="21" y2="18"/><line x1="4" y1="6" x2="4" y2="6"/><line x1="4" y1="12" x2="4" y2="12"/><line x1="4" y1="18" x2="4" y2="18"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+  chevL:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>',
+  chevR:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
+  box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  beaker:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.18A1 1 0 0 0 5.61 21.5h12.78a1 1 0 0 0 .89-1.32l-5.069-9.757A2 2 0 0 1 14 9.527V2"/></svg>',
+  archive:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  stock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7l-8-4-8 4m16 0v10l-8 4m8-14l-8 4m0 10L4 17V7m8 4v10"/></svg>',
+  dollar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  truck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  building:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><path d="M9 22v-4h6v4"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  arrowIn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>',
+  arrowOut:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>',
+  calCheck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>',
+  bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>',
+};
+
+// ========== STATE ==========
+let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all'};
+
+// ========== NAV — Modules ==========
+const NAV=[
+  { module:'Visão Geral', icon:'eye', items:[
+    {id:'dashboard',label:'Dashboard',icon:'dashboard'},
+  ]},
+  { module:'Produção', icon:'layers', items:[
+    {id:'products',label:'Produtos',icon:'products'},
+    {id:'formulas',label:'Fórmulas',icon:'formula'},
+    {id:'production',label:'Modo Produção',icon:'production'},
+    {id:'stockmp',label:'Estoque MP',icon:'stock'},
+    {id:'pricing',label:'Precificação',icon:'dollar'},
+    {id:'suppliers',label:'Fornecedores',icon:'truck'},
+  ]},
+  { module:'Empresa', icon:'building', items:[
+    {id:'empresa',label:'Dados Mundana',icon:'building'},
+  ]},
+  { module:'Financeiro', icon:'dollar', items:[
+    {id:'receber',label:'A Receber',icon:'arrowIn'},
+    {id:'pagar',label:'A Pagar',icon:'arrowOut'},
+    {id:'calpag',label:'Calendário Pgto',icon:'calCheck'},
+  ]},
+  { module:'Criação', icon:'bulb', items:[
+    {id:'ideias',label:'Banco de Ideias',icon:'bulb'},
+    {id:'docs',label:'Documentos',icon:'file'},
+  ]},
+];
+
+function renderNav(){
+  document.getElementById('sidebarNav').innerHTML=NAV.map(m=>`
+    <div class="nav-module">
+      <div class="nav-module-header">${I[m.icon]} ${m.module}</div>
+      ${m.items.map(i=>`
+        <div class="nav-item ${S.page===i.id?'active':''}" onclick="go('${i.id}')">
+          ${I[i.icon]} ${i.label}
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
+function render(){
+  const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs};
+  (fn[S.page]||rDash)();
+  renderTopBar();
+}
+
+// ========== MODAL ==========
+function openModal(t,b,f,w){document.getElementById('modalTitle').textContent=t;document.getElementById('modalBody').innerHTML=b;document.getElementById('modalFooter').innerHTML=f||'';document.getElementById('modal').className=w?'modal modal-wide':'modal';document.getElementById('modalOverlay').classList.add('open');}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('open');}
+document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
+function toast(m){const c=document.getElementById('toastContainer'),t=document.createElement('div');t.className='toast';t.textContent=m;c.appendChild(t);setTimeout(()=>t.remove(),3000);}
+
+// ========== UTILS ==========
+function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
+function fmtR(v){return'R$ '+Number(v||0).toFixed(2).replace('.',',');}
+function fmtD(d){return d?new Date(d).toLocaleDateString('pt-BR'):'';}
+const MO=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const TYPES=['Hidratante Corporal','Manteiga Corporal','Esfoliante Corporal','Leite Hidratante','Body Splash'];
+
+// ========== DASHBOARD ==========
+function rDash(){
+  const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots');
+  const today=new Date(),todayStr=today.toISOString().split('T')[0];
+  const y=S.calY,m=S.calM,fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),dip=new Date(y,m,0).getDate();
+  let cal='';
+  for(let i=fd-1;i>=0;i--)cal+=`<div class="cal-day other-month">${dip-i}</div>`;
+  for(let d=1;d<=dim;d++){
+    const isT=d===today.getDate()&&m===today.getMonth()&&y===today.getFullYear();
+    const hasE=lots.some(l=>{const ld=new Date(l.date);return ld.getDate()===d&&ld.getMonth()===m&&ld.getFullYear()===y;});
+    cal+=`<div class="cal-day ${isT?'today':''} ${hasE?'has-event':''}">${d}</div>`;
+  }
+  const rem=(7-(fd+dim)%7)%7;
+  for(let i=1;i<=rem;i++)cal+=`<div class="cal-day other-month">${i}</div>`;
+  const hr=today.getHours();
+  const gr=hr<12?'Bom dia':hr<18?'Boa tarde':'Boa noite';
+
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim">
+      <div class="page-header-left">
+        <h2>${gr}, Ana</h2>
+        <p>Resumo do dia — ${today.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px">
+      <div class="stat-card stat-rose anim d1"><div class="stat-deco"></div><div class="stat-icon">${I.box}</div><div class="stat-value">${prods.length}</div><div class="stat-label">Produtos</div></div>
+      <div class="stat-card stat-oliva anim d2"><div class="stat-deco"></div><div class="stat-icon">${I.beaker}</div><div class="stat-value">${forms.length}</div><div class="stat-label">Fórmulas</div></div>
+      <div class="stat-card stat-lavanda anim d3"><div class="stat-deco"></div><div class="stat-icon">${I.archive}</div><div class="stat-value">${lots.length}</div><div class="stat-label">Lotes</div></div>
+      <div class="stat-card stat-sol anim d4"><div class="stat-deco"></div><div class="stat-icon">${I.clock}</div><div class="stat-value">${lots.filter(l=>l.status==='em_estoque').length}</div><div class="stat-label">Em estoque</div></div>
+    </div>
+    ${ (()=>{
+      const receber=DB.get('receber'), pagar=DB.get('pagar');
+      const totalRec=receber.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+      const recebido=receber.filter(i=>i.status==='recebido').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+      const totalPag=pagar.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+      const pago=pagar.filter(i=>i.status==='pago').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+      const pagHoje=pagar.filter(p=>p.vencimento===todayStr&&p.status!=='pago');
+      const vencidos=pagar.filter(p=>p.vencimento<todayStr&&p.status!=='pago');
+      const stock=DB.get('stockmp');const formulas=DB.get('formulas');
+      const consumoMap={};formulas.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)consumoMap[n]=(consumoMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
+      const stockCritico=stock.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;return c>0&&q<=(c*0.3);});
+      return `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:22px">
+      <div class="card anim d1" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">A Receber</div><div style="font-size:20px;font-weight:800;color:var(--oliva)">${fmtR(totalRec)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Recebido: ${fmtR(recebido)}</div></div>
+      <div class="card anim d2" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">A Pagar</div><div style="font-size:20px;font-weight:800;color:var(--rosa-antigo)">${fmtR(totalPag)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Pago: ${fmtR(pago)}</div></div>
+      <div class="card anim d3" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">Saldo Estimado</div><div style="font-size:20px;font-weight:800;color:${(recebido-pago)>=0?'var(--oliva)':'var(--rosa-antigo)'}">${fmtR(recebido-pago)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Recebido - Pago</div></div>
+      <div class="card anim d4" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">Pagamentos Hoje</div><div style="font-size:20px;font-weight:800;color:${pagHoje.length>0?'var(--rosa-antigo)':'var(--carvao)'}">${pagHoje.length}</div>${vencidos.length>0?`<div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px;font-weight:600">${vencidos.length} vencido${vencidos.length>1?'s':''}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Em dia</div>`}</div>
+    </div>`;
+    })()}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="cal-container anim d2">
+          <div class="cal-header"><h3>${MO[m]} ${y}</h3><div class="cal-nav"><button onclick="S.calM--;if(S.calM<0){S.calM=11;S.calY--;}rDash()">${I.chevL}</button><button onclick="S.calM++;if(S.calM>11){S.calM=0;S.calY++;}rDash()">${I.chevR}</button></div></div>
+          <div class="cal-grid">${DA.map(d=>`<div class="cal-day-name">${d}</div>`).join('')}${cal}</div>
+        </div>
+        ${ (()=>{
+          const stock=DB.get('stockmp');const formulas=DB.get('formulas');
+          const consumoMap={};formulas.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)consumoMap[n]=(consumoMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
+          const critico=stock.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;return c>0&&q<=(c*0.3);});
+          if(critico.length===0) return '';
+          return `<div class="card anim d3"><div class="card-header"><h3 style="color:var(--rosa-antigo)">Estoque Critico</h3><span style="font-size:11px;color:var(--text-muted)">${critico.length} ite${critico.length>1?'ns':'m'}</span></div><div class="card-body">${critico.map(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;const pct=c>0?Math.round((q/c)*100):0;return `<div class="activity-item"><div class="activity-dot" style="background:var(--rosa-antigo)"></div><div class="activity-text"><strong>${s.name}</strong> — ${q} ${s.unit||''} <span style="color:var(--rosa-antigo);font-weight:600">(${pct}%)</span></div></div>`;}).join('')}</div></div>`;
+        })()}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card anim d3" style="flex:1"><div class="card-header"><h3>Pagamentos do dia</h3></div><div class="card-body">${ (()=>{
+          const pagar=DB.get('pagar');
+          const pagHoje=pagar.filter(p=>p.vencimento===todayStr&&p.status!=='pago');
+          const vencidos=pagar.filter(p=>p.vencimento<todayStr&&p.status!=='pago');
+          let html='';
+          if(vencidos.length>0) html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:6px">Vencidos (${vencidos.length})</div>`+vencidos.slice(0,3).map(p=>`<div class="activity-item"><div class="activity-dot" style="background:var(--rosa-antigo)"></div><div class="activity-text"><strong>${p.descricao}</strong> — ${fmtR(p.valor)}</div><div class="activity-time">${fmtD(p.vencimento)}</div></div>`).join('')+(vencidos.length>3?`<div style="font-size:11px;color:var(--text-muted);padding:4px 14px">+${vencidos.length-3} mais</div>`:'');
+          if(pagHoje.length>0) html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--sol-ancestral);font-weight:700;margin:${vencidos.length>0?'12px':'0'} 0 6px">Hoje (${pagHoje.length})</div>`+pagHoje.map(p=>`<div class="activity-item"><div class="activity-dot" style="background:var(--sol-ancestral)"></div><div class="activity-text"><strong>${p.descricao}</strong> — ${fmtR(p.valor)}</div></div>`).join('');
+          if(!html) html='<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px">Nenhum pagamento pendente</div>';
+          return html;
+        })()}</div></div>
+        <div class="card anim d4" style="flex:1"><div class="card-header"><h3>Últimos lotes</h3></div><div class="card-body" style="padding:0 22px 12px">${lots.length>0?lots.slice(-4).reverse().map(l=>`<div class="activity-item"><div class="activity-dot" style="background:var(--lavanda)"></div><div class="activity-text"><strong>${l.lotNumber}</strong> — ${l.formulaName}</div><div class="activity-time">${fmtD(l.date)}</div></div>`).join(''):'<div style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px">Nenhum lote produzido</div>'}</div></div>
+      </div>
+    </div>`;
+}
+
+// ========== PRODUCTS ==========
+function rProds(){
+  const prods=DB.get('products'),folders=DB.get('product_folders');
+  const filtered=S.folder==='all'?prods:prods.filter(p=>p.folder===S.folder);
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterP(this.value)" style="width:180px"></div><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="openFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
+    <div class="folder-bar anim d1"><div class="folder-chip ${S.folder==='all'?'active':''}" onclick="S.folder='all';rProds()">Todos <span class="count">${prods.length}</span></div>${folders.map(f=>`<div class="folder-chip ${S.folder===f.id?'active':''}" onclick="S.folder='${f.id}';rProds()">${f.name} <span class="count">${prods.filter(p=>p.folder===f.id).length}</span></div>`).join('')}</div>
+    <div id="prodList" class="anim d2">${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.products}</div><h3>Nenhum produto cadastrado</h3><p>Comece adicionando seu primeiro produto</p><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div>`:S.pView==='grid'?`<div class="grid-cards">${filtered.map(p=>`<div class="product-card" onclick="openProdModal('${p.id}')"><div class="product-card-img">${p.photo?`<img src="${p.photo}">`:`${I.camera}`}</div><div class="product-card-body"><div class="product-line">${p.line||''}</div><h4>${p.name}</h4><div class="product-type">${p.type||''} · ${p.ml||''}ml</div><div class="product-price">${fmtR(p.price)}</div></div></div>`).join('')}</div>`:`<div class="card"><div class="table-wrapper"><table><thead><tr><th>Produto</th><th>Linha</th><th>Tipo</th><th>Vol.</th><th>Preço</th><th></th></tr></thead><tbody>${filtered.map(p=>`<tr><td><strong>${p.name}</strong></td><td>${p.line||'-'}</td><td><span class="badge badge-oliva">${p.type||'-'}</span></td><td>${p.ml||'-'}ml</td><td><strong>${fmtR(p.price)}</strong></td><td style="text-align:right"><button class="btn-icon" onclick="event.stopPropagation();openProdModal('${p.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="event.stopPropagation();delProd('${p.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}</div>`;
+}
+function filterP(q){const lq=q.toLowerCase();document.querySelectorAll('.product-card,#prodList table tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
+
+let tmpPhoto='';
+function openProdModal(id){
+  const prods=DB.get('products'),folders=DB.get('product_folders');
+  const p=id?prods.find(x=>x.id===id):{id:'',name:'',line:'',type:'',ml:'',description:'',notes:'',price:'',photo:'',folder:''};
+  tmpPhoto=p.photo||'';
+  openModal(id?'Editar Produto':'Novo Produto',`
+    <div class="form-group"><label class="form-label">Foto do Produto</label><div class="photo-upload" onclick="document.getElementById('phIn').click()" id="phPrev">${p.photo?`<img src="${p.photo}">`:`${I.camera}<span>Clique para enviar foto</span>`}<input type="file" id="phIn" accept="image/*" onchange="handlePh(event)"></div></div>
+    <div class="form-row form-row-2"><div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pN" value="${p.name}" placeholder="Ex: Copacabana Glow"></div><div class="form-group"><label class="form-label">Linha</label><input class="form-input" id="pL" value="${p.line||''}" placeholder="Ex: Copacabana Glow"></div></div>
+    <div class="form-row form-row-3"><div class="form-group"><label class="form-label">Tipo</label><select class="form-select" id="pT"><option value="">Selecione...</option>${getProductTypes().map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}</select></div><div class="form-group"><label class="form-label">Volume (ml)</label><input class="form-input" id="pMl" type="number" value="${p.ml||''}" placeholder="200"></div><div class="form-group"><label class="form-label">Preço Final (R$)</label><input class="form-input" id="pP" type="number" step="0.01" value="${p.price||''}" placeholder="0,00"></div></div>
+    <div class="form-group"><label class="form-label">Notas Olfativas</label><input class="form-input" id="pNo" value="${p.notes||''}" placeholder="ylang ylang, ameixa negra, lírio"></div>
+    <div class="form-group"><label class="form-label">Descrição</label><textarea class="form-textarea" id="pD" placeholder="Descrição do produto...">${p.description||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Pasta</label><select class="form-select" id="pF"><option value="">Sem pasta</option>${folders.map(f=>`<option value="${f.id}" ${p.folder===f.id?'selected':''}>${f.name}</option>`).join('')}</select></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delProd('${p.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveProd('${p.id||''}')">Salvar</button>`);
+}
+function handlePh(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{tmpPhoto=ev.target.result;document.getElementById('phPrev').innerHTML=`<img src="${tmpPhoto}"><input type="file" id="phIn" accept="image/*" onchange="handlePh(event)">`};r.readAsDataURL(f);}
+function saveProd(id){const prods=DB.get('products');const d={id:id||uid(),name:document.getElementById('pN').value,line:document.getElementById('pL').value,type:document.getElementById('pT').value,ml:document.getElementById('pMl').value,price:document.getElementById('pP').value,notes:document.getElementById('pNo').value,description:document.getElementById('pD').value,folder:document.getElementById('pF').value,photo:tmpPhoto};if(!d.name){toast('Preencha o nome do produto');return;}if(id){const i=prods.findIndex(p=>p.id===id);if(i>=0)prods[i]=d;}else prods.push(d);DB.set('products',prods);tmpPhoto='';closeModal();rProds();toast(id?'Produto atualizado':'Produto cadastrado');}
+function delProd(id){if(!confirm('Excluir este produto?'))return;DB.set('products',DB.get('products').filter(p=>p.id!==id));rProds();toast('Produto excluído');}
+function openFolderModal(){const folders=DB.get('product_folders');openModal('Gerenciar Pastas',`<div id="fList">${folders.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f.name}" onchange="updFolder('${f.id}',this.value)" style="flex:1"><button class="remove-btn" onclick="delFolder('${f.id}')">${I.trash}</button></div>`).join('')}</div><div style="display:flex;gap:8px;margin-top:14px"><input class="form-input" id="nfN" placeholder="Nome da nova pasta" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addFolder()">Criar</button></div>`,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');}
+function addFolder(){const n=document.getElementById('nfN').value;if(!n)return;const f=DB.get('product_folders');f.push({id:uid(),name:n});DB.set('product_folders',f);openFolderModal();toast('Pasta criada');}
+function updFolder(id,n){const f=DB.get('product_folders'),x=f.find(v=>v.id===id);if(x)x.name=n;DB.set('product_folders',f);}
+function delFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('product_folders',DB.get('product_folders').filter(f=>f.id!==id));const p=DB.get('products');p.forEach(x=>{if(x.folder===id)x.folder='';});DB.set('products',p);openFolderModal();toast('Pasta excluída');}
+
+// ========== FORMULAS ==========
+// Default config from spreadsheet 1_Configuracoes
+function getCfg(){
+  const c=DB.get('config');
+  return c.length?c[0]:{taxRate:0.06,cardRate:0.015,marginTarget:0.35,lossRate:0.02,laborCostHr:0,fixedCosts:2235,totalUnitsMonth:150};
+}
+
+// Default product types (editable by user)
+const DEFAULT_TYPES=['Hidratante Corporal','Manteiga Corporal','Esfoliante Corporal','Leite Hidratante','Body Splash'];
+function getProductTypes(){
+  const custom=DB.get('product_types');
+  return custom.length?custom:DEFAULT_TYPES;
+}
+function promptAddType(){
+  const types=getProductTypes();
+  openModal('Gerenciar Tipos de Produto',`
+    <div id="typeList">${types.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${t}" onchange="updType(${i},this.value)" style="flex:1"><button class="remove-btn" onclick="delType(${i})">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:12px"><input class="form-input" id="newTypeName" placeholder="Novo tipo de produto" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addType()">Adicionar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addType(){const n=document.getElementById('newTypeName').value;if(!n)return;const t=getProductTypes();t.push(n);DB.set('product_types',t);promptAddType();toast('Tipo adicionado');}
+function updType(i,v){const t=getProductTypes();t[i]=v;DB.set('product_types',t);}
+function delType(i){if(!confirm('Excluir este tipo?'))return;const t=getProductTypes();t.splice(i,1);DB.set('product_types',t);promptAddType();toast('Tipo removido');}
+
+function calcFormula(f){
+  const cfg=getCfg();
+  const lotSize=parseFloat(f.lotSize)||0;
+  const unitSize=parseFloat(f.unitSize)||0;
+  const unitsLot=unitSize>0?Math.floor(lotSize/unitSize):0;
+  const unitsProdMonth=parseFloat(f.unitsProdMonth)||30;
+  const lossRate=cfg.lossRate;
+  const packagingCost=parseFloat(f.packagingCost)||0;
+  const otherCosts=parseFloat(f.otherCosts)||0;
+
+  const totalMP=(f.ingredients||[]).reduce((s,i)=>s+(parseFloat(i.totalCost)||0),0);
+  const laborLot=0;
+  const packagingLot=packagingCost*unitsLot;
+  const otherLot=otherCosts*unitsLot;
+  const subtotalVar=totalMP+laborLot+packagingLot+otherLot;
+  const adjustedLot=lossRate<1?subtotalVar/(1-lossRate):subtotalVar;
+  const costVarUnit=unitsLot>0?adjustedLot/unitsLot:0;
+  const fixedPerUnit=cfg.totalUnitsMonth>0?cfg.fixedCosts/cfg.totalUnitsMonth:0;
+  const costTotalUnit=costVarUnit+fixedPerUnit;
+
+  const priceMin=costTotalUnit/(1-cfg.taxRate-cfg.cardRate);
+  const priceSuggested=costTotalUnit/(1-cfg.taxRate-cfg.cardRate-cfg.marginTarget);
+  const taxVal=priceSuggested*cfg.taxRate;
+  const cardVal=priceSuggested*cfg.cardRate;
+  const profit=priceSuggested-costTotalUnit-taxVal-cardVal;
+  const marginReal=priceSuggested>0?profit/priceSuggested:0;
+  const profitLot=profit*unitsLot;
+
+  return {totalMP,laborLot,packagingLot,otherLot,subtotalVar,adjustedLot,costVarUnit,fixedPerUnit,costTotalUnit,priceMin,priceSuggested,taxVal,cardVal,profit,marginReal,profitLot,unitsLot};
+}
+
+function rForms(){
+  const forms=DB.get('formulas');
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Fórmulas</h2><p>${forms.length} fórmula${forms.length!==1?'s':''} cadastrada${forms.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div></div>
+    ${forms.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.formula}</div><h3>Nenhuma fórmula cadastrada</h3><p>Cadastre a primeira fórmula dos seus produtos</p><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div>`:`<div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th>Tipo</th><th>Lote</th><th>Un/Lote</th><th>MP Total</th><th>Custo Un.</th><th>Preço Sug.</th><th>Margem</th><th></th></tr></thead><tbody>${forms.map(f=>{const c=calcFormula(f);return`<tr style="cursor:pointer" onclick="viewFormula('${f.id}')"><td><strong>${f.name}</strong></td><td><span class="badge badge-oliva">${f.productType||'-'}</span></td><td>${f.lotSize||'-'}g</td><td>${c.unitsLot}</td><td>${fmtR(c.totalMP)}</td><td>${fmtR(c.costTotalUnit)}</td><td><strong>${fmtR(c.priceSuggested)}</strong></td><td><span class="badge ${c.marginReal>=0.3?'badge-oliva':'badge-rose'}">${(c.marginReal*100).toFixed(1)}%</span></td><td style="text-align:right" onclick="event.stopPropagation()"><button class="btn-icon" onclick="openFormModal('${f.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delForm('${f.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div></div>`}`;
+}
+
+function viewFormula(id){
+  const forms=DB.get('formulas'),f=forms.find(x=>x.id===id);if(!f)return;
+  const c=calcFormula(f);
+  const cfg=getCfg();
+  openModal(f.name,`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+      <div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Lote</div><div style="font-size:20px;font-weight:800">${f.lotSize||0}g</div></div>
+      <div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Unidades/Lote</div><div style="font-size:20px;font-weight:800">${c.unitsLot}</div></div>
+      <div style="background:var(--oliva-pale);border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--oliva);font-weight:700;margin-bottom:4px">Preço Sugerido</div><div style="font-size:20px;font-weight:800;color:var(--oliva)">${fmtR(c.priceSuggested)}</div></div>
+    </div>
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px">Matérias-primas</h4>
+    <table style="margin-bottom:16px"><thead><tr><th>Ingrediente</th><th>Unidade</th><th>Qtd/Lote</th><th>Custo Unit.</th><th>Custo Total</th><th>Obs</th></tr></thead><tbody>${(f.ingredients||[]).map(g=>`<tr><td>${g.name}</td><td>${g.unit||'-'}</td><td>${g.qtyLot||'-'}</td><td>${fmtR(g.unitCost)}</td><td>${fmtR(g.totalCost)}</td><td style="font-size:11px;color:var(--text-muted)">${g.obs||''}</td></tr>`).join('')}<tr style="font-weight:700"><td colspan="4" style="text-align:right">Total MP</td><td>${fmtR(c.totalMP)}</td><td></td></tr></tbody></table>
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px">Cálculos</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>MP (lote)</span><strong>${fmtR(c.totalMP)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Mão de obra (lote)</span><strong>${fmtR(c.laborLot)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Embalagem (lote)</span><strong>${fmtR(c.packagingLot)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Outros variáveis (lote)</span><strong>${fmtR(c.otherLot)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Subtotal variáveis</span><strong>${fmtR(c.subtotalVar)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Ajustado por perdas (${((f.lossRate||cfg.lossRate)*100).toFixed(0)}%)</span><strong>${fmtR(c.adjustedLot)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Custo variável/un.</span><strong>${fmtR(c.costVarUnit)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Rateio fixos/un.</span><strong>${fmtR(c.fixedPerUnit)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px"><span><strong>Custo total/un.</strong></span><strong>${fmtR(c.costTotalUnit)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Preço mínimo</span><strong>${fmtR(c.priceMin)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Impostos (${(cfg.taxRate*100).toFixed(0)}%)</span><strong>${fmtR(c.taxVal)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Taxa cartão (${(cfg.cardRate*100).toFixed(1)}%)</span><strong>${fmtR(c.cardVal)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>Lucro/un.</span><strong style="color:var(--oliva)">${fmtR(c.profit)}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Lucro/lote</span><strong style="color:var(--oliva)">${fmtR(c.profitLot)}</strong></div>
+    </div>
+    ${f.prepSteps?`<h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:18px 0 10px">Modo de Preparo</h4><div style="font-size:13px;line-height:1.8">${f.prepSteps.split('\\n').map((s,i)=>s.trim()?`<div style="padding:4px 0"><span style="color:var(--text-muted);font-weight:600;margin-right:6px">${i+1}.</span>${s}</div>`:'').join('')}</div>`:''}
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>',true);
+}
+
+function openFormModal(id){
+  const forms=DB.get('formulas');
+  const cfg=getCfg();
+  const def={id:'',name:'',productType:'',lotSize:'',unitSize:'',packagingCost:'',otherCosts:'',ingredients:[],prepSteps:''};
+  const f=id?forms.find(x=>x.id===id):def;
+  window._fIng=[...(f.ingredients||[])];
+
+  openModal(id?'Editar Fórmula':'Nova Fórmula',`
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);margin-bottom:14px">Dados do Produto</h4>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Nome da Fórmula</label><input class="form-input" id="fN" value="${f.name}" placeholder="Ex: Hidratante Copacabana Glow"></div>
+      <div class="form-group"><label class="form-label">Tipo de Produto</label><div style="display:flex;gap:6px"><select class="form-select" id="fType" style="flex:1"><option value="">Selecione...</option>${getProductTypes().map(t=>`<option value="${t}" ${f.productType===t?'selected':''}>${t}</option>`).join('')}</select><button class="btn-icon" onclick="promptAddType()" title="Gerenciar tipos" style="flex-shrink:0">${I.edit}</button></div></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="form-group"><label class="form-label">Tamanho do lote (g)</label><input class="form-input" id="fLot" type="number" value="${f.lotSize||''}" placeholder="3000"></div>
+      <div class="form-group"><label class="form-label">Tam. por unidade (g)</label><input class="form-input" id="fUnit" type="number" value="${f.unitSize||''}" placeholder="300"></div>
+      <div class="form-group"><label class="form-label">Embalagem/un. (R$)</label><input class="form-input" id="fPack" type="number" step="0.01" value="${f.packagingCost||''}" placeholder="15.37"></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Outros custos/un. (R$)</label><input class="form-input" id="fOther" type="number" step="0.01" value="${f.otherCosts||''}" placeholder="2.00"></div>
+      <div class="form-group"></div>
+    </div>
+
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);margin:20px 0 14px">Matérias-primas (por lote)</h4>
+    <div style="overflow-x:auto">
+      <div style="min-width:620px">
+        <div style="display:grid;grid-template-columns:2.5fr 1fr 0.8fr 1fr 1fr 1.5fr auto;gap:6px;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);font-weight:700;padding:0 0 6px;margin-bottom:4px;border-bottom:1.5px solid var(--border)">
+          <span>Ingrediente</span><span>Unidade</span><span>Qtd/Lote</span><span>Custo Unit.</span><span>Custo Total</span><span>Observação</span><span></span>
+        </div>
+        <div id="ingList"></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+      <button class="btn btn-secondary btn-sm" onclick="addIng()">${I.plus} Ingrediente</button>
+      <div style="font-size:13px;color:var(--text-muted)">Total MP: <strong id="totMP" style="color:var(--oliva)">R$ 0,00</strong></div>
+    </div>
+
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);margin:20px 0 14px">Modo de Preparo</h4>
+    <div class="form-group" style="margin-bottom:0"><textarea class="form-textarea" id="fPrep" rows="5" placeholder="Cada linha será um passo separado na produção">${f.prepSteps||''}</textarea></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delForm('${f.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveForm('${f.id||''}')">Salvar</button>`,true);
+  rIngs();
+}
+
+function rIngs(){
+  const l=document.getElementById('ingList');if(!l)return;
+  l.innerHTML=window._fIng.map((g,i)=>`
+    <div style="display:grid;grid-template-columns:2.5fr 1fr 0.8fr 1fr 1fr 1.5fr auto;gap:6px;align-items:center;margin-bottom:5px">
+      <div style="position:relative"><input class="form-input" id="ingN${i}" value="${g.name||''}" placeholder="Nome" oninput="searchIngMP(${i},this.value)" onfocus="searchIngMP(${i},this.value)" onchange="window._fIng[${i}].name=this.value" autocomplete="off" style="padding:7px 8px;font-size:12px"><div id="ingDrop${i}" style="position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);z-index:10;display:none;max-height:120px;overflow-y:auto"></div></div>
+      <input class="form-input" id="ingU${i}" value="${g.unit||''}" placeholder="ml, g" onchange="window._fIng[${i}].unit=this.value" style="padding:7px 8px;font-size:12px">
+      <input class="form-input" value="${g.qtyLot||''}" placeholder="0" type="number" step="0.1" onchange="window._fIng[${i}].qtyLot=this.value;calcIngCost(${i})" style="padding:7px 8px;font-size:12px">
+      <input class="form-input" id="ingUC${i}" value="${g.unitCost||''}" placeholder="R$" type="number" step="0.01" onchange="window._fIng[${i}].unitCost=this.value;calcIngCost(${i})" style="padding:7px 8px;font-size:12px">
+      <input class="form-input" id="ingTC${i}" value="${g.totalCost||''}" placeholder="Auto" type="number" step="0.01" style="padding:7px 8px;font-size:12px;background:var(--bg-warm);font-weight:600" readonly>
+      <input class="form-input" value="${g.obs||''}" placeholder="Obs" onchange="window._fIng[${i}].obs=this.value" style="padding:7px 8px;font-size:11px">
+      <button class="remove-btn" onclick="window._fIng.splice(${i},1);rIngs()">${I.trash}</button>
+    </div>
+  `).join('');
+  updTotMP();
+}
+
+function searchIngMP(idx,q){
+  const drop=document.getElementById('ingDrop'+idx);
+  if(!q||q.length<1){drop.style.display='none';return;}
+  const stock=DB.get('stockmp');
+  const unique={};stock.forEach(s=>{if(s.name) unique[s.name]={unit:s.unit||'',price:s.price||'',qty:s.quantity||''};});
+  const matches=Object.keys(unique).filter(n=>n.toLowerCase().includes(q.toLowerCase()));
+  if(matches.length===0){drop.style.display='none';return;}
+  drop.style.display='block';
+  drop.innerHTML=matches.slice(0,6).map(n=>{
+    const info=unique[n];
+    return `<div style="padding:6px 10px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;transition:background 0.15s" onmouseover="this.style.background='var(--bg-warm)'" onmouseout="this.style.background=''" onclick="pickIngMP(${idx},'${n.replace(/'/g,"\\'")}','${(info.unit||'').replace(/'/g,"\\'")}')"><span>${n}</span><span style="color:var(--text-muted)">${info.unit||''}</span></div>`;
+  }).join('');
+}
+function pickIngMP(idx,name,unit){
+  window._fIng[idx].name=name;
+  window._fIng[idx].unit=unit;
+  document.getElementById('ingN'+idx).value=name;
+  const uEl=document.getElementById('ingU'+idx);if(uEl)uEl.value=unit;
+  document.getElementById('ingDrop'+idx).style.display='none';
+}
+document.addEventListener('click',e=>{document.querySelectorAll('[id^=ingDrop]').forEach(d=>{if(!e.target.closest('[id^=ingN]')&&!e.target.closest('[id^=ingDrop]'))d.style.display='none';});});
+
+function calcIngCost(i){
+  const g=window._fIng[i];
+  const q=parseFloat(g.qtyLot)||0;
+  const uc=parseFloat(g.unitCost)||0;
+  g.totalCost=(q*uc).toFixed(2);
+  const el=document.getElementById('ingTC'+i);
+  if(el) el.value=g.totalCost;
+  updTotMP();
+}
+
+function addIng(){window._fIng.push({name:'',unit:'',qtyLot:'',unitCost:'',totalCost:'',obs:''});rIngs();}
+
+function updTotMP(){
+  const t=window._fIng.reduce((s,i)=>s+(parseFloat(i.totalCost)||0),0);
+  const el=document.getElementById('totMP');
+  if(el) el.textContent=fmtR(t);
+}
+
+function saveForm(id){
+  const forms=DB.get('formulas');
+  const d={
+    id:id||uid(),
+    name:document.getElementById('fN').value,
+    productType:document.getElementById('fType').value,
+    lotSize:document.getElementById('fLot').value,
+    unitSize:document.getElementById('fUnit').value,
+    packagingCost:document.getElementById('fPack').value,
+    otherCosts:document.getElementById('fOther').value,
+    ingredients:window._fIng.filter(i=>i.name),
+    prepSteps:document.getElementById('fPrep').value,
+  };
+  if(!d.name){toast('Preencha o nome da fórmula');return;}
+  if(id){const i=forms.findIndex(f=>f.id===id);if(i>=0)forms[i]=d;}else forms.push(d);
+  DB.set('formulas',forms);closeModal();rForms();toast(id?'Fórmula atualizada':'Fórmula cadastrada');
+}
+function delForm(id){if(!confirm('Excluir esta fórmula?'))return;DB.set('formulas',DB.get('formulas').filter(f=>f.id!==id));rForms();toast('Fórmula excluída');}
+
+// ========== PRODUCTION ==========
+function rProd(){
+  const forms=DB.get('formulas');if(S.prodFId){rProdExec();return;}
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Modo Produção</h2><p>Selecione uma fórmula para iniciar a produção</p></div></div>
+    ${forms.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.production}</div><h3>Nenhuma fórmula disponível</h3><p>Cadastre fórmulas primeiro para iniciar a produção</p><button class="btn btn-primary" onclick="go('formulas')">Ir para Fórmulas</button></div>`:`<div class="grid-cards anim d1">${forms.map(f=>`<div class="formula-select-card" onclick="S.prodFId='${f.id}';S.prodQty=0;S.prodSteps=[];rProd()"><h4>${f.name}</h4><div class="sub">${f.productType||'Sem tipo definido'} — Lote: ${f.lotSize||'?'}g</div><div style="display:flex;gap:6px"><span class="badge badge-oliva">${(f.ingredients||[]).length} ingredientes</span>${f.prepSteps?'<span class="badge badge-lavanda">Com modo de preparo</span>':''}</div></div>`).join('')}</div>`}`;
+}
+function rProdExec(){
+  const forms=DB.get('formulas'),f=forms.find(x=>x.id===S.prodFId);if(!f){S.prodFId=null;rProd();return;}
+  const q=S.prodQty,steps=f.prepSteps?f.prepSteps.split('\n').filter(s=>s.trim()):[];
+  if(S.prodSteps.length!==steps.length)S.prodSteps=steps.map(()=>false);
+  const done=S.prodSteps.filter(Boolean).length,pct=steps.length>0?(done/steps.length)*100:0,allDone=steps.length>0&&done===steps.length&&q>0;
+  const lotSize=parseFloat(f.lotSize)||1;
+  const ratio=q>0?q/lotSize:0;
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>${f.name}</h2><p>${f.productType||'Produção em andamento'}</p></div><div class="page-header-actions"><button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">${I.back} Voltar</button></div></div>
+    <div class="prod-info-grid anim d1"><div class="prod-info-card"><label>Tamanho do lote (g)</label><input class="form-input" type="number" value="${q||''}" placeholder="${f.lotSize||'Ex: 3000'}" onchange="S.prodQty=parseFloat(this.value)||0;rProdExec()" style="text-align:center;font-size:20px;font-weight:800;max-width:180px;margin:4px auto 0;border:none;background:transparent"></div><div class="prod-info-card"><label>Ingredientes</label><div class="value">${(f.ingredients||[]).length}</div></div><div class="prod-info-card"><label>Progresso</label><div class="value" style="color:${pct===100?'var(--oliva)':'var(--carvao)'}">${Math.round(pct)}%</div></div></div>
+    ${q>0?`<div class="card anim d2" style="margin-bottom:18px"><div class="card-header"><h3>Ingredientes para ${q}g ${ratio!==1?`(fator ${ratio.toFixed(2)}x)`:''}</h3></div><div class="card-body"><div class="calc-row" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1.5px solid var(--border)"><span>Ingrediente</span><span class="pct">Unidade</span><span class="qty">Quantidade</span></div>${(f.ingredients||[]).map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;return`<div class="calc-row"><span>${ing.name}</span><span class="pct">${ing.unit||'-'}</span><span class="qty">${amt.toFixed(2)}</span></div>`;}).join('')}</div></div>`:''}
+    ${steps.length>0?`<div class="card anim d3" style="margin-bottom:18px"><div class="card-header"><h3>Modo de preparo</h3><span style="font-size:12px;color:var(--text-muted);font-weight:600">${done} de ${steps.length}</span></div><div class="card-body"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>${steps.map((s,i)=>`<div class="production-step"><div class="step-check ${S.prodSteps[i]?'checked':''}" onclick="S.prodSteps[${i}]=!S.prodSteps[${i}];rProdExec()">${I.check}</div><div class="step-content ${S.prodSteps[i]?'done':''}"><div class="step-num">Passo ${i+1}</div><div class="step-text">${s}</div></div></div>`).join('')}</div></div>`:''}
+    ${allDone?`<div style="text-align:center;padding:18px" class="anim d4"><button class="btn btn-primary" onclick="finishProd()" style="font-size:13.5px;padding:12px 32px">${I.check} Finalizar produção e gerar lote</button></div>`:''}`;
+}
+function finishProd(){
+  const forms=DB.get('formulas'),f=forms.find(x=>x.id===S.prodFId);if(!f)return;
+  const lots=DB.get('lots'),now=new Date();
+  const num='LOT-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+String(lots.length+1).padStart(3,'0');
+  const fab=now.toISOString().split('T')[0],val=new Date(now);val.setMonth(val.getMonth()+12);const valS=val.toISOString().split('T')[0];
+  lots.push({id:uid(),lotNumber:num,formulaId:f.id,formulaName:f.name,quantity:S.prodQty,date:fab,validity:valS,status:'em_estoque'});DB.set('lots',lots);
+  // Descontar MP do estoque
+  const stock=DB.get('stockmp');
+  const lotSize=parseFloat(f.lotSize)||1;
+  const ratio=S.prodQty/lotSize;
+  (f.ingredients||[]).forEach(ing=>{
+    const ingName=(ing.name||'').toLowerCase().trim();
+    const consumed=(parseFloat(ing.qtyLot)||0)*ratio;
+    if(!ingName||consumed<=0)return;
+    // Find matching stock item and deduct
+    const match=stock.find(s=>(s.name||'').toLowerCase().trim()===ingName);
+    if(match){
+      match.quantity=String(Math.max(0,(parseFloat(match.quantity)||0)-consumed).toFixed(2));
+    }
+  });
+  DB.set('stockmp',stock);
+  document.getElementById('content').innerHTML=`<div style="max-width:500px;margin:60px auto;text-align:center" class="anim">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--oliva-pale);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:var(--oliva)">${I.check}</div>
+    <h2 style="font-size:24px;font-weight:800;margin-bottom:6px;color:var(--carvao)">Produção finalizada</h2>
+    <p style="color:var(--text-muted);margin-bottom:28px">Lote registrado com sucesso no sistema</p>
+    <div class="lot-result">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--musgo);font-weight:700;margin-bottom:4px">Número do Lote</div>
+      <div class="lot-number">${num}</div>
+      <div class="lot-dates"><div><strong>Fabricação:</strong> ${fmtD(fab)}</div><div><strong>Validade:</strong> ${fmtD(valS)}</div></div>
+      <div style="margin-top:12px;font-size:14px;color:var(--oliva)"><strong>${f.name}</strong> — ${S.prodQty}g</div>
+    </div>
+    <div style="margin-top:28px;display:flex;gap:12px;justify-content:center">
+      <button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">Nova produção</button>
+      <button class="btn btn-primary" onclick="go('dashboard')">Ir para Dashboard</button>
+    </div>
+  </div>`;
+  toast('Lote '+num+' registrado');
+}
+
+// ========== STOCK MP ==========
+function rStockMP(){
+  const items=DB.get('stockmp');
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Estoque de Matérias-Primas</h2><p>${items.length} item${items.length!==1?'ns':''} registrado${items.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterStock(this.value)" style="width:180px"></div><button class="btn btn-primary" onclick="openStockModal()">${I.plus} Nova Entrada</button></div></div>
+    ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.stock}</div><h3>Nenhuma matéria-prima registrada</h3><p>Registre suas compras de insumos</p><button class="btn btn-primary" onclick="openStockModal()">${I.plus} Nova Entrada</button></div>`:`
+    <div class="card anim d1"><div class="table-wrapper"><table id="stockTable"><thead><tr><th>Matéria-prima</th><th>Fornecedor</th><th>Data Compra</th><th>Quantidade</th><th>Valor (R$)</th><th>Link</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.name}</strong></td><td>${i.supplier||'-'}</td><td>${fmtD(i.purchaseDate)}</td><td>${i.quantity||'-'} ${i.unit||''}</td><td>${fmtR(i.price)}</td><td>${i.supplierLink?`<a href="${i.supplierLink}" target="_blank" style="color:var(--rosa-antigo)">${I.link}</a>`:'-'}</td><td style="text-align:right"><button class="btn-icon" onclick="openStockModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delStock('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+}
+function filterStock(q){const lq=q.toLowerCase();document.querySelectorAll('#stockTable tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
+function openStockModal(id){
+  const items=DB.get('stockmp');
+  const s=id?items.find(x=>x.id===id):{id:'',name:'',supplier:'',purchaseDate:'',quantity:'',unit:'',price:'',supplierLink:''};
+  const suppliers=DB.get('suppliers');
+  openModal(id?'Editar Entrada':'Nova Entrada de MP',`
+    <div class="form-row form-row-2"><div class="form-group"><label class="form-label">Matéria-prima</label><input class="form-input" id="sN" value="${s.name}" placeholder="Ex: Óleo vegetal"></div><div class="form-group"><label class="form-label">Fornecedor</label><select class="form-select" id="sSup"><option value="">Selecione...</option>${suppliers.map(f=>`<option value="${f.name}" ${s.supplier===f.name?'selected':''}>${f.name}</option>`).join('')}<option value="_other">Outro (digitar)</option></select></div></div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr"><div class="form-group"><label class="form-label">Data da Compra</label><input class="form-input" id="sDate" type="date" value="${s.purchaseDate||''}"></div><div class="form-group"><label class="form-label">Quantidade</label><input class="form-input" id="sQty" type="number" step="0.1" value="${s.quantity||''}" placeholder="1000"></div><div class="form-group"><label class="form-label">Unidade</label><input class="form-input" id="sUnit" value="${s.unit||''}" placeholder="g, ml, un"></div><div class="form-group"><label class="form-label">Valor Total (R$)</label><input class="form-input" id="sPrice" type="number" step="0.01" value="${s.price||''}" placeholder="50.00"></div></div>
+    <div class="form-group"><label class="form-label">Link do Fornecedor</label><input class="form-input" id="sLink" value="${s.supplierLink||''}" placeholder="https://..."></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delStock('${s.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStock('${s.id||''}')">Salvar</button>`);
+}
+function saveStock(id){
+  const items=DB.get('stockmp');
+  let sup=document.getElementById('sSup').value;
+  if(sup==='_other') sup=prompt('Nome do fornecedor:')||'';
+  const d={id:id||uid(),name:document.getElementById('sN').value,supplier:sup,purchaseDate:document.getElementById('sDate').value,quantity:document.getElementById('sQty').value,unit:document.getElementById('sUnit').value,price:document.getElementById('sPrice').value,supplierLink:document.getElementById('sLink').value};
+  if(!d.name){toast('Preencha o nome da MP');return;}
+  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
+  DB.set('stockmp',items);closeModal();rStockMP();toast(id?'Entrada atualizada':'Entrada registrada');
+}
+function delStock(id){if(!confirm('Excluir?'))return;DB.set('stockmp',DB.get('stockmp').filter(x=>x.id!==id));rStockMP();toast('Excluído');}
+
+// ========== PRICING ==========
+function rPricing(){
+  const tab=S.pricingTab;
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Precificação</h2><p>Resumo de preços, custos fixos e configurações</p></div></div>
+    <div style="display:flex;gap:2px;border-bottom:1.5px solid var(--border);margin-bottom:22px" class="anim d1">
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='resumo'?'700':'500'};color:${tab==='resumo'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='resumo'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.pricingTab='resumo';rPricing()">Resumo de Preços</div>
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='custos'?'700':'500'};color:${tab==='custos'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='custos'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.pricingTab='custos';rPricing()">Custos Fixos</div>
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='config'?'700':'500'};color:${tab==='config'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='config'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.pricingTab='config';rPricing()">Configurações</div>
+    </div>
+    <div class="anim d2">${tab==='resumo'?renderPricingResumo():tab==='custos'?renderPricingCustos():renderPricingConfig()}</div>`;
+}
+
+function renderPricingConfig(){
+  const cfg=getCfg();
+  return `<div class="card" style="max-width:600px"><div class="card-header"><h3>Parâmetros de Precificação</h3></div><div class="card-body">
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px">Esses valores são usados automaticamente no cálculo de preço sugerido de todas as fórmulas.</p>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Impostos sobre venda (%)</label><input class="form-input" id="cfgTax" type="number" step="0.1" value="${(cfg.taxRate*100).toFixed(1)}" placeholder="6.0"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Alíquota efetiva sobre a venda</p></div>
+      <div class="form-group"><label class="form-label">Taxa de cartão (%)</label><input class="form-input" id="cfgCard" type="number" step="0.1" value="${(cfg.cardRate*100).toFixed(1)}" placeholder="1.5"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Inclua antecipação se aplicável</p></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Margem de lucro alvo (%)</label><input class="form-input" id="cfgMargin" type="number" step="0.1" value="${(cfg.marginTarget*100).toFixed(1)}" placeholder="35.0"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Lucro por unidade após impostos e taxa</p></div>
+      <div class="form-group"><label class="form-label">Perdas / refugos (%)</label><input class="form-input" id="cfgLoss" type="number" step="0.1" value="${(cfg.lossRate*100).toFixed(1)}" placeholder="2.0"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Perdas de produção (sobras, derramas)</p></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Total unidades/mês (rateio)</label><input class="form-input" id="cfgUnits" type="number" value="${cfg.totalUnitsMonth||150}" placeholder="150"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Total de unidades produzidas por mês para rateio de custos fixos</p></div>
+      <div class="form-group"><label class="form-label">Custo hora mão de obra (R$)</label><input class="form-input" id="cfgLabor" type="number" step="0.01" value="${cfg.laborCostHr||0}" placeholder="0.00"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Custo total/hora incluindo pró-labore</p></div>
+    </div>
+    <div style="margin-top:8px"><button class="btn btn-primary" onclick="savePricingConfig()">Salvar Configurações</button></div>
+  </div></div>`;
+}
+
+function savePricingConfig(){
+  const cfg=getCfg();
+  cfg.taxRate=(parseFloat(document.getElementById('cfgTax').value)||6)/100;
+  cfg.cardRate=(parseFloat(document.getElementById('cfgCard').value)||1.5)/100;
+  cfg.marginTarget=(parseFloat(document.getElementById('cfgMargin').value)||35)/100;
+  cfg.lossRate=(parseFloat(document.getElementById('cfgLoss').value)||2)/100;
+  cfg.totalUnitsMonth=parseFloat(document.getElementById('cfgUnits').value)||150;
+  cfg.laborCostHr=parseFloat(document.getElementById('cfgLabor').value)||0;
+  DB.set('config',[cfg]);
+  toast('Configurações salvas');
+  rPricing();
+}
+
+function renderPricingResumo(){
+  const forms=DB.get('formulas');
+  if(forms.length===0) return '<div class="empty-state"><div class="empty-icon">'+I.dollar+'</div><h3>Sem dados</h3><p>Cadastre fórmulas para ver o resumo de preços</p></div>';
+  const cfg=getCfg();
+  const pricingLines=getPricingLines(); // {formulaId: lineName}
+  const products=DB.get('products');
+  // Extract unique lines from products
+  const lines=[...new Set(products.map(p=>p.line).filter(Boolean))];
+
+  const rows=forms.map(f=>{
+    const c=calcFormula(f);
+    const currentLine=pricingLines[f.id]||'';
+    return `<tr>
+      <td><select class="form-select" onchange="setPricingLine('${f.id}',this.value)" style="padding:6px 8px;font-size:12px;min-width:130px;border-radius:6px">
+        <option value="">— Selecionar —</option>
+        ${lines.map(l=>`<option value="${l}" ${currentLine===l?'selected':''}>${l}</option>`).join('')}
+        <option value="_custom" ${currentLine&&!lines.includes(currentLine)?'selected':''}>Outra...</option>
+      </select>${currentLine&&!lines.includes(currentLine)?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${currentLine}</div>`:''}</td>
+      <td><strong>${f.name}</strong></td>
+      <td>${c.unitsLot}</td>
+      <td>${fmtR(c.costVarUnit)}</td>
+      <td>${fmtR(c.fixedPerUnit)}</td>
+      <td>${fmtR(c.costTotalUnit)}</td>
+      <td><strong>${fmtR(c.priceSuggested)}</strong></td>
+      <td>${fmtR(c.taxVal)}</td>
+      <td>${fmtR(c.cardVal)}</td>
+      <td style="color:var(--oliva);font-weight:700">${fmtR(c.profit)}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="card"><div class="card-header"><h3>Resumo — Precificação dos Produtos</h3></div><div class="card-body"><p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Impostos: ${(cfg.taxRate*100).toFixed(1)}% | Taxa cartão: ${(cfg.cardRate*100).toFixed(1)}% | Margem alvo: ${(cfg.marginTarget*100).toFixed(0)}% | Custos fixos: ${fmtR(cfg.fixedCosts)}/mês</p><div class="table-wrapper"><table><thead><tr><th>Linha</th><th>Fórmula</th><th>Un/Lote</th><th>C. Variável</th><th>Rateio Fixo</th><th>C. Total</th><th>Preço Sug.</th><th>Impostos</th><th>Tx Cartão</th><th>Lucro</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+}
+
+function setPricingLine(formulaId,val){
+  if(val==='_custom'){
+    const custom=prompt('Digite o nome da linha:');
+    if(!custom){rPricing();return;}
+    val=custom;
+  }
+  const lines=getPricingLines();
+  lines[formulaId]=val;
+  _origSetPricingLines(lines);
+  rPricing();
+}
+
+// Override pricing_lines getter since it's an object not array
+function getPricingLines(){
+  try{return JSON.parse(localStorage.getItem('mundana_pricing_lines'))||{};}catch{return{};}
+}
+
+function renderPricingCustos(){
+  const costs=DB.get('fixed_costs');
+  if(costs.length===0){
+    // Seed with defaults from spreadsheet
+    const defaults=[{id:uid(),name:'Aluguel',value:600,obs:''},{id:uid(),name:'Luz',value:60,obs:''},{id:uid(),name:'Internet',value:100,obs:''},{id:uid(),name:'Despesas de Social Mídia',value:640,obs:''},{id:uid(),name:'Sistema financeiro',value:240,obs:''},{id:uid(),name:'Nuvemshop',value:60,obs:'nuvemshop'},{id:uid(),name:'Certificado digital',value:235,obs:'certificado digital'},{id:uid(),name:'Contabilidade',value:300,obs:'contabilidade'}];
+    DB.set('fixed_costs',defaults);
+    return renderPricingCustos();
+  }
+  const total=costs.reduce((s,c)=>s+(parseFloat(c.value)||0),0);
+  return `<div class="card"><div class="card-header"><h3>Custos Fixos Mensais</h3><button class="btn btn-primary btn-sm" onclick="openCostModal()">${I.plus} Nova Despesa</button></div><div class="card-body"><div class="table-wrapper"><table><thead><tr><th>Despesa</th><th>Valor Mensal (R$)</th><th>Observações</th><th></th></tr></thead><tbody>${costs.map(c=>`<tr><td><strong>${c.name}</strong></td><td>${fmtR(c.value)}</td><td style="font-size:12px;color:var(--text-muted)">${c.obs||''}</td><td style="text-align:right"><button class="btn-icon" onclick="openCostModal('${c.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delCost('${c.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}<tr style="font-weight:700;background:var(--bg-warm)"><td>TOTAL</td><td>${fmtR(total)}</td><td></td><td></td></tr></tbody></table></div></div></div>`;
+}
+
+function openCostModal(id){
+  const costs=DB.get('fixed_costs');
+  const c=id?costs.find(x=>x.id===id):{id:'',name:'',value:'',obs:''};
+  openModal(id?'Editar Despesa':'Nova Despesa Fixa',`
+    <div class="form-group"><label class="form-label">Despesa</label><input class="form-input" id="cN" value="${c.name}" placeholder="Ex: Aluguel"></div>
+    <div class="form-row form-row-2"><div class="form-group"><label class="form-label">Valor Mensal (R$)</label><input class="form-input" id="cV" type="number" step="0.01" value="${c.value||''}" placeholder="0.00"></div><div class="form-group"><label class="form-label">Observações</label><input class="form-input" id="cO" value="${c.obs||''}" placeholder="Opcional"></div></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delCost('${c.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveCost('${c.id||''}')">Salvar</button>`);
+}
+function saveCost(id){
+  const costs=DB.get('fixed_costs');
+  const d={id:id||uid(),name:document.getElementById('cN').value,value:document.getElementById('cV').value,obs:document.getElementById('cO').value};
+  if(!d.name){toast('Preencha o nome');return;}
+  if(id){const i=costs.findIndex(c=>c.id===id);if(i>=0)costs[i]=d;}else costs.push(d);
+  DB.set('fixed_costs',costs);
+  // Update config total
+  const cfg=getCfg();cfg.fixedCosts=costs.reduce((s,c)=>s+(parseFloat(c.value)||0),0);DB.set('config',[cfg]);
+  closeModal();rPricing();toast(id?'Atualizada':'Cadastrada');
+}
+function delCost(id){if(!confirm('Excluir?'))return;const costs=DB.get('fixed_costs').filter(c=>c.id!==id);DB.set('fixed_costs',costs);const cfg=getCfg();cfg.fixedCosts=costs.reduce((s,c)=>s+(parseFloat(c.value)||0),0);DB.set('config',[cfg]);rPricing();toast('Excluída');}
+
+// ========== SUPPLIERS ==========
+function rSuppliers(){
+  const sups=DB.get('suppliers');
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Fornecedores</h2><p>${sups.length} fornecedor${sups.length!==1?'es':''} cadastrado${sups.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-primary" onclick="openSupModal()">${I.plus} Novo Fornecedor</button></div></div>
+    ${sups.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.truck}</div><h3>Nenhum fornecedor cadastrado</h3><p>Cadastre seus fornecedores de matérias-primas</p><button class="btn btn-primary" onclick="openSupModal()">${I.plus} Novo Fornecedor</button></div>`:`
+    <div class="grid-cards anim d1">${sups.map(s=>`
+      <div class="card" style="cursor:pointer" onclick="openSupModal('${s.id}')">
+        <div class="card-body" style="padding:20px">
+          <h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:var(--carvao)">${s.name}</h4>
+          ${s.phone?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:3px">${s.phone}</div>`:''}
+          ${s.email?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:3px">${s.email}</div>`:''}
+          ${s.site?`<div style="font-size:12px"><a href="${s.site.startsWith('http')?s.site:'https://'+s.site}" target="_blank" style="color:var(--rosa-antigo);text-decoration:none">${s.site}</a></div>`:''}
+          ${s.docName?`<div style="margin-top:8px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--oliva)">${I.file} ${s.docName}</div>`:''}
+        </div>
+      </div>
+    `).join('')}</div>`}`;
+}
+
+function openSupModal(id){
+  const sups=DB.get('suppliers');
+  const s=id?sups.find(x=>x.id===id):{id:'',name:'',phone:'',email:'',site:'',doc:'',docName:''};
+  window._supDoc=s.doc||'';window._supDocName=s.docName||'';
+  openModal(id?'Editar Fornecedor':'Novo Fornecedor',`
+    <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="supN" value="${s.name}" placeholder="Nome do fornecedor"></div>
+    <div class="form-row form-row-2"><div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="supPh" value="${s.phone||''}" placeholder="(11) 99999-0000"></div><div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="supEm" value="${s.email||''}" placeholder="email@fornecedor.com"></div></div>
+    <div class="form-group"><label class="form-label">Site / Loja</label><input class="form-input" id="supSite" value="${s.site||''}" placeholder="https://..."></div>
+    <div class="form-group"><label class="form-label">Documento Anexo</label>
+      <div id="supDocArea">
+        ${s.docName?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${I.file} ${s.docName}</span><button class="remove-btn" onclick="removeSupDoc()">${I.trash}</button></div>`:`<div class="photo-upload" onclick="document.getElementById('supDocIn').click()" style="height:70px">${I.file}<span>Clique para anexar documento</span><input type="file" id="supDocIn" onchange="handleSupDoc(event)"></div>`}
+      </div>
+    </div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delSup('${s.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveSup('${s.id||''}')">Salvar</button>`);
+}
+function handleSupDoc(e){
+  const f=e.target.files[0];if(!f)return;
+  window._supDocName=f.name;
+  const r=new FileReader();
+  r.onload=ev=>{window._supDoc=ev.target.result;document.getElementById('supDocArea').innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${I.file} ${f.name}</span><button class="remove-btn" onclick="removeSupDoc()">${I.trash}</button></div>`;};
+  r.readAsDataURL(f);
+}
+function removeSupDoc(){window._supDoc='';window._supDocName='';document.getElementById('supDocArea').innerHTML=`<div class="photo-upload" onclick="document.getElementById('supDocIn').click()" style="height:70px">${I.file}<span>Clique para anexar documento</span><input type="file" id="supDocIn" onchange="handleSupDoc(event)"></div>`;}
+function saveSup(id){
+  const sups=DB.get('suppliers');
+  const d={id:id||uid(),name:document.getElementById('supN').value,phone:document.getElementById('supPh').value,email:document.getElementById('supEm').value,site:document.getElementById('supSite').value,doc:window._supDoc,docName:window._supDocName};
+  if(!d.name){toast('Preencha o nome');return;}
+  if(id){const i=sups.findIndex(s=>s.id===id);if(i>=0)sups[i]=d;}else sups.push(d);
+  DB.set('suppliers',sups);closeModal();rSuppliers();toast(id?'Fornecedor atualizado':'Fornecedor cadastrado');
+}
+function delSup(id){if(!confirm('Excluir fornecedor?'))return;DB.set('suppliers',DB.get('suppliers').filter(s=>s.id!==id));rSuppliers();toast('Fornecedor excluído');}
+
+// ========== TOP BAR — ALERTS ==========
+function getAlerts(){
+  const alerts=[];
+  const today=new Date();const todayStr=today.toISOString().split('T')[0];
+  // Lotes produzidos hoje
+  const lots=DB.get('lots').filter(l=>l.date===todayStr);
+  lots.forEach(l=>alerts.push({key:'lot_'+l.id,type:'oliva',text:`Lote <strong>${l.lotNumber}</strong> produzido hoje — ${l.formulaName}`}));
+  // Estoque MP baixo — calcula consumo total de cada MP nas fórmulas
+  const stock=DB.get('stockmp');
+  const formulas=DB.get('formulas');
+  const consumoMap={};
+  formulas.forEach(f=>{
+    (f.ingredients||[]).forEach(ing=>{
+      const name=(ing.name||'').toLowerCase().trim();
+      if(!name)return;
+      consumoMap[name]=(consumoMap[name]||0)+(parseFloat(ing.qtyLot)||0);
+    });
+  });
+  stock.forEach(s=>{
+    const name=(s.name||'').toLowerCase().trim();
+    const qtdEstoque=parseFloat(s.quantity)||0;
+    const consumo=consumoMap[name]||0;
+    if(consumo>0 && qtdEstoque<=(consumo*0.3)){
+      const pct=consumo>0?Math.round((qtdEstoque/consumo)*100):0;
+      alerts.push({key:'stock_'+s.id,type:'rosa-antigo',text:`Estoque baixo: <strong>${s.name}</strong> — ${qtdEstoque} ${s.unit||''} (${pct}% do necessário por lote)`});
+    }
+  });
+  if(formulas.length===0) alerts.push({key:'no_formulas',type:'sol-ancestral',text:'Nenhuma fórmula cadastrada ainda'});
+  if(DB.get('products').length===0) alerts.push({key:'no_products',type:'sol-ancestral',text:'Nenhum produto cadastrado ainda'});
+  const pagar=DB.get('pagar').filter(p=>p.vencimento===todayStr&&p.status!=='pago');
+  pagar.forEach(p=>alerts.push({key:'pag_'+p.id,type:'sol-ancestral',text:`Pagamento hoje: <strong>${p.descricao}</strong> — ${fmtR(p.valor)}`}));
+  const vencidos=DB.get('pagar').filter(p=>p.vencimento<todayStr&&p.status!=='pago');
+  if(vencidos.length>0) alerts.push({key:'pag_vencidos_'+todayStr,type:'rosa-antigo',text:`<strong>${vencidos.length}</strong> pagamento${vencidos.length>1?'s':''} vencido${vencidos.length>1?'s':''}`});
+  return alerts;
+}
+
+function getReadAlerts(){
+  try{return JSON.parse(localStorage.getItem('mundana_alerts_read'))||{};}catch{return{};}
+}
+function markAlertRead(key){
+  const read=getReadAlerts();
+  read[key]=Date.now();
+  _origSetAlertsRead(read);
+  renderTopBar();
+}
+function clearReadAlerts(){
+  _origSetAlertsRead({});
+  renderTopBar();
+}
+
+function renderTopBar(){
+  const allAlerts=getAlerts();
+  const read=getReadAlerts();
+  const unread=allAlerts.filter(a=>!read[a.key]);
+  const readList=allAlerts.filter(a=>read[a.key]);
+  const count=unread.length;
+  document.getElementById('topBar').innerHTML=`
+    <div style="position:relative">
+      <div class="alert-btn" onclick="S.alertOpen=!S.alertOpen;renderTopBar()">
+        ${I.bell}
+        ${count>0?`<div class="alert-badge">${count>9?'9+':count}</div>`:''}
+      </div>
+      <div class="alert-panel ${S.alertOpen?'open':''}">
+        <div class="alert-panel-header" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Alertas (${count})</span>
+          ${unread.length>0?`<span style="font-size:11px;color:var(--rosa-antigo);cursor:pointer;font-weight:500" onclick="markAllAlertsRead()">Marcar todas como lidas</span>`:''}
+        </div>
+        ${unread.length===0&&readList.length===0?'<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">Nenhum alerta no momento</div>':''}
+        ${unread.map(a=>`
+          <div class="alert-item" style="background:var(--surface)">
+            <div class="alert-dot" style="background:var(--${a.type})"></div>
+            <div class="alert-text">${a.text}</div>
+            <div class="remove-btn" onclick="event.stopPropagation();markAlertRead('${a.key}')" title="Marcar como lida" style="flex-shrink:0">${I.check}</div>
+          </div>
+        `).join('')}
+        ${readList.length>0?`
+          <div style="padding:8px 18px 4px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-top:1px solid var(--border-light)">Lidas</div>
+          ${readList.map(a=>`
+            <div class="alert-item" style="opacity:0.5">
+              <div class="alert-dot" style="background:var(--${a.type})"></div>
+              <div class="alert-text">${a.text}</div>
+            </div>
+          `).join('')}
+        `:''}
+      </div>
+    </div>
+  `;
+}
+
+function markAllAlertsRead(){
+  const allAlerts=getAlerts();
+  const read=getReadAlerts();
+  allAlerts.forEach(a=>{read[a.key]=Date.now();});
+  _origSetAlertsRead(read);
+  renderTopBar();
+}
+
+// Close alert panel on outside click
+document.addEventListener('click',e=>{
+  if(S.alertOpen && !e.target.closest('.alert-btn') && !e.target.closest('.alert-panel')){
+    S.alertOpen=false;renderTopBar();
+  }
+});
+
+// ========== EMPRESA ==========
+function getEmpresaData(){
+  try{return JSON.parse(localStorage.getItem('mundana_empresa'))||{};}catch{return{};}
+}
+function setEmpresaData(d){_origSetEmpresaData(d);}
+
+function rEmpresa(){
+  const tab=S.empresaTab;
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Dados Mundana</h2><p>Ficha cadastral, documentos e acessos</p></div></div>
+    <div class="tab-bar anim d1">
+      <div class="tab-item ${tab==='dados'?'active':''}" onclick="S.empresaTab='dados';rEmpresa()">Ficha Cadastral</div>
+      <div class="tab-item ${tab==='docs'?'active':''}" onclick="S.empresaTab='docs';rEmpresa()">Documentos</div>
+      <div class="tab-item ${tab==='users'?'active':''}" onclick="S.empresaTab='users';rEmpresa()">Acessos</div>
+    </div>
+    <div class="anim d2">${tab==='dados'?renderEmpresaDados():tab==='docs'?renderEmpresaDocs():renderEmpresaUsers()}</div>`;
+}
+
+function renderEmpresaDados(){
+  const e=getEmpresaData();
+  return `
+    <div class="empresa-card">
+      <div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:24px">
+        <div class="empresa-logo" onclick="document.getElementById('logoIn').click()">
+          ${e.logo?`<img src="${e.logo}">`:`${I.camera}`}
+          <input type="file" id="logoIn" accept="image/*" onchange="handleLogo(event)">
+        </div>
+        <div style="flex:1">
+          <h3 style="font-size:20px;font-weight:700;color:var(--carvao);margin-bottom:2px">${e.razaoSocial||'Mundana Cosméticos'}</h3>
+          <p style="font-size:13px;color:var(--text-muted)">${e.cnpj?'CNPJ: '+e.cnpj:'CNPJ não informado'}</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="editEmpresa()">${I.edit} Editar</button>
+          <button class="btn btn-primary btn-sm" onclick="exportEmpresaPDF()">${I.download} Exportar PDF</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Razão Social</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.razaoSocial||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">CNPJ</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.cnpj||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Inscrição Estadual</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.ie||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Responsável Legal</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.responsavel||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">CPF do Responsável</div>
+          <div style="font-size:14px">${e.cpfResp||'—'}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Endereço</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.endereco||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Cidade / Estado / CEP</div>
+          <div style="font-size:14px;margin-bottom:14px">${[e.cidade,e.estado,e.cep].filter(Boolean).join(' — ')||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Telefone</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.telefone||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">E-mail</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.email||'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Site</div>
+          <div style="font-size:14px;margin-bottom:14px">${e.site?`<a href="${e.site.startsWith('http')?e.site:'https://'+e.site}" target="_blank" style="color:var(--rosa-antigo)">${e.site}</a>`:'—'}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Redes Sociais</div>
+          <div style="font-size:14px">${e.redes||'—'}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function handleLogo(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=e=>{const d=getEmpresaData();d.logo=e.target.result;setEmpresaData(d);rEmpresa();toast('Logo atualizada');};r.readAsDataURL(f);
+}
+
+function editEmpresa(){
+  const e=getEmpresaData();
+  openModal('Editar Dados da Empresa',`
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Razão Social</label><input class="form-input" id="eRS" value="${e.razaoSocial||''}" placeholder="Mundana Cosméticos Ltda"></div>
+      <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" id="eCNPJ" value="${e.cnpj||''}" placeholder="00.000.000/0000-00"></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Inscrição Estadual</label><input class="form-input" id="eIE" value="${e.ie||''}" placeholder=""></div>
+      <div class="form-group"><label class="form-label">Responsável Legal</label><input class="form-input" id="eResp" value="${e.responsavel||''}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">CPF do Responsável</label><input class="form-input" id="eCPF" value="${e.cpfResp||''}" placeholder="000.000.000-00" style="max-width:300px"></div>
+    <div class="form-group"><label class="form-label">Endereço</label><input class="form-input" id="eEnd" value="${e.endereco||''}" placeholder="Rua, número, complemento"></div>
+    <div class="form-row" style="grid-template-columns:2fr 1fr 1fr">
+      <div class="form-group"><label class="form-label">Cidade</label><input class="form-input" id="eCid" value="${e.cidade||''}"></div>
+      <div class="form-group"><label class="form-label">Estado</label><input class="form-input" id="eUF" value="${e.estado||''}" placeholder="SP"></div>
+      <div class="form-group"><label class="form-label">CEP</label><input class="form-input" id="eCEP" value="${e.cep||''}" placeholder="00000-000"></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="eTel" value="${e.telefone||''}" placeholder="(11) 99999-0000"></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="eEmail" value="${e.email||''}"></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Site</label><input class="form-input" id="eSite" value="${e.site||''}" placeholder="https://"></div>
+      <div class="form-group"><label class="form-label">Redes Sociais</label><input class="form-input" id="eRedes" value="${e.redes||''}" placeholder="@mundana"></div>
+    </div>
+  `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEmpresa()">Salvar</button>`,true);
+}
+
+function saveEmpresa(){
+  const d=getEmpresaData();
+  Object.assign(d,{razaoSocial:document.getElementById('eRS').value,cnpj:document.getElementById('eCNPJ').value,ie:document.getElementById('eIE').value,responsavel:document.getElementById('eResp').value,cpfResp:document.getElementById('eCPF').value,endereco:document.getElementById('eEnd').value,cidade:document.getElementById('eCid').value,estado:document.getElementById('eUF').value,cep:document.getElementById('eCEP').value,telefone:document.getElementById('eTel').value,email:document.getElementById('eEmail').value,site:document.getElementById('eSite').value,redes:document.getElementById('eRedes').value});
+  setEmpresaData(d);closeModal();rEmpresa();toast('Dados atualizados');
+}
+
+function exportEmpresaPDF(){
+  const e=getEmpresaData();
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Ficha Cadastral — ${e.razaoSocial||'Mundana'}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Montserrat,Arial,sans-serif;padding:40px;color:#252829;font-size:13px;line-height:1.7}h1{font-size:22px;font-weight:700;margin-bottom:4px}h2{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#b17a7f;margin:24px 0 12px;border-bottom:1px solid #ebe5dd;padding-bottom:6px}.row{display:flex;gap:30px;margin-bottom:6px}.label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#9a9490;font-weight:700;margin-bottom:2px}.val{font-size:14px;margin-bottom:12px}.sub{color:#6b6560;font-size:13px}@media print{body{padding:20px}}</style></head><body>
+  <h1>${e.razaoSocial||'Mundana Cosméticos'}</h1><p class="sub">Ficha cadastral — Gerada em ${new Date().toLocaleDateString('pt-BR')}</p>
+  <h2>Dados Jurídicos</h2><div class="row"><div style="flex:1"><div class="label">CNPJ</div><div class="val">${e.cnpj||'—'}</div></div><div style="flex:1"><div class="label">Inscrição Estadual</div><div class="val">${e.ie||'—'}</div></div></div><div class="row"><div style="flex:1"><div class="label">Responsável Legal</div><div class="val">${e.responsavel||'—'}</div></div><div style="flex:1"><div class="label">CPF</div><div class="val">${e.cpfResp||'—'}</div></div></div>
+  <h2>Endereço</h2><div class="val">${e.endereco||'—'}</div><div class="val">${[e.cidade,e.estado,e.cep].filter(Boolean).join(' — ')||'—'}</div>
+  <h2>Contato</h2><div class="row"><div style="flex:1"><div class="label">Telefone</div><div class="val">${e.telefone||'—'}</div></div><div style="flex:1"><div class="label">E-mail</div><div class="val">${e.email||'—'}</div></div></div><div class="row"><div style="flex:1"><div class="label">Site</div><div class="val">${e.site||'—'}</div></div><div style="flex:1"><div class="label">Redes Sociais</div><div class="val">${e.redes||'—'}</div></div></div>
+  <script>setTimeout(()=>window.print(),500)<\/script></body></html>`);
+  w.document.close();
+}
+
+// ========== EMPRESA — DOCS ==========
+function renderEmpresaDocs(){
+  const docs=DB.get('empresa_docs');
+  return `
+    <div class="card"><div class="card-header"><h3>Documentos da Empresa</h3><button class="btn btn-primary btn-sm" onclick="openEmpDocModal()">${I.plus} Anexar Documento</button></div>
+    <div class="card-body">${docs.length===0?'<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Nenhum documento anexado</div>':`<div class="table-wrapper"><table><thead><tr><th>Nome</th><th>Tipo</th><th>Data</th><th></th></tr></thead><tbody>${docs.map(d=>`<tr><td style="display:flex;align-items:center;gap:8px">${I.file} <strong>${d.name}</strong></td><td><span class="badge badge-lavanda">${d.tipo||'Geral'}</span></td><td>${fmtD(d.date)}</td><td style="text-align:right"><a href="${d.data}" download="${d.fileName}" class="btn-icon" style="display:inline-flex;text-decoration:none">${I.download}</a><button class="btn-icon" onclick="delEmpDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div>`}</div></div>`;
+}
+function openEmpDocModal(){
+  openModal('Anexar Documento',`
+    <div class="form-group"><label class="form-label">Nome do Documento</label><input class="form-input" id="edN" placeholder="Ex: Contrato Social"></div>
+    <div class="form-group"><label class="form-label">Tipo</label><input class="form-input" id="edT" placeholder="Ex: Contrato, Alvará, Certificado"></div>
+    <div class="form-group"><label class="form-label">Arquivo</label><div class="photo-upload" onclick="document.getElementById('edFile').click()" id="edPrev" style="height:80px">${I.file}<span>Clique para selecionar</span><input type="file" id="edFile" onchange="handleEmpDoc(event)"></div></div>
+  `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEmpDoc()">Salvar</button>`);
+}
+let _empDocData='',_empDocFileName='';
+function handleEmpDoc(e){const f=e.target.files[0];if(!f)return;_empDocFileName=f.name;const r=new FileReader();r.onload=ev=>{_empDocData=ev.target.result;document.getElementById('edPrev').innerHTML=`<span style="font-size:12px">${I.file} ${f.name}</span><input type="file" id="edFile" onchange="handleEmpDoc(event)">`};r.readAsDataURL(f);}
+function saveEmpDoc(){
+  const name=document.getElementById('edN').value;if(!name||!_empDocData){toast('Preencha nome e anexe arquivo');return;}
+  const docs=DB.get('empresa_docs');
+  docs.push({id:uid(),name,tipo:document.getElementById('edT').value,date:new Date().toISOString().split('T')[0],data:_empDocData,fileName:_empDocFileName});
+  DB.set('empresa_docs',docs);_empDocData='';_empDocFileName='';closeModal();rEmpresa();toast('Documento anexado');
+}
+function delEmpDoc(id){if(!confirm('Excluir documento?'))return;DB.set('empresa_docs',DB.get('empresa_docs').filter(d=>d.id!==id));rEmpresa();toast('Documento excluído');}
+
+// ========== EMPRESA — USERS ==========
+function renderEmpresaUsers(){
+  const users=DB.get('empresa_users');
+  const roles={'admin':'Administrador','editor':'Editor','viewer':'Visualizador'};
+  return `
+    <div class="card"><div class="card-header"><h3>Acessos de Usuários</h3><button class="btn btn-primary btn-sm" onclick="openUserModal()">${I.plus} Novo Usuário</button></div>
+    <div class="card-body">${users.length===0?'<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Nenhum usuário cadastrado</div>':`<div class="table-wrapper"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th></th></tr></thead><tbody>${users.map(u=>`<tr><td><div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--rosa-antigo),var(--lavanda));display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">${(u.name||'?')[0].toUpperCase()}</div><strong>${u.name}</strong></div></td><td>${u.email||'-'}</td><td><span class="badge role-${u.role}">${roles[u.role]||u.role}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openUserModal('${u.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delUser('${u.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div>`}</div></div>
+    <div style="margin-top:16px;padding:16px;background:var(--bg-warm);border-radius:var(--radius-md);font-size:12px;color:var(--text-muted)">
+      <strong>Perfis disponíveis:</strong> Administrador (acesso total), Editor (pode criar e editar dados), Visualizador (apenas consulta).
+    </div>`;
+}
+function openUserModal(id){
+  const users=DB.get('empresa_users');
+  const u=id?users.find(x=>x.id===id):{id:'',name:'',email:'',role:'viewer'};
+  openModal(id?'Editar Usuário':'Novo Usuário',`
+    <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="uN" value="${u.name}" placeholder="Nome completo"></div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="uE" value="${u.email||''}" placeholder="email@exemplo.com"></div>
+      <div class="form-group"><label class="form-label">Perfil de Acesso</label><select class="form-select" id="uR"><option value="admin" ${u.role==='admin'?'selected':''}>Administrador</option><option value="editor" ${u.role==='editor'?'selected':''}>Editor</option><option value="viewer" ${u.role==='viewer'?'selected':''}>Visualizador</option></select></div>
+    </div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delUser('${u.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveUser('${u.id||''}')">Salvar</button>`);
+}
+function saveUser(id){
+  const users=DB.get('empresa_users');
+  const d={id:id||uid(),name:document.getElementById('uN').value,email:document.getElementById('uE').value,role:document.getElementById('uR').value};
+  if(!d.name){toast('Preencha o nome');return;}
+  if(id){const i=users.findIndex(u=>u.id===id);if(i>=0)users[i]=d;}else users.push(d);
+  DB.set('empresa_users',users);closeModal();rEmpresa();toast(id?'Usuário atualizado':'Usuário cadastrado');
+}
+function delUser(id){if(!confirm('Excluir usuário?'))return;DB.set('empresa_users',DB.get('empresa_users').filter(u=>u.id!==id));rEmpresa();toast('Usuário excluído');}
+
+// ========== FINANCEIRO — A RECEBER ==========
+function rReceber(){
+  const items=DB.get('receber');
+  const total=items.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const received=items.filter(i=>i.status==='recebido').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>A Receber</h2><p>${items.length} entrada${items.length!==1?'s':''} — Total: ${fmtR(total)} | Recebido: ${fmtR(received)}</p></div><div class="page-header-actions"><button class="btn btn-primary" onclick="openReceberModal()">${I.plus} Nova Entrada</button></div></div>
+    ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.arrowIn}</div><h3>Nenhuma entrada registrada</h3><p>Cadastre seus recebimentos</p><button class="btn btn-primary" onclick="openReceberModal()">${I.plus} Nova Entrada</button></div>`:`
+    <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Descrição</th><th>Cliente</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.descricao}</strong></td><td>${i.cliente||'-'}</td><td>${fmtD(i.vencimento)}</td><td><strong>${fmtR(i.valor)}</strong></td><td><span class="badge ${i.status==='recebido'?'badge-oliva':'badge-rose'}" style="cursor:pointer" onclick="toggleReceber('${i.id}')">${i.status==='recebido'?'Recebido':'Pendente'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openReceberModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delReceber('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+}
+function openReceberModal(id){
+  const items=DB.get('receber');
+  const r=id?items.find(x=>x.id===id):{id:'',descricao:'',cliente:'',vencimento:'',valor:'',status:'pendente',obs:''};
+  openModal(id?'Editar Entrada':'Nova Entrada',`
+    <div class="form-group"><label class="form-label">Descrição</label><input class="form-input" id="rcDesc" value="${r.descricao}" placeholder="Ex: Venda lote Hidratante"></div>
+    <div class="form-row form-row-3"><div class="form-group"><label class="form-label">Cliente</label><input class="form-input" id="rcCli" value="${r.cliente||''}" placeholder="Nome do cliente"></div><div class="form-group"><label class="form-label">Vencimento</label><input class="form-input" id="rcVenc" type="date" value="${r.vencimento||''}"></div><div class="form-group"><label class="form-label">Valor (R$)</label><input class="form-input" id="rcVal" type="number" step="0.01" value="${r.valor||''}" placeholder="0.00"></div></div>
+    <div class="form-group"><label class="form-label">Observações</label><input class="form-input" id="rcObs" value="${r.obs||''}" placeholder="Opcional"></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delReceber('${r.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveReceber('${r.id||''}')">Salvar</button>`);
+}
+function saveReceber(id){
+  const items=DB.get('receber');
+  const d={id:id||uid(),descricao:document.getElementById('rcDesc').value,cliente:document.getElementById('rcCli').value,vencimento:document.getElementById('rcVenc').value,valor:document.getElementById('rcVal').value,obs:document.getElementById('rcObs').value,status:id?(items.find(x=>x.id===id)?.status||'pendente'):'pendente'};
+  if(!d.descricao){toast('Preencha a descrição');return;}
+  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
+  DB.set('receber',items);closeModal();rReceber();toast(id?'Atualizado':'Cadastrado');
+}
+function toggleReceber(id){const items=DB.get('receber');const i=items.find(x=>x.id===id);if(i)i.status=i.status==='recebido'?'pendente':'recebido';DB.set('receber',items);rReceber();}
+function delReceber(id){if(!confirm('Excluir?'))return;DB.set('receber',DB.get('receber').filter(x=>x.id!==id));rReceber();toast('Excluído');}
+
+// ========== FINANCEIRO — A PAGAR ==========
+const DEFAULT_PAG_TYPES=['Fiscal','Social Mídia','Aluguel','Matéria Prima','Embalagem','Serviço','Outros'];
+function getPagTypes(){const c=DB.get('pag_types');return c.length?c:DEFAULT_PAG_TYPES;}
+
+function rPagar(){
+  const items=DB.get('pagar');
+  const total=items.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const paid=items.filter(i=>i.status==='pago').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''} — Total: ${fmtR(total)} | Pago: ${fmtR(paid)}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
+    ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.arrowOut}</div><h3>Nenhum lançamento registrado</h3><p>Cadastre seus pagamentos</p><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div>`:`
+    <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Descrição</th><th>Fornecedor</th><th>Tipo</th><th>Vencimento</th><th>Valor</th><th>Parcelas</th><th>Status</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td>${fmtD(i.vencimento)}</td><td><strong>${fmtR(i.valor)}</strong></td><td>${i.parcelado==='sim'?(i.parcela||'1')+'/'+( i.totalParcelas||'1'):'À vista'}</td><td><span class="badge ${i.status==='pago'?'badge-oliva':'badge-rose'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':'Pendente'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+}
+
+function openPagarModal(id){
+  const items=DB.get('pagar');const suppliers=DB.get('suppliers');const types=getPagTypes();
+  const p=id?items.find(x=>x.id===id):{id:'',descricao:'',fornecedor:'',tipo:'',vencimento:'',valor:'',parcelado:'nao',parcela:'',totalParcelas:'',status:'pendente',obs:''};
+  openModal(id?'Editar Lançamento':'Novo Lançamento',`
+    <div class="form-group"><label class="form-label">Descrição</label><input class="form-input" id="pgDesc" value="${p.descricao}" placeholder="Ex: Compra de embalagens"></div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Fornecedor</label>
+        <div style="position:relative"><input class="form-input" id="pgForn" value="${p.fornecedor||''}" placeholder="Buscar fornecedor..." oninput="searchSupplier(this.value)" onfocus="searchSupplier(this.value)" autocomplete="off"><div id="pgFornList" style="position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);z-index:10;display:none;max-height:150px;overflow-y:auto"></div></div>
+      </div>
+      <div class="form-group"><label class="form-label">Tipo de Lançamento</label><select class="form-select" id="pgTipo"><option value="">Selecione...</option>${types.map(t=>`<option value="${t}" ${p.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="form-group"><label class="form-label">Vencimento</label><input class="form-input" id="pgVenc" type="date" value="${p.vencimento||''}"></div>
+      <div class="form-group"><label class="form-label">Valor Total (R$)</label><input class="form-input" id="pgVal" type="number" step="0.01" value="${p.valor||''}" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Parcelado?</label><select class="form-select" id="pgParc" onchange="toggleParcFields()"><option value="nao" ${p.parcelado!=='sim'?'selected':''}>Não</option><option value="sim" ${p.parcelado==='sim'?'selected':''}>Sim</option></select></div>
+    </div>
+    <div id="parcFields" style="display:${p.parcelado==='sim'?'grid':'none'}" class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Parcela atual</label><input class="form-input" id="pgParcN" type="number" value="${p.parcela||''}" placeholder="1"></div>
+      <div class="form-group"><label class="form-label">Total de parcelas</label><input class="form-input" id="pgParcT" type="number" value="${p.totalParcelas||''}" placeholder="3"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Observações</label><input class="form-input" id="pgObs" value="${p.obs||''}" placeholder="Opcional"></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delPagar('${p.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePagar('${p.id||''}')">Salvar</button>`);
+}
+
+function toggleParcFields(){document.getElementById('parcFields').style.display=document.getElementById('pgParc').value==='sim'?'grid':'none';}
+
+function searchSupplier(q){
+  const list=document.getElementById('pgFornList');
+  if(!q){list.style.display='none';return;}
+  const sups=DB.get('suppliers').filter(s=>s.name.toLowerCase().includes(q.toLowerCase()));
+  if(sups.length===0){list.style.display='none';return;}
+  list.style.display='block';
+  list.innerHTML=sups.map(s=>`<div style="padding:8px 12px;cursor:pointer;font-size:13px;transition:background 0.15s" onmouseover="this.style.background='var(--bg-warm)'" onmouseout="this.style.background=''" onclick="document.getElementById('pgForn').value='${s.name}';document.getElementById('pgFornList').style.display='none'">${s.name}</div>`).join('');
+}
+// Close supplier dropdown on outside click
+document.addEventListener('click',e=>{const l=document.getElementById('pgFornList');if(l&&!e.target.closest('#pgForn')&&!e.target.closest('#pgFornList'))l.style.display='none';});
+
+function savePagar(id){
+  const items=DB.get('pagar');
+  const d={id:id||uid(),descricao:document.getElementById('pgDesc').value,fornecedor:document.getElementById('pgForn').value,tipo:document.getElementById('pgTipo').value,vencimento:document.getElementById('pgVenc').value,valor:document.getElementById('pgVal').value,parcelado:document.getElementById('pgParc').value,parcela:document.getElementById('pgParcN')?.value||'',totalParcelas:document.getElementById('pgParcT')?.value||'',obs:document.getElementById('pgObs').value,status:id?(items.find(x=>x.id===id)?.status||'pendente'):'pendente'};
+  if(!d.descricao){toast('Preencha a descrição');return;}
+  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
+  DB.set('pagar',items);closeModal();rPagar();toast(id?'Atualizado':'Cadastrado');
+}
+function togglePagar(id){const items=DB.get('pagar');const i=items.find(x=>x.id===id);if(i)i.status=i.status==='pago'?'pendente':'pago';DB.set('pagar',items);rPagar();}
+function delPagar(id){if(!confirm('Excluir lançamento?'))return;DB.set('pagar',DB.get('pagar').filter(x=>x.id!==id));rPagar();toast('Excluído');}
+
+function managePagTypes(){
+  const types=getPagTypes();
+  openModal('Tipos de Lançamento',`
+    <div id="ptList">${types.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${t}" onchange="updPagType(${i},this.value)" style="flex:1"><button class="remove-btn" onclick="delPagType(${i})">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:12px"><input class="form-input" id="newPagType" placeholder="Novo tipo" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addPagType()">Adicionar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addPagType(){const n=document.getElementById('newPagType').value;if(!n)return;const t=getPagTypes();t.push(n);DB.set('pag_types',t);managePagTypes();toast('Tipo adicionado');}
+function updPagType(i,v){const t=getPagTypes();t[i]=v;DB.set('pag_types',t);}
+function delPagType(i){if(!confirm('Excluir?'))return;const t=getPagTypes();t.splice(i,1);DB.set('pag_types',t);managePagTypes();toast('Tipo removido');}
+
+// ========== FINANCEIRO — CALENDÁRIO PAGAMENTO ==========
+function rCalPag(){
+  const y=S.calFinY,m=S.calFinM;
+  const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),dip=new Date(y,m,0).getDate();
+  const today=new Date();const todayStr=today.toISOString().split('T')[0];
+  const items=DB.get('pagar');
+
+  // Build calendar
+  let cal='';
+  for(let i=fd-1;i>=0;i--)cal+=`<div class="cal-day other-month">${dip-i}</div>`;
+  for(let d=1;d<=dim;d++){
+    const dt=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isT=d===today.getDate()&&m===today.getMonth()&&y===today.getFullYear();
+    const hasP=items.some(i=>i.vencimento===dt&&i.status!=='pago');
+    cal+=`<div class="cal-day ${isT?'today':''} ${hasP?'has-event':''}" onclick="S._calSelDate='${dt}';rCalPag()">${d}</div>`;
+  }
+  const rem=(7-(fd+dim)%7)%7;
+  for(let i=1;i<=rem;i++)cal+=`<div class="cal-day other-month">${i}</div>`;
+
+  // Selected date or today
+  const selDate=S._calSelDate||todayStr;
+  const dayItems=items.filter(i=>i.vencimento===selDate);
+  const pendDay=dayItems.filter(i=>i.status!=='pago');
+  const paidDay=dayItems.filter(i=>i.status==='pago');
+
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Calendário de Pagamentos</h2><p>Visualize e dê baixa nos pagamentos do dia</p></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="cal-container anim d1">
+        <div class="cal-header"><h3>${MO[m]} ${y}</h3><div class="cal-nav"><button onclick="S.calFinM--;if(S.calFinM<0){S.calFinM=11;S.calFinY--;}rCalPag()">${I.chevL}</button><button onclick="S.calFinM++;if(S.calFinM>11){S.calFinM=0;S.calFinY++;}rCalPag()">${I.chevR}</button></div></div>
+        <div class="cal-grid">${DA.map(d=>`<div class="cal-day-name">${d}</div>`).join('')}${cal}</div>
+        <div style="margin-top:14px;display:flex;gap:14px;font-size:11px;color:var(--text-muted)">
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:50%;background:var(--rosa-antigo)"></div> Pagamento pendente</div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:50%;background:var(--carvao)"></div> Hoje</div>
+        </div>
+      </div>
+      <div>
+        <div class="card anim d2">
+          <div class="card-header"><h3>Pagamentos — ${fmtD(selDate)}</h3><span style="font-size:12px;color:var(--text-muted)">${dayItems.length} lançamento${dayItems.length!==1?'s':''}</span></div>
+          <div class="card-body">
+            ${dayItems.length===0?'<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Nenhum pagamento nesta data</div>':`
+              ${pendDay.length>0?`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:8px">Pendentes (${pendDay.length})</div>${pendDay.map(i=>`
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--rose-pale);margin-bottom:6px">
+                  <div style="flex:1">
+                    <div style="font-weight:700;font-size:13px">${i.descricao}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${i.fornecedor||''} ${i.tipo?'· '+i.tipo:''} ${i.parcelado==='sim'?' · Parcela '+i.parcela+'/'+i.totalParcelas:''}</div>
+                  </div>
+                  <div style="font-weight:800;font-size:15px;color:var(--carvao)">${fmtR(i.valor)}</div>
+                  <button class="btn btn-sm" style="background:var(--oliva);color:#fff;border-radius:var(--radius-full)" onclick="togglePagarCal('${i.id}')">${I.check} Baixa</button>
+                  <button class="btn-icon" onclick="delPagarCal('${i.id}')" style="width:30px;height:30px">${I.trash}</button>
+                </div>
+              `).join('')}`:''}
+              ${paidDay.length>0?`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--oliva);font-weight:700;margin:${pendDay.length>0?'16px':'0'} 0 8px">Pagos (${paidDay.length})</div>${paidDay.map(i=>`
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--oliva-pale);margin-bottom:6px">
+                  <div style="flex:1">
+                    <div style="font-weight:700;font-size:13px;text-decoration:line-through;color:var(--text-muted)">${i.descricao}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${i.fornecedor||''} ${i.tipo?'· '+i.tipo:''}</div>
+                  </div>
+                  <div style="font-weight:800;font-size:15px;color:var(--oliva)">${fmtR(i.valor)}</div>
+                  <button class="btn btn-sm" style="background:var(--bg-warm);color:var(--text-muted);border-radius:var(--radius-full)" onclick="togglePagarCal('${i.id}')">Desfazer</button>
+                </div>
+              `).join('')}`:''}
+            `}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function togglePagarCal(id){
+  const items=DB.get('pagar');
+  const i=items.find(x=>x.id===id);
+  if(i) i.status=i.status==='pago'?'pendente':'pago';
+  DB.set('pagar',items);
+  rCalPag();
+}
+function delPagarCal(id){
+  if(!confirm('Excluir este pagamento?'))return;
+  DB.set('pagar',DB.get('pagar').filter(x=>x.id!==id));
+  rCalPag();
+  toast('Pagamento excluído');
+}
+
+// ========== CRIAÇÃO — BANCO DE IDEIAS ==========
+const DEFAULT_IDEA_TYPES=['Roteiro','Post','Ensaio','Campanha','Conceito'];
+function getIdeaTypes(){const c=DB.get('idea_types');return c.length?c:DEFAULT_IDEA_TYPES;}
+
+function rIdeias(){
+  const items=DB.get('ideias'),folders=DB.get('ideia_folders');
+  const filtered=S.ideiaFolder==='all'?items:items.filter(i=>i.folder===S.ideiaFolder);
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Banco de Ideias</h2><p>${items.length} ideia${items.length!==1?'s':''} registrada${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="openIdeiaFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openIdeiaModal()">${I.plus} Nova Ideia</button></div></div>
+    <div class="folder-bar anim d1"><div class="folder-chip ${S.ideiaFolder==='all'?'active':''}" onclick="S.ideiaFolder='all';rIdeias()">Todas <span class="count">${items.length}</span></div>${folders.map(f=>`<div class="folder-chip ${S.ideiaFolder===f.id?'active':''}" onclick="S.ideiaFolder='${f.id}';rIdeias()">${f.name} <span class="count">${items.filter(i=>i.folder===f.id).length}</span></div>`).join('')}</div>
+    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.bulb}</div><h3>Nenhuma ideia registrada</h3><p>Comece criando sua primeira ideia</p><button class="btn btn-primary" onclick="openIdeiaModal()">${I.plus} Nova Ideia</button></div>`:`
+    <div class="grid-cards anim d2">${filtered.map(i=>`
+      <div class="card" style="cursor:pointer;transition:var(--transition)" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.transform='';this.style.boxShadow=''" onclick="openIdeiaModal('${i.id}')">
+        ${i.attachData?`<div style="height:120px;overflow:hidden;border-radius:var(--radius-lg) var(--radius-lg) 0 0"><img src="${i.attachData}" style="width:100%;height:100%;object-fit:cover"></div>`:''}
+        <div class="card-body" style="padding:16px 18px">
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <span class="badge badge-lavanda">${i.tipo||'Geral'}</span>
+            ${i.linha?`<span class="badge badge-oliva">${i.linha}</span>`:''}
+          </div>
+          <h4 style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--carvao)">${i.titulo}</h4>
+          ${i.descricao?`<p style="font-size:12px;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${i.descricao}</p>`:''}
+          ${i.produtos?`<div style="margin-top:8px;font-size:11px;color:var(--text-secondary)">${I.products} ${i.produtos}</div>`:''}
+        </div>
+      </div>
+    `).join('')}</div>`}`;
+}
+
+function openIdeiaModal(id){
+  const items=DB.get('ideias'),folders=DB.get('ideia_folders'),products=DB.get('products');
+  const i=id?items.find(x=>x.id===id):{id:'',titulo:'',tipo:'',descricao:'',produtos:'',linha:'',folder:'',attachData:'',attachName:''};
+  window._ideiaAttach=i.attachData||'';window._ideiaAttachName=i.attachName||'';
+  const types=getIdeaTypes();
+  const lines=[...new Set(products.map(p=>p.line).filter(Boolean))];
+
+  openModal(id?'Editar Ideia':'Nova Ideia',`
+    <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="idT" value="${i.titulo}" placeholder="Ex: Ensaio de verão linha Copacabana"></div>
+    <div class="form-row form-row-3">
+      <div class="form-group"><label class="form-label">Tipo de Ideia</label><div style="display:flex;gap:6px"><select class="form-select" id="idTipo" style="flex:1"><option value="">Selecione...</option>${types.map(t=>`<option value="${t}" ${i.tipo===t?'selected':''}>${t}</option>`).join('')}</select><button class="btn-icon" onclick="manageIdeaTypes()" title="Gerenciar tipos" style="flex-shrink:0">${I.edit}</button></div></div>
+      <div class="form-group"><label class="form-label">Linha</label><select class="form-select" id="idLinha"><option value="">Selecione...</option>${lines.map(l=>`<option value="${l}" ${i.linha===l?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Produtos</label><input class="form-input" id="idProd" value="${i.produtos||''}" placeholder="Ex: Hidratante, Body Splash"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Descrição</label><textarea class="form-textarea" id="idDesc" rows="4" placeholder="Descreva sua ideia...">${i.descricao||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Pasta</label><select class="form-select" id="idFolder"><option value="">Sem pasta</option>${folders.map(f=>`<option value="${f.id}" ${i.folder===f.id?'selected':''}>${f.name}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Anexo</label>
+      <div id="idAttArea">${i.attachName?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${i.attachName.match(/\.(jpg|jpeg|png|gif|webp)$/i)?`<img src="${i.attachData}" style="height:60px;border-radius:6px;margin-right:8px">`:I.file+' '}${i.attachName}</span><button class="remove-btn" onclick="clearIdeiaAttach()">${I.trash}</button></div>`:`<div class="photo-upload" onclick="document.getElementById('idAttIn').click()" style="height:80px">${I.camera}<span>Clique para anexar imagem ou arquivo</span><input type="file" id="idAttIn" onchange="handleIdeiaAttach(event)"></div>`}</div>
+    </div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delIdeia('${i.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveIdeia('${i.id||''}')">Salvar</button>`,true);
+}
+
+function handleIdeiaAttach(e){const f=e.target.files[0];if(!f)return;window._ideiaAttachName=f.name;const r=new FileReader();r.onload=ev=>{window._ideiaAttach=ev.target.result;const isImg=f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);document.getElementById('idAttArea').innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${isImg?`<img src="${window._ideiaAttach}" style="height:60px;border-radius:6px;margin-right:8px">`:I.file+' '}${f.name}</span><button class="remove-btn" onclick="clearIdeiaAttach()">${I.trash}</button></div>`;};r.readAsDataURL(f);}
+function clearIdeiaAttach(){window._ideiaAttach='';window._ideiaAttachName='';document.getElementById('idAttArea').innerHTML=`<div class="photo-upload" onclick="document.getElementById('idAttIn').click()" style="height:80px">${I.camera}<span>Clique para anexar</span><input type="file" id="idAttIn" onchange="handleIdeiaAttach(event)"></div>`;}
+
+function saveIdeia(id){
+  const items=DB.get('ideias');
+  const d={id:id||uid(),titulo:document.getElementById('idT').value,tipo:document.getElementById('idTipo').value,descricao:document.getElementById('idDesc').value,produtos:document.getElementById('idProd').value,linha:document.getElementById('idLinha').value,folder:document.getElementById('idFolder').value,attachData:window._ideiaAttach,attachName:window._ideiaAttachName,createdAt:id?(items.find(x=>x.id===id)?.createdAt||new Date().toISOString()):new Date().toISOString()};
+  if(!d.titulo){toast('Preencha o título');return;}
+  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
+  DB.set('ideias',items);closeModal();rIdeias();toast(id?'Ideia atualizada':'Ideia criada');
+}
+function delIdeia(id){if(!confirm('Excluir esta ideia?'))return;DB.set('ideias',DB.get('ideias').filter(x=>x.id!==id));rIdeias();toast('Ideia excluída');}
+
+function openIdeiaFolderModal(){
+  const folders=DB.get('ideia_folders');
+  openModal('Pastas de Ideias',`
+    <div>${folders.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f.name}" onchange="updIdeiaFolder('${f.id}',this.value)" style="flex:1"><button class="remove-btn" onclick="delIdeiaFolder('${f.id}')">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:12px"><input class="form-input" id="nifN" placeholder="Nova pasta" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addIdeiaFolder()">Criar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addIdeiaFolder(){const n=document.getElementById('nifN').value;if(!n)return;const f=DB.get('ideia_folders');f.push({id:uid(),name:n});DB.set('ideia_folders',f);openIdeiaFolderModal();toast('Pasta criada');}
+function updIdeiaFolder(id,n){const f=DB.get('ideia_folders'),x=f.find(v=>v.id===id);if(x)x.name=n;DB.set('ideia_folders',f);}
+function delIdeiaFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('ideia_folders',DB.get('ideia_folders').filter(f=>f.id!==id));const items=DB.get('ideias');items.forEach(x=>{if(x.folder===id)x.folder='';});DB.set('ideias',items);openIdeiaFolderModal();toast('Pasta excluída');}
+
+function manageIdeaTypes(){
+  const types=getIdeaTypes();
+  openModal('Tipos de Ideia',`
+    <div>${types.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${t}" onchange="updIdeaType(${i},this.value)" style="flex:1"><button class="remove-btn" onclick="delIdeaType(${i})">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:12px"><input class="form-input" id="newIdeaType" placeholder="Novo tipo" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addIdeaType()">Adicionar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addIdeaType(){const n=document.getElementById('newIdeaType').value;if(!n)return;const t=getIdeaTypes();t.push(n);DB.set('idea_types',t);manageIdeaTypes();toast('Tipo adicionado');}
+function updIdeaType(i,v){const t=getIdeaTypes();t[i]=v;DB.set('idea_types',t);}
+function delIdeaType(i){if(!confirm('Excluir?'))return;const t=getIdeaTypes();t.splice(i,1);DB.set('idea_types',t);manageIdeaTypes();toast('Tipo removido');}
+
+// ========== CRIAÇÃO — DOCUMENTOS ==========
+function rDocs(){
+  const items=DB.get('mydocs'),folders=DB.get('doc_folders');
+  const filtered=S.docFolder==='all'?items:items.filter(i=>i.folder===S.docFolder);
+  const totalSize=items.reduce((s,i)=>s+(i.size||0),0);
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Documentos</h2><p>${items.length} arquivo${items.length!==1?'s':''} ${totalSize>0?'· '+formatSize(totalSize):''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="openDocFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="uploadDoc()">${I.plus} Enviar Arquivo</button></div></div>
+    <div class="folder-bar anim d1"><div class="folder-chip ${S.docFolder==='all'?'active':''}" onclick="S.docFolder='all';rDocs()">Todos <span class="count">${items.length}</span></div>${folders.map(f=>`<div class="folder-chip ${S.docFolder===f.id?'active':''}" onclick="S.docFolder='${f.id}';rDocs()">${f.name} <span class="count">${items.filter(i=>i.folder===f.id).length}</span></div>`).join('')}</div>
+    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.file}</div><h3>Nenhum documento</h3><p>Envie seus primeiros arquivos</p><button class="btn btn-primary" onclick="uploadDoc()">${I.plus} Enviar Arquivo</button></div>`:`
+    <div class="card anim d2"><div class="table-wrapper"><table><thead><tr><th>Arquivo</th><th>Pasta</th><th>Tamanho</th><th>Data</th><th></th></tr></thead><tbody>${filtered.map(d=>{
+      const fName=folders.find(f=>f.id===d.folder);
+      const isImg=d.fileName&&d.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+      return `<tr>
+        <td><div style="display:flex;align-items:center;gap:10px">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:I.file} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
+        <td>${fName?fName.name:'-'}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${d.size?formatSize(d.size):'-'}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${fmtD(d.date)}</td>
+        <td style="text-align:right">
+          <a href="${d.data}" download="${d.fileName}" class="btn-icon" style="display:inline-flex;text-decoration:none">${I.download}</a>
+          <button class="btn-icon" onclick="editDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button>
+          <button class="btn-icon" onclick="delDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button>
+        </td>
+      </tr>`;}).join('')}</tbody></table></div></div>`}`;
+}
+
+function formatSize(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB';}
+
+function uploadDoc(){
+  const folders=DB.get('doc_folders');
+  openModal('Enviar Arquivo',`
+    <div class="form-group"><label class="form-label">Arquivo</label><div class="photo-upload" onclick="document.getElementById('docUpIn').click()" id="docUpPrev" style="height:100px">${I.file}<span>Clique para selecionar arquivo</span><input type="file" id="docUpIn" onchange="handleDocUpload(event)"></div></div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Nome (opcional)</label><input class="form-input" id="docUpName" placeholder="Nome descritivo"></div>
+      <div class="form-group"><label class="form-label">Pasta</label><select class="form-select" id="docUpFolder"><option value="">Sem pasta</option>${folders.map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}</select></div>
+    </div>
+  `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveDocUpload()">Salvar</button>`);
+}
+
+let _docUpData='',_docUpFileName='',_docUpSize=0;
+function handleDocUpload(e){
+  const f=e.target.files[0];if(!f)return;
+  _docUpFileName=f.name;_docUpSize=f.size;
+  const isImg=f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  const r=new FileReader();
+  r.onload=ev=>{_docUpData=ev.target.result;document.getElementById('docUpPrev').innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:10px">${isImg?`<img src="${_docUpData}" style="height:60px;border-radius:6px">`:I.file}<div><strong style="font-size:13px">${f.name}</strong><div style="font-size:11px;color:var(--text-muted)">${formatSize(f.size)}</div></div></div><input type="file" id="docUpIn" onchange="handleDocUpload(event)" style="display:none">`;
+  if(!document.getElementById('docUpName').value) document.getElementById('docUpName').value=f.name.replace(/\.[^/.]+$/,'');};
+  r.readAsDataURL(f);
+}
+
+function saveDocUpload(){
+  if(!_docUpData){toast('Selecione um arquivo');return;}
+  const items=DB.get('mydocs');
+  items.push({id:uid(),name:document.getElementById('docUpName').value||_docUpFileName,fileName:_docUpFileName,folder:document.getElementById('docUpFolder').value,data:_docUpData,size:_docUpSize,date:new Date().toISOString().split('T')[0]});
+  DB.set('mydocs',items);_docUpData='';_docUpFileName='';_docUpSize=0;closeModal();rDocs();toast('Arquivo salvo');
+}
+
+function editDoc(id){
+  const items=DB.get('mydocs'),d=items.find(x=>x.id===id);if(!d)return;
+  const folders=DB.get('doc_folders');
+  openModal('Editar Documento',`
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="edDocN" value="${d.name||''}"></div>
+      <div class="form-group"><label class="form-label">Pasta</label><select class="form-select" id="edDocF"><option value="">Sem pasta</option>${folders.map(f=>`<option value="${f.id}" ${d.folder===f.id?'selected':''}>${f.name}</option>`).join('')}</select></div>
+    </div>
+  `,`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delDoc('${d.id}');closeModal()">Excluir</button><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveDocEdit('${d.id}')">Salvar</button>`);
+}
+function saveDocEdit(id){
+  const items=DB.get('mydocs'),d=items.find(x=>x.id===id);if(!d)return;
+  d.name=document.getElementById('edDocN').value;d.folder=document.getElementById('edDocF').value;
+  DB.set('mydocs',items);closeModal();rDocs();toast('Atualizado');
+}
+function delDoc(id){if(!confirm('Excluir documento?'))return;DB.set('mydocs',DB.get('mydocs').filter(x=>x.id!==id));rDocs();toast('Excluído');}
+
+function openDocFolderModal(){
+  const folders=DB.get('doc_folders');
+  openModal('Pastas de Documentos',`
+    <div>${folders.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f.name}" onchange="updDocFolder('${f.id}',this.value)" style="flex:1"><button class="remove-btn" onclick="delDocFolder('${f.id}')">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:12px"><input class="form-input" id="ndfN" placeholder="Nova pasta" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addDocFolder()">Criar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addDocFolder(){const n=document.getElementById('ndfN').value;if(!n)return;const f=DB.get('doc_folders');f.push({id:uid(),name:n});DB.set('doc_folders',f);openDocFolderModal();toast('Pasta criada');}
+function updDocFolder(id,n){const f=DB.get('doc_folders'),x=f.find(v=>v.id===id);if(x)x.name=n;DB.set('doc_folders',f);}
+function delDocFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('doc_folders',DB.get('doc_folders').filter(f=>f.id!==id));const items=DB.get('mydocs');items.forEach(x=>{if(x.folder===id)x.folder='';});DB.set('mydocs',items);openDocFolderModal();toast('Pasta excluída');}
+
+// ========== INIT ==========
+renderNav();
+render();
+// Load from Supabase in background (will re-render when done)
+loadFromSupabase();
+</script>
+</body>
+</html>
