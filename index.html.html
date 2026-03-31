@@ -838,6 +838,107 @@ const DA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TYPES=['Hidratante Corporal','Manteiga Corporal','Esfoliante Corporal','Leite Hidratante','Body Splash'];
 
 // ========== DASHBOARD ==========
+function renderWhatIf(mode,cfg,forms){
+  if(mode==='price'){
+    const pct=S._wifPricePct||10;
+    const rows=forms.map(f=>{
+      const c=calcFormula(f);
+      const curPrice=c.priceSuggested;
+      const newPrice=curPrice*(1+pct/100);
+      const newTax=newPrice*cfg.taxRate;
+      const newCard=newPrice*cfg.cardRate;
+      const newProfit=newPrice-c.costTotalUnit-newTax-newCard;
+      const newMargin=newPrice>0?newProfit/newPrice:0;
+      const diffProfit=newProfit-c.profit;
+      return {name:f.name,curPrice,newPrice,curMargin:c.marginReal,newMargin,curProfit:c.profit,newProfit,diffProfit,units:c.unitsLot};
+    }).filter(r=>r.curPrice>0);
+    const totalDiffLot=rows.reduce((s,r)=>s+r.diffProfit*r.units,0);
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--text-secondary)">Variação de preço:</span>
+        <input type="range" min="-30" max="50" value="${pct}" oninput="S._wifPricePct=parseInt(this.value);document.getElementById('wifPctVal').textContent=this.value+'%';document.getElementById('wifContent').innerHTML=renderWhatIf('price',getCfg(),DB.get('formulas'))" style="flex:1;max-width:180px">
+        <span id="wifPctVal" style="font-size:14px;font-weight:700;min-width:44px;color:${pct>=0?'var(--oliva)':'var(--rosa-antigo)'}">${pct}%</span>
+      </div>
+      <div style="max-height:180px;overflow-y:auto">
+      <table style="width:100%;font-size:11.5px"><thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)"><th style="text-align:left">Fórmula</th><th>Atual</th><th>Novo</th><th>Margem</th><th>Δ Lucro/un</th></tr></thead><tbody>${rows.map(r=>`<tr>
+        <td style="font-weight:600">${r.name}</td>
+        <td style="text-align:center">${fmtR(r.curPrice)}</td>
+        <td style="text-align:center;font-weight:700;color:${pct>=0?'var(--oliva)':'var(--rosa-antigo)'}">${fmtR(r.newPrice)}</td>
+        <td style="text-align:center"><span style="font-size:10px;padding:2px 6px;border-radius:10px;background:${r.newMargin>=0.3?'var(--oliva-pale)':'var(--rose-pale)'};color:${r.newMargin>=0.3?'var(--oliva)':'var(--rosa-antigo)'};font-weight:600">${(r.newMargin*100).toFixed(1)}%</span></td>
+        <td style="text-align:center;font-weight:700;color:${r.diffProfit>=0?'var(--oliva)':'var(--rosa-antigo)'}">${r.diffProfit>=0?'+':''}${fmtR(r.diffProfit)}</td>
+      </tr>`).join('')}</tbody></table></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-light);font-size:12px;display:flex;justify-content:space-between">
+        <span style="color:var(--text-muted)">Impacto total por lote:</span>
+        <strong style="color:${totalDiffLot>=0?'var(--oliva)':'var(--rosa-antigo)'}">${totalDiffLot>=0?'+':''}${fmtR(totalDiffLot)}</strong>
+      </div>`;
+  }
+  if(mode==='cost'){
+    const extra=S._wifExtraCost||0;
+    const curFixed=cfg.fixedCosts;
+    const newFixed=curFixed+extra;
+    const rows=forms.map(f=>{
+      const c=calcFormula(f);
+      const newFixedUnit=cfg.totalUnitsMonth>0?newFixed/cfg.totalUnitsMonth:0;
+      const newCostUnit=c.costVarUnit+newFixedUnit;
+      const newPriceSug=newCostUnit/(1-cfg.taxRate-cfg.cardRate-cfg.marginTarget);
+      const curPriceSug=c.priceSuggested;
+      return {name:f.name,curCost:c.costTotalUnit,newCost:newCostUnit,curPrice:curPriceSug,newPrice:newPriceSug,diff:newPriceSug-curPriceSug};
+    }).filter(r=>r.curPrice>0);
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--text-secondary)">Novo custo fixo mensal:</span>
+        <span style="font-size:11px;color:var(--text-muted)">R$</span>
+        <input class="form-input" type="number" step="100" value="${extra}" oninput="S._wifExtraCost=parseFloat(this.value)||0;document.getElementById('wifContent').innerHTML=renderWhatIf('cost',getCfg(),DB.get('formulas'))" style="width:110px;font-size:13px;font-weight:700">
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Fixos atuais: ${fmtR(curFixed)} → Novos: <strong style="color:var(--carvao)">${fmtR(newFixed)}</strong></div>
+      <div style="max-height:180px;overflow-y:auto">
+      <table style="width:100%;font-size:11.5px"><thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)"><th style="text-align:left">Fórmula</th><th>Custo atual</th><th>Novo custo</th><th>Preço sug.</th><th>Δ Preço</th></tr></thead><tbody>${rows.map(r=>`<tr>
+        <td style="font-weight:600">${r.name}</td>
+        <td style="text-align:center">${fmtR(r.curCost)}</td>
+        <td style="text-align:center;font-weight:700">${fmtR(r.newCost)}</td>
+        <td style="text-align:center;font-weight:700;color:var(--rosa-antigo)">${fmtR(r.newPrice)}</td>
+        <td style="text-align:center;color:var(--rosa-antigo);font-weight:600">+${fmtR(r.diff)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+  if(mode==='tax'){
+    const newTax=(S._wifTax!==undefined?S._wifTax:cfg.taxRate*100);
+    const newCard=(S._wifCard!==undefined?S._wifCard:cfg.cardRate*100);
+    const rows=forms.map(f=>{
+      const c=calcFormula(f);
+      const curPriceSug=c.priceSuggested;
+      const newPriceSug=c.costTotalUnit/(1-newTax/100-newCard/100-cfg.marginTarget);
+      const curTaxVal=curPriceSug*cfg.taxRate;
+      const newTaxVal=newPriceSug*newTax/100;
+      const curCardVal=curPriceSug*cfg.cardRate;
+      const newCardVal=newPriceSug*newCard/100;
+      const newProfit=newPriceSug-c.costTotalUnit-newTaxVal-newCardVal;
+      return {name:f.name,curPrice:curPriceSug,newPrice:newPriceSug,diff:newPriceSug-curPriceSug,newProfit};
+    }).filter(r=>r.curPrice>0);
+    return `
+      <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--text-secondary)">Impostos:</span>
+          <input class="form-input" type="number" step="0.5" min="0" max="50" value="${newTax}" oninput="S._wifTax=parseFloat(this.value)||0;document.getElementById('wifContent').innerHTML=renderWhatIf('tax',getCfg(),DB.get('formulas'))" style="width:70px;font-size:13px;font-weight:700">
+          <span style="font-size:12px;color:var(--text-muted)">%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--text-secondary)">Tx cartão:</span>
+          <input class="form-input" type="number" step="0.1" min="0" max="20" value="${newCard}" oninput="S._wifCard=parseFloat(this.value)||0;document.getElementById('wifContent').innerHTML=renderWhatIf('tax',getCfg(),DB.get('formulas'))" style="width:70px;font-size:13px;font-weight:700">
+          <span style="font-size:12px;color:var(--text-muted)">%</span>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Atual: impostos ${(cfg.taxRate*100).toFixed(1)}% + cartão ${(cfg.cardRate*100).toFixed(1)}%</div>
+      <div style="max-height:180px;overflow-y:auto">
+      <table style="width:100%;font-size:11.5px"><thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)"><th style="text-align:left">Fórmula</th><th>Preço atual</th><th>Novo preço</th><th>Δ Preço</th></tr></thead><tbody>${rows.map(r=>`<tr>
+        <td style="font-weight:600">${r.name}</td>
+        <td style="text-align:center">${fmtR(r.curPrice)}</td>
+        <td style="text-align:center;font-weight:700;color:${r.diff>0?'var(--rosa-antigo)':'var(--oliva)'}">${fmtR(r.newPrice)}</td>
+        <td style="text-align:center;font-weight:600;color:${r.diff>0?'var(--rosa-antigo)':'var(--oliva)'}">${r.diff>=0?'+':''}${fmtR(r.diff)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+  return '';
+}
+
 function rDash(){
   const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots'),pagar=DB.get('pagar');
   const today=new Date(),todayStr=localDateStr(today);
@@ -893,6 +994,51 @@ function rDash(){
       <div class="card anim d4" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">Pagamentos Hoje</div><div style="font-size:20px;font-weight:800;color:${pagHoje.length>0?'var(--rosa-antigo)':'var(--carvao)'}">${pagHoje.length}</div>${vencidos.length>0?`<div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px;font-weight:600">${vencidos.length} vencido${vencidos.length>1?'s':''}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Em dia</div>`}</div>
     </div>`;
     })()}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+      <!-- MODO OPERAÇÃO DO DIA -->
+      <div class="card anim d2" style="border-left:3px solid var(--oliva)">
+        <div class="card-header"><h3 style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;color:var(--oliva)">${I.check}</span> O que fazer hoje</h3></div>
+        <div class="card-body" style="padding:8px 20px 16px">${(()=>{
+          const tasks=[];
+          // Pagamentos do dia
+          const pagHoje2=pagar.filter(p=>p.vencimento===todayStr&&p.status!=='pago');
+          pagHoje2.forEach(p=>tasks.push({done:false,text:'Pagar: <strong>'+p.descricao+'</strong> — '+fmtR(p.valor),color:'rosa-antigo',action:"togglePagar('"+p.id+"');rDash()"}));
+          // Vencidos
+          const venc2=pagar.filter(p=>p.vencimento<todayStr&&p.status!=='pago');
+          venc2.slice(0,3).forEach(p=>tasks.push({done:false,text:'Vencido: <strong>'+p.descricao+'</strong> — '+fmtR(p.valor)+' ('+fmtD(p.vencimento)+')',color:'rosa-antigo',action:"togglePagar('"+p.id+"');rDash()"}));
+          // A Receber pendente
+          const recPend=DB.get('receber').filter(r=>r.status!=='recebido'&&r.vencimento&&r.vencimento<=todayStr);
+          recPend.slice(0,3).forEach(r=>tasks.push({done:false,text:'Cobrar: <strong>'+r.descricao+'</strong> — '+fmtR(r.valor),color:'sol-ancestral',action:"toggleReceber('"+r.id+"');rDash()"}));
+          // Estoque MP crítico
+          const stock2=DB.get('stockmp');const forms2=DB.get('formulas');
+          const cMap={};forms2.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)cMap[n]=(cMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
+          stock2.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=cMap[n]||0;return c>0&&q<=(c*0.3);}).slice(0,3).forEach(s=>tasks.push({done:false,text:'Repor MP: <strong>'+s.name+'</strong> — '+s.quantity+' '+(s.unit||'')+'restante',color:'sol-ancestral',action:"go('stockmp')"}));
+          // Lotes com validade próxima (90 dias)
+          const now2=new Date();
+          DB.get('stockpa').filter(i=>{const d=new Date(i.validade);const diff=Math.ceil((d-now2)/(1000*60*60*24));return diff<=90&&diff>0&&i.status==='disponivel';}).slice(0,2).forEach(i=>tasks.push({done:false,text:'Validade próxima: <strong>'+i.name+'</strong> — lote '+i.lotNumber,color:'sol-ancestral',action:"S.stockTab='pa';go('stockmp')"}));
+          if(tasks.length===0) return '<div style="text-align:center;padding:20px;color:var(--oliva);font-size:13px"><strong>Tudo em dia!</strong><br><span style="color:var(--text-muted)">Nenhuma pendência para hoje</span></div>';
+          return tasks.map((t,i)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;${i<tasks.length-1?'border-bottom:1px solid var(--border-light)':''}">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--${t.color});flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:var(--transition)" onclick="${t.action}" onmouseover="this.style.background='var(--${t.color})';this.innerHTML='${I.check.replace(/'/g,"\\'")}';" onmouseout="this.style.background='transparent';this.innerHTML='';"></div>
+            <div style="font-size:12.5px;line-height:1.5;color:var(--text-primary);flex:1">${t.text}</div>
+          </div>`).join('');
+        })()}</div>
+      </div>
+      <!-- SIMULADOR WHAT-IF -->
+      <div class="card anim d3" style="border-left:3px solid var(--lavanda)">
+        <div class="card-header"><h3 style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;color:var(--lavanda)">${I.production}</span> Simulação What-If</h3></div>
+        <div class="card-body" style="padding:8px 20px 16px">${(()=>{
+          const cfg=getCfg();const allForms=DB.get('formulas');
+          if(allForms.length===0) return '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Cadastre fórmulas para usar o simulador</div>';
+          return `
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <button class="btn btn-sm ${(S._wif||'price')==='price'?'btn-primary':''}" onclick="S._wif='price';rDash()" style="font-size:11px">Preço</button>
+              <button class="btn btn-sm ${S._wif==='cost'?'btn-primary':''}" onclick="S._wif='cost';rDash()" style="font-size:11px">Custo fixo</button>
+              <button class="btn btn-sm ${S._wif==='tax'?'btn-primary':''}" onclick="S._wif='tax';rDash()" style="font-size:11px">Impostos / Cartão</button>
+            </div>
+            <div id="wifContent">${renderWhatIf(S._wif||'price',cfg,allForms)}</div>`;
+        })()}</div>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="cal-container anim d2">
