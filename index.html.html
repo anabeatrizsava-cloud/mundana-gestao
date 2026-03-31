@@ -580,7 +580,7 @@ const TABLE_MAP={
 };
 
 // Simple tables that store as name-only arrays
-const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types','rot_fases','rot_tipos'];
+const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types','rot_fases','rot_tipos','rot_freqs'];
 
 // Supabase REST helper
 async function sbFetch(path,opts={}){
@@ -2222,6 +2222,7 @@ function delDocFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('doc_folde
 // ========== ROTEIROS DE ATENDIMENTO ==========
 function getRotFases(){return DB.get('rot_fases').length?DB.get('rot_fases'):['1º Contato','Follow-up','Fechamento'];}
 function getRotTipos(){return DB.get('rot_tipos').length?DB.get('rot_tipos'):['Follow-up','Venda'];}
+function getRotFreqs(){return DB.get('rot_freqs').length?DB.get('rot_freqs'):['1 dia','2 dias','3 dias','4 dias','5 dias','6 dias','7 dias','8 dias','9 dias','10 dias'];}
 
 function rRoteiros(){
   const items=DB.get('roteiros');
@@ -2237,12 +2238,14 @@ function rRoteiros(){
   const tipoBg=t=>{const map={'Follow-up':'var(--lavanda-pale)','Venda':'var(--rose-pale)'};return map[t]||'var(--lavanda-pale)';};
 
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Roteiro de Atendimento</h2><p>${items.length} mensagen${items.length!==1?'s':''} cadastrada${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="manageRotFases()">${I.edit} Fases</button><button class="btn btn-secondary btn-sm" onclick="manageRotTipos()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button></div></div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px" class="anim d1">
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <div class="page-header anim"><div class="page-header-left"><h2>Roteiro de Atendimento</h2><p>${items.length} mensagen${items.length!==1?'s':''} cadastrada${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="manageRotFases()">${I.edit} Fases</button><button class="btn btn-secondary btn-sm" onclick="manageRotTipos()">${I.edit} Tipos</button><button class="btn btn-secondary btn-sm" onclick="manageRotFreqs()">${I.edit} Frequências</button><button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button></div></div>
+    <div style="display:flex;gap:14px;margin-bottom:22px;align-items:center;flex-wrap:wrap" class="anim d1">
+      <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Fase:</span>
-        <div class="folder-chip ${S.rotFase==='all'?'active':''}" onclick="S.rotFase='all';rRoteiros()">Todas <span class="count">${items.length}</span></div>
-        ${fases.map(f=>`<div class="folder-chip ${S.rotFase===f?'active':''}" onclick="S.rotFase='${f}';rRoteiros()">${f} <span class="count">${items.filter(r=>r.fase===f).length}</span></div>`).join('')}
+        <select class="form-select" style="min-width:180px;font-size:13px" onchange="S.rotFase=this.value;rRoteiros()">
+          <option value="all" ${S.rotFase==='all'?'selected':''}>Todas (${items.length})</option>
+          ${fases.map(f=>`<option value="${f}" ${S.rotFase===f?'selected':''}>${f} (${items.filter(r=>r.fase===f).length})</option>`).join('')}
+        </select>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Tipo:</span>
@@ -2263,6 +2266,7 @@ function rRoteiros(){
                 <div style="display:flex;gap:6px;align-items:center">
                   ${r.fase?`<span style="background:${faseBg(r.fase)};color:var(--${faseColor(r.fase)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.fase}</span>`:''}
                   ${r.tipo?`<span style="background:${tipoBg(r.tipo)};color:var(--${tipoColor(r.tipo)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.tipo}</span>`:''}
+                  ${r.frequencia?`<span style="background:var(--bg-warm);color:var(--text-secondary);font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500">${I.clock ? '<span style="width:12px;height:12px;display:inline-flex;vertical-align:middle;margin-right:3px">'+I.clock+'</span>' : ''}${r.frequencia}</span>`:''}
                 </div>
                 <div style="display:flex;gap:4px">
                   <button class="btn-icon" onclick="openRotModal('${r.id}')" style="display:inline-flex">${I.edit}</button>
@@ -2279,12 +2283,13 @@ function rRoteiros(){
 
 function openRotModal(id){
   const items=DB.get('roteiros');
-  const r=id?items.find(x=>x.id===id):{id:'',mensagem:'',fase:'',tipo:'',ordem:items.length+1};
-  const fases=getRotFases(),tipos=getRotTipos();
+  const r=id?items.find(x=>x.id===id):{id:'',mensagem:'',fase:'',tipo:'',frequencia:'',ordem:items.length+1};
+  const fases=getRotFases(),tipos=getRotTipos(),freqs=getRotFreqs();
   openModal(id?'Editar Roteiro':'Novo Roteiro',`
-    <div class="form-row form-row-2">
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
       <div class="form-group"><label class="form-label">Fase</label><select class="form-select" id="rotFase"><option value="">Selecione...</option>${fases.map(f=>`<option value="${f}" ${r.fase===f?'selected':''}>${f}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Tipo de Contato</label><select class="form-select" id="rotTipo"><option value="">Selecione...</option>${tipos.map(t=>`<option value="${t}" ${r.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Frequência</label><select class="form-select" id="rotFreq"><option value="">Selecione...</option>${freqs.map(f=>`<option value="${f}" ${r.frequencia===f?'selected':''}>${f}</option>`).join('')}</select></div>
     </div>
     <div class="form-group"><label class="form-label">Mensagem</label><textarea class="form-textarea" id="rotMsg" rows="8" placeholder="Escreva a mensagem do roteiro...">${r.mensagem||''}</textarea></div>
     <div class="form-group"><label class="form-label">Ordem</label><input class="form-input" id="rotOrdem" type="number" value="${r.ordem||items.length+1}" style="max-width:100px" min="1"></div>
@@ -2293,7 +2298,7 @@ function openRotModal(id){
 
 function saveRot(id){
   const items=DB.get('roteiros');
-  const d={id:id||uid(),mensagem:document.getElementById('rotMsg').value,fase:document.getElementById('rotFase').value,tipo:document.getElementById('rotTipo').value,ordem:parseInt(document.getElementById('rotOrdem').value)||items.length+1};
+  const d={id:id||uid(),mensagem:document.getElementById('rotMsg').value,fase:document.getElementById('rotFase').value,tipo:document.getElementById('rotTipo').value,frequencia:document.getElementById('rotFreq').value,ordem:parseInt(document.getElementById('rotOrdem').value)||items.length+1};
   if(!d.mensagem){toast('Preencha a mensagem');return;}
   if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
   items.sort((a,b)=>(a.ordem||0)-(b.ordem||0));
@@ -2323,6 +2328,17 @@ function manageRotTipos(){
 function addRotTipo(){const n=document.getElementById('newRotTipo').value;if(!n)return;const t=getRotTipos();t.push(n);DB.set('rot_tipos',t);manageRotTipos();toast('Tipo adicionado');}
 function updRotTipo(i,v){const t=getRotTipos();t[i]=v;DB.set('rot_tipos',t);}
 function delRotTipo(i){if(!confirm('Excluir este tipo?'))return;const t=getRotTipos();t.splice(i,1);DB.set('rot_tipos',t);manageRotTipos();toast('Tipo excluído');}
+
+function manageRotFreqs(){
+  const freqs=getRotFreqs();
+  openModal('Gerenciar Frequências',`
+    <div id="rotFreqsList">${freqs.map((f,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f}" data-idx="${i}" onchange="updRotFreq(${i},this.value)" style="flex:1"><button class="remove-btn" onclick="delRotFreq(${i})">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:14px"><input class="form-input" id="newRotFreq" placeholder="Ex: 15 dias" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addRotFreq()">Criar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addRotFreq(){const n=document.getElementById('newRotFreq').value;if(!n)return;const f=getRotFreqs();f.push(n);DB.set('rot_freqs',f);manageRotFreqs();toast('Frequência adicionada');}
+function updRotFreq(i,v){const f=getRotFreqs();f[i]=v;DB.set('rot_freqs',f);}
+function delRotFreq(i){if(!confirm('Excluir?'))return;const f=getRotFreqs();f.splice(i,1);DB.set('rot_freqs',f);manageRotFreqs();toast('Frequência excluída');}
 
 // ========== INIT ==========
 renderNav();
