@@ -2114,7 +2114,7 @@ function rDocs(){
       const fName=folders.find(f=>f.id===d.folder);
       const isImg=d.fileName&&d.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
       return `<tr>
-        <td><div style="display:flex;align-items:center;gap:10px">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:I.file} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
+        <td><div style="display:flex;align-items:center;gap:10px">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:`<span style="width:24px;height:24px;flex-shrink:0;color:var(--text-muted)">${I.file}</span>`} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
         <td>${fName?fName.name:'-'}</td>
         <td style="font-size:12px;color:var(--text-muted)">${d.size?formatSize(d.size):'-'}</td>
         <td style="font-size:12px;color:var(--text-muted)">${fmtD(d.date)}</td>
