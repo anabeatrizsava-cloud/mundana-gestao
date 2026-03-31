@@ -2183,19 +2183,17 @@ function saveDocUpload(){
   if(!_docUpData){toast('Selecione um arquivo');return;}
   const items=DB.get('mydocs');
   const doc={id:uid(),name:document.getElementById('docUpName').value||_docUpFileName,fileName:_docUpFileName,folder:document.getElementById('docUpFolder').value||'',data:_docUpData,size:_docUpSize,date:new Date().toISOString().split('T')[0]};
-  // Check if data is too large for storage (>2MB base64)
-  if(_docUpData.length>2*1024*1024){
-    doc.data='';doc.tooLarge=true;
-    toast('Arquivo muito grande para armazenar — salvo sem preview');
-  }
   items.push(doc);
-  try{DB.set('mydocs',items);}catch(e){
-    // If still fails, try without data
-    doc.data='';doc.tooLarge=true;
-    DB.set('mydocs',items);
-    toast('Arquivo registrado (sem preview por limite de armazenamento)');
+  // Save metadata only to localStorage (no base64), full data to Supabase
+  const localItems=items.map(d=>({...d,data:d.data&&d.data.length>50000?'':d.data}));
+  DB._mem['mydocs']=items; // Keep full data in memory for current session
+  try{localStorage.setItem('mundana_mydocs',JSON.stringify(localItems));}catch(e){
+    // If still fails, strip all data
+    const stripped=items.map(d=>({...d,data:''}));
+    try{localStorage.setItem('mundana_mydocs',JSON.stringify(stripped));}catch(e2){}
   }
-  _docUpData='';_docUpFileName='';_docUpSize=0;closeModal();rDocs();if(!doc.tooLarge)toast('Arquivo salvo');
+  DB._syncToSupabase('mydocs',items); // Full data goes to Supabase
+  _docUpData='';_docUpFileName='';_docUpSize=0;closeModal();rDocs();toast('Arquivo salvo');
 }
 
 function editDoc(id){
@@ -2364,6 +2362,16 @@ function updRotFreq(i,v){const f=getRotFreqs();f[i]=v;DB.set('rot_freqs',f);}
 function delRotFreq(i){if(!confirm('Excluir?'))return;const f=getRotFreqs();f.splice(i,1);DB.set('rot_freqs',f);manageRotFreqs();toast('Frequência excluída');}
 
 // ========== INIT ==========
+// Cleanup: strip base64 from mydocs in localStorage to free space
+try{
+  const rawDocs=localStorage.getItem('mundana_mydocs');
+  if(rawDocs&&rawDocs.length>500000){
+    const docs=JSON.parse(rawDocs);
+    const stripped=docs.map(d=>({...d,data:d.data&&d.data.length>50000?'':d.data}));
+    localStorage.setItem('mundana_mydocs',JSON.stringify(stripped));
+    console.log('Cleaned mydocs localStorage: freed '+(rawDocs.length-JSON.stringify(stripped).length)+' chars');
+  }
+}catch(e){}
 renderNav();
 render();
 // Load from Supabase in background (will re-render when done)
