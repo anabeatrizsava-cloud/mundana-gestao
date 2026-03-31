@@ -832,15 +832,15 @@ function toast(m){const c=document.getElementById('toastContainer'),t=document.c
 // ========== UTILS ==========
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function fmtR(v){return'R$ '+Number(v||0).toFixed(2).replace('.',',');}
-function fmtD(d){return d?new Date(d).toLocaleDateString('pt-BR'):'';}
-const MO=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function fmtD(d){return d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'';}
+function localDateStr(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}const MO=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const DA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TYPES=['Hidratante Corporal','Manteiga Corporal','Esfoliante Corporal','Leite Hidratante','Body Splash'];
 
 // ========== DASHBOARD ==========
 function rDash(){
   const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots'),pagar=DB.get('pagar');
-  const today=new Date(),todayStr=today.toISOString().split('T')[0];
+  const today=new Date(),todayStr=localDateStr(today);
   const y=S.calY,m=S.calM,fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),dip=new Date(y,m,0).getDate();
   let cal='';
   for(let i=fd-1;i>=0;i--)cal+=`<div class="cal-day other-month">${dip-i}</div>`;
@@ -1224,7 +1224,7 @@ function finishProd(){
   const forms=DB.get('formulas'),f=forms.find(x=>x.id===S.prodFId);if(!f)return;
   const lots=DB.get('lots'),now=new Date();
   const num='LOT-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+String(lots.length+1).padStart(3,'0');
-  const fab=now.toISOString().split('T')[0],val=new Date(now);val.setMonth(val.getMonth()+24);const valS=val.toISOString().split('T')[0];
+  const fab=localDateStr(now),val=new Date(now);val.setMonth(val.getMonth()+24);const valS=localDateStr(val);
   lots.push({id:uid(),lotNumber:num,formulaId:f.id,formulaName:f.name,line:f.line||'',quantity:S.prodQty,date:fab,validity:valS,status:'em_estoque'});DB.set('lots',lots);
   // Descontar MP do estoque
   const stock=DB.get('stockmp');
@@ -1506,7 +1506,7 @@ function delSup(id){if(!confirm('Excluir fornecedor?'))return;DB.set('suppliers'
 // ========== TOP BAR — ALERTS ==========
 function getAlerts(){
   const alerts=[];
-  const today=new Date();const todayStr=today.toISOString().split('T')[0];
+  const today=new Date();const todayStr=localDateStr(today);
   // Lotes produzidos hoje
   const lots=DB.get('lots').filter(l=>l.date===todayStr);
   lots.forEach(l=>alerts.push({key:'lot_'+l.id,type:'oliva',text:`Lote <strong>${l.lotNumber}</strong> produzido hoje — ${l.formulaName}`}));
@@ -1749,7 +1749,7 @@ function handleEmpDoc(e){const f=e.target.files[0];if(!f)return;_empDocFileName=
 function saveEmpDoc(){
   const name=document.getElementById('edN').value;if(!name||!_empDocData){toast('Preencha nome e anexe arquivo');return;}
   const docs=DB.get('empresa_docs');
-  docs.push({id:uid(),name,tipo:document.getElementById('edT').value,date:new Date().toISOString().split('T')[0],data:_empDocData,fileName:_empDocFileName});
+  docs.push({id:uid(),name,tipo:document.getElementById('edT').value,date:localDateStr(),data:_empDocData,fileName:_empDocFileName});
   DB.set('empresa_docs',docs);_empDocData='';_empDocFileName='';closeModal();rEmpresa();toast('Documento anexado');
 }
 function delEmpDoc(id){if(!confirm('Excluir documento?'))return;DB.set('empresa_docs',DB.get('empresa_docs').filter(d=>d.id!==id));rEmpresa();toast('Documento excluído');}
@@ -1885,12 +1885,12 @@ function togglePagExtras(){
 function addMonths(dateStr,months){
   const d=new Date(dateStr+'T12:00:00');
   d.setMonth(d.getMonth()+months);
-  return d.toISOString().split('T')[0];
+  return localDateStr(d);
 }
 function addDays(dateStr,days){
   const d=new Date(dateStr+'T12:00:00');
   d.setDate(d.getDate()+days);
-  return d.toISOString().split('T')[0];
+  return localDateStr(d);
 }
 
 function savePagar(id){
@@ -1963,7 +1963,7 @@ function delPagType(i){if(!confirm('Excluir?'))return;const t=getPagTypes();t.sp
 function rCalPag(){
   const y=S.calFinY,m=S.calFinM;
   const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),dip=new Date(y,m,0).getDate();
-  const today=new Date();const todayStr=today.toISOString().split('T')[0];
+  const today=new Date();const todayStr=localDateStr(today);
   const items=DB.get('pagar');
 
   // Build calendar
@@ -2182,7 +2182,7 @@ function handleDocUpload(e){
 function saveDocUpload(){
   if(!_docUpData){toast('Selecione um arquivo');return;}
   const items=DB.get('mydocs');
-  const doc={id:uid(),name:document.getElementById('docUpName').value||_docUpFileName,fileName:_docUpFileName,folder:document.getElementById('docUpFolder').value||'',data:_docUpData,size:_docUpSize,date:new Date().toISOString().split('T')[0]};
+  const doc={id:uid(),name:document.getElementById('docUpName').value||_docUpFileName,fileName:_docUpFileName,folder:document.getElementById('docUpFolder').value||'',data:_docUpData,size:_docUpSize,date:localDateStr()};
   items.push(doc);
   // Save metadata only to localStorage (no base64), full data to Supabase
   const localItems=items.map(d=>({...d,data:d.data&&d.data.length>50000?'':d.data}));
