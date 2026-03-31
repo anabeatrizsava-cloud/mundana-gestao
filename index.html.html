@@ -580,7 +580,7 @@ const TABLE_MAP={
 };
 
 // Simple tables that store as name-only arrays
-const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types','rot_fases','rot_tipos','rot_freqs'];
+const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types'];
 
 // Supabase REST helper
 async function sbFetch(path,opts={}){
@@ -644,12 +644,14 @@ async function loadFromSupabase(){
       if(map.isJsonStore){
         const rows=await sbFetch('app_data?key=eq.'+k+'&select=value');
         if(rows&&Array.isArray(rows)&&rows[0]&&rows[0].value){
+          DB._mem[k]=rows[0].value;
           try{localStorage.setItem('mundana_'+k,JSON.stringify(rows[0].value));}catch(e){}
         }
       } else {
         const rows=await sbFetch(map.table+'?select=*');
         if(rows&&Array.isArray(rows)&&rows.length>0){
           const data=map.fromRow?rows.map(map.fromRow):rows;
+          DB._mem[k]=data;
           try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
         }
       }
@@ -658,14 +660,17 @@ async function loadFromSupabase(){
     for(const k of SIMPLE_ARRAY_TABLES){
       const rows=await sbFetch(k+'?select=name');
       if(rows&&Array.isArray(rows)&&rows.length>0){
-        try{localStorage.setItem('mundana_'+k,JSON.stringify(rows.map(r=>r.name)));}catch(e){}
+        const data=rows.map(r=>r.name);
+        DB._mem[k]=data;
+        try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
       }
     }
-    // Load app_data entries (config, empresa, pricing_lines, alerts_read, etc)
+    // Load app_data entries (config, empresa, pricing_lines, alerts_read, rot_fases, rot_tipos, rot_freqs, etc)
     const appRows=await sbFetch('app_data?select=key,value');
     if(appRows&&Array.isArray(appRows)){
       appRows.forEach(r=>{
         if(!TABLE_MAP[r.key]){
+          DB._mem[r.key]=r.value;
           try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));}catch(e){}
         }
       });
@@ -673,17 +678,20 @@ async function loadFromSupabase(){
     // Special: empresa data
     const empRow=await sbFetch('app_data?key=eq.empresa&select=value');
     if(empRow&&empRow[0]&&empRow[0].value){
-      localStorage.setItem('mundana_empresa',JSON.stringify(empRow[0].value));
+      DB._mem['empresa']=empRow[0].value;
+      try{localStorage.setItem('mundana_empresa',JSON.stringify(empRow[0].value));}catch(e){}
     }
     // Special: pricing_lines
     const plRow=await sbFetch('app_data?key=eq.pricing_lines&select=value');
     if(plRow&&plRow[0]&&plRow[0].value){
-      localStorage.setItem('mundana_pricing_lines',JSON.stringify(plRow[0].value));
+      DB._mem['pricing_lines']=plRow[0].value;
+      try{localStorage.setItem('mundana_pricing_lines',JSON.stringify(plRow[0].value));}catch(e){}
     }
     // Special: alerts_read
     const arRow=await sbFetch('app_data?key=eq.alerts_read&select=value');
     if(arRow&&arRow[0]&&arRow[0].value){
-      localStorage.setItem('mundana_alerts_read',JSON.stringify(arRow[0].value));
+      DB._mem['alerts_read']=arRow[0].value;
+      try{localStorage.setItem('mundana_alerts_read',JSON.stringify(arRow[0].value));}catch(e){}
     }
   }catch(e){console.warn('Load from Supabase failed, using local cache:',e);}
   // Re-render after load
