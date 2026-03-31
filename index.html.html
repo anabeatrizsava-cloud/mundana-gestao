@@ -575,6 +575,7 @@ const TABLE_MAP={
   doc_folders:{table:'doc_folders',cols:['id','name']},
   empresa_users:{table:'empresa_users',cols:['id','name','email','role']},
   empresa_docs:{table:'empresa_docs',cols:['id','name'],isJsonStore:true},
+  stockpa:{table:'stockpa',cols:['id','name'],isJsonStore:true},
 };
 
 // Simple tables that store as name-only arrays
@@ -743,7 +744,7 @@ const I={
 };
 
 // ========== STATE ==========
-let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all'};
+let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp'};
 
 // ========== NAV — Modules ==========
 const NAV=[
@@ -754,7 +755,7 @@ const NAV=[
     {id:'products',label:'Produtos',icon:'products'},
     {id:'formulas',label:'Fórmulas',icon:'formula'},
     {id:'production',label:'Modo Produção',icon:'production'},
-    {id:'stockmp',label:'Estoque MP',icon:'stock'},
+    {id:'stockmp',label:'Estoques',icon:'stock'},
     {id:'pricing',label:'Precificação',icon:'dollar'},
     {id:'suppliers',label:'Fornecedores',icon:'truck'},
   ]},
@@ -1191,7 +1192,7 @@ function finishProd(){
   const forms=DB.get('formulas'),f=forms.find(x=>x.id===S.prodFId);if(!f)return;
   const lots=DB.get('lots'),now=new Date();
   const num='LOT-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+String(lots.length+1).padStart(3,'0');
-  const fab=now.toISOString().split('T')[0],val=new Date(now);val.setMonth(val.getMonth()+12);const valS=val.toISOString().split('T')[0];
+  const fab=now.toISOString().split('T')[0],val=new Date(now);val.setMonth(val.getMonth()+24);const valS=val.toISOString().split('T')[0];
   lots.push({id:uid(),lotNumber:num,formulaId:f.id,formulaName:f.name,quantity:S.prodQty,date:fab,validity:valS,status:'em_estoque'});DB.set('lots',lots);
   // Descontar MP do estoque
   const stock=DB.get('stockmp');
@@ -1208,6 +1209,12 @@ function finishProd(){
     }
   });
   DB.set('stockmp',stock);
+  // Entrada no estoque de produto acabado
+  const c=calcFormula(f);
+  const unitsProduced=c.unitsLot>0?Math.round(c.unitsLot*ratio):0;
+  const pa=DB.get('stockpa');
+  pa.push({id:uid(),name:f.name,productType:f.productType||'',lotNumber:num,quantity:unitsProduced,fabricacao:fab,validade:valS,formulaId:f.id,status:'disponivel'});
+  DB.set('stockpa',pa);
   document.getElementById('content').innerHTML=`<div style="max-width:500px;margin:60px auto;text-align:center" class="anim">
     <div style="width:64px;height:64px;border-radius:50%;background:var(--oliva-pale);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:var(--oliva)">${I.check}</div>
     <h2 style="font-size:24px;font-weight:800;margin-bottom:6px;color:var(--carvao)">Produção finalizada</h2>
@@ -1216,7 +1223,7 @@ function finishProd(){
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--musgo);font-weight:700;margin-bottom:4px">Número do Lote</div>
       <div class="lot-number">${num}</div>
       <div class="lot-dates"><div><strong>Fabricação:</strong> ${fmtD(fab)}</div><div><strong>Validade:</strong> ${fmtD(valS)}</div></div>
-      <div style="margin-top:12px;font-size:14px;color:var(--oliva)"><strong>${f.name}</strong> — ${S.prodQty}g</div>
+      <div style="margin-top:12px;font-size:14px;color:var(--oliva)"><strong>${f.name}</strong> — ${S.prodQty}g — ${unitsProduced} unidade${unitsProduced!==1?'s':''}</div>
     </div>
     <div style="margin-top:28px;display:flex;gap:12px;justify-content:center">
       <button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">Nova produção</button>
@@ -1228,12 +1235,42 @@ function finishProd(){
 
 // ========== STOCK MP ==========
 function rStockMP(){
-  const items=DB.get('stockmp');
+  const tab=S.stockTab;
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Estoque de Matérias-Primas</h2><p>${items.length} item${items.length!==1?'ns':''} registrado${items.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterStock(this.value)" style="width:180px"></div><button class="btn btn-primary" onclick="openStockModal()">${I.plus} Nova Entrada</button></div></div>
-    ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.stock}</div><h3>Nenhuma matéria-prima registrada</h3><p>Registre suas compras de insumos</p><button class="btn btn-primary" onclick="openStockModal()">${I.plus} Nova Entrada</button></div>`:`
-    <div class="card anim d1"><div class="table-wrapper"><table id="stockTable"><thead><tr><th>Matéria-prima</th><th>Fornecedor</th><th>Data Compra</th><th>Quantidade</th><th>Valor (R$)</th><th>Link</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.name}</strong></td><td>${i.supplier||'-'}</td><td>${fmtD(i.purchaseDate)}</td><td>${i.quantity||'-'} ${i.unit||''}</td><td>${fmtR(i.price)}</td><td>${i.supplierLink?`<a href="${i.supplierLink}" target="_blank" style="color:var(--rosa-antigo)">${I.link}</a>`:'-'}</td><td style="text-align:right"><button class="btn-icon" onclick="openStockModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delStock('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+    <div class="page-header anim"><div class="page-header-left"><h2>Estoques</h2><p>Controle de matérias-primas e produto acabado</p></div></div>
+    <div style="display:flex;gap:2px;border-bottom:1.5px solid var(--border);margin-bottom:22px" class="anim d1">
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='mp'?'700':'500'};color:${tab==='mp'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='mp'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.stockTab='mp';rStockMP()">Matérias-Primas</div>
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='pa'?'700':'500'};color:${tab==='pa'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='pa'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.stockTab='pa';rStockMP()">Produto Acabado</div>
+    </div>
+    <div class="anim d2">${tab==='pa'?renderStockPA():renderStockMP()}</div>`;
 }
+function renderStockMP(){
+  const items=DB.get('stockmp');
+  return items.length===0?`<div class="empty-state"><div class="empty-icon">${I.stock}</div><h3>Nenhuma matéria-prima registrada</h3><p>Registre suas compras de insumos</p><button class="btn btn-primary" onclick="openStockModal()">${I.plus} Nova Entrada</button></div>`:`
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterStock(this.value)" style="width:180px"></div><button class="btn btn-primary" onclick="openStockModal()">${I.plus} Nova Entrada</button></div>
+    <div class="card"><div class="table-wrapper"><table id="stockTable"><thead><tr><th>Matéria-prima</th><th>Fornecedor</th><th>Data Compra</th><th>Quantidade</th><th>Valor (R$)</th><th>Link</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.name}</strong></td><td>${i.supplier||'-'}</td><td>${fmtD(i.purchaseDate)}</td><td>${i.quantity||'-'} ${i.unit||''}</td><td>${fmtR(i.price)}</td><td>${i.supplierLink?`<a href="${i.supplierLink}" target="_blank" style="color:var(--rosa-antigo)">${I.link}</a>`:'-'}</td><td style="text-align:right"><button class="btn-icon" onclick="openStockModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delStock('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function renderStockPA(){
+  const items=DB.get('stockpa');
+  const totalUnits=items.reduce((s,i)=>s+(parseInt(i.quantity)||0),0);
+  const now=new Date();
+  return items.length===0?`<div class="empty-state"><div class="empty-icon">${I.box}</div><h3>Nenhum produto acabado em estoque</h3><p>Finalize uma produção no Modo Produção para gerar entradas aqui</p><button class="btn btn-primary" onclick="go('production')">${I.production} Ir para Produção</button></div>`:`
+    <div style="display:flex;gap:12px;margin-bottom:18px">
+      <div style="background:var(--oliva-pale);border-radius:var(--radius-md);padding:14px 20px;flex:1;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--oliva);font-weight:700;margin-bottom:2px">Total em Estoque</div><div style="font-size:22px;font-weight:800;color:var(--oliva)">${totalUnits} un</div></div>
+      <div style="background:var(--lavanda-pale);border-radius:var(--radius-md);padding:14px 20px;flex:1;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--violeta-suave);font-weight:700;margin-bottom:2px">Lotes Registrados</div><div style="font-size:22px;font-weight:800;color:var(--violeta-suave)">${items.length}</div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterStockPA(this.value)" style="width:180px"></div></div>
+    <div class="card"><div class="table-wrapper"><table id="stockPATable"><thead><tr><th>Produto</th><th>Tipo</th><th>Lote</th><th>Quantidade</th><th>Fabricação</th><th>Validade</th><th>Status</th><th></th></tr></thead><tbody>${items.map(i=>{const valDate=new Date(i.validade);const daysToExp=Math.ceil((valDate-now)/(1000*60*60*24));const isNearExp=daysToExp<=90&&daysToExp>0;const isExpired=daysToExp<=0;const statusLabel=i.status==='disponivel'?'Disponível':i.status==='reservado'?'Reservado':i.status==='vendido'?'Vendido':i.status||'Disponível';const statusBadge=i.status==='vendido'?'badge-oliva':i.status==='reservado'?'badge-lavanda':'badge-oliva';return`<tr><td><strong>${i.name}</strong></td><td><span class="badge badge-oliva">${i.productType||'-'}</span></td><td style="font-family:monospace;font-size:12px">${i.lotNumber||'-'}</td><td><strong>${i.quantity||0} un</strong></td><td>${fmtD(i.fabricacao)}</td><td>${isExpired?`<span style="color:var(--rosa-antigo);font-weight:600">${fmtD(i.validade)} (vencido)</span>`:isNearExp?`<span style="color:var(--sol-ancestral);font-weight:600">${fmtD(i.validade)} (${daysToExp}d)</span>`:fmtD(i.validade)}</td><td><span class="badge ${statusBadge}" style="cursor:pointer" onclick="cycleStatusPA('${i.id}')">${statusLabel}</span></td><td style="text-align:right"><button class="btn-icon" onclick="editStockPA('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delStockPA('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div></div>`;
+}
+function filterStockPA(q){const lq=q.toLowerCase();document.querySelectorAll('#stockPATable tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
+function cycleStatusPA(id){const items=DB.get('stockpa');const i=items.find(x=>x.id===id);if(!i)return;const cycle=['disponivel','reservado','vendido'];const idx=cycle.indexOf(i.status||'disponivel');i.status=cycle[(idx+1)%cycle.length];DB.set('stockpa',items);rStockMP();toast('Status: '+(i.status==='disponivel'?'Disponível':i.status==='reservado'?'Reservado':'Vendido'));}
+function editStockPA(id){const items=DB.get('stockpa');const i=items.find(x=>x.id===id);if(!i)return;openModal('Editar Produto Acabado',`
+    <div class="form-row form-row-2"><div class="form-group"><label class="form-label">Produto</label><input class="form-input" id="paN" value="${i.name}"></div><div class="form-group"><label class="form-label">Tipo</label><input class="form-input" id="paT" value="${i.productType||''}"></div></div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr"><div class="form-group"><label class="form-label">Lote</label><input class="form-input" id="paL" value="${i.lotNumber||''}" readonly style="opacity:0.6"></div><div class="form-group"><label class="form-label">Quantidade (un)</label><input class="form-input" id="paQ" type="number" value="${i.quantity||0}"></div><div class="form-group"><label class="form-label">Fabricação</label><input class="form-input" id="paF" type="date" value="${i.fabricacao||''}"></div><div class="form-group"><label class="form-label">Validade</label><input class="form-input" id="paV" type="date" value="${i.validade||''}"></div></div>
+    <div class="form-group"><label class="form-label">Status</label><select class="form-select" id="paS"><option value="disponivel" ${i.status==='disponivel'?'selected':''}>Disponível</option><option value="reservado" ${i.status==='reservado'?'selected':''}>Reservado</option><option value="vendido" ${i.status==='vendido'?'selected':''}>Vendido</option></select></div>
+  `,`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delStockPA('${i.id}');closeModal()">Excluir</button><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStockPA('${i.id}')">Salvar</button>`);}
+function saveStockPA(id){const items=DB.get('stockpa');const idx=items.findIndex(x=>x.id===id);if(idx<0)return;items[idx].name=document.getElementById('paN').value;items[idx].productType=document.getElementById('paT').value;items[idx].quantity=parseInt(document.getElementById('paQ').value)||0;items[idx].fabricacao=document.getElementById('paF').value;items[idx].validade=document.getElementById('paV').value;items[idx].status=document.getElementById('paS').value;DB.set('stockpa',items);closeModal();rStockMP();toast('Produto atualizado');}
+function delStockPA(id){if(!confirm('Excluir este item do estoque?'))return;DB.set('stockpa',DB.get('stockpa').filter(x=>x.id!==id));rStockMP();toast('Excluído');}
 function filterStock(q){const lq=q.toLowerCase();document.querySelectorAll('#stockTable tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
 function openStockModal(id){
   const items=DB.get('stockmp');
