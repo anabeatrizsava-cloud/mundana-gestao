@@ -596,10 +596,12 @@ async function sbFetch(path,opts={}){
 
 // ========== DB (localStorage cache + Supabase sync) ==========
 const DB={
-  get(k){try{return JSON.parse(localStorage.getItem('mundana_'+k))||[];}catch{return[];}},
+  _mem:{},
+  get(k){try{const v=localStorage.getItem('mundana_'+k);if(v)return JSON.parse(v);return DB._mem[k]||[];}catch{return DB._mem[k]||[];}},
   set(k,d){
+    DB._mem[k]=d;
     try{localStorage.setItem('mundana_'+k,JSON.stringify(d));}
-    catch(e){console.warn('localStorage full for',k,', syncing to Supabase only');}
+    catch(e){console.warn('localStorage full for',k,', using memory + Supabase');}
     DB._syncToSupabase(k,d);
   },
   async _syncToSupabase(k,data){
@@ -2151,8 +2153,20 @@ function handleDocUpload(e){
 function saveDocUpload(){
   if(!_docUpData){toast('Selecione um arquivo');return;}
   const items=DB.get('mydocs');
-  items.push({id:uid(),name:document.getElementById('docUpName').value||_docUpFileName,fileName:_docUpFileName,folder:document.getElementById('docUpFolder').value,data:_docUpData,size:_docUpSize,date:new Date().toISOString().split('T')[0]});
-  DB.set('mydocs',items);_docUpData='';_docUpFileName='';_docUpSize=0;closeModal();rDocs();toast('Arquivo salvo');
+  const doc={id:uid(),name:document.getElementById('docUpName').value||_docUpFileName,fileName:_docUpFileName,folder:document.getElementById('docUpFolder').value||'',data:_docUpData,size:_docUpSize,date:new Date().toISOString().split('T')[0]};
+  // Check if data is too large for storage (>2MB base64)
+  if(_docUpData.length>2*1024*1024){
+    doc.data='';doc.tooLarge=true;
+    toast('Arquivo muito grande para armazenar — salvo sem preview');
+  }
+  items.push(doc);
+  try{DB.set('mydocs',items);}catch(e){
+    // If still fails, try without data
+    doc.data='';doc.tooLarge=true;
+    DB.set('mydocs',items);
+    toast('Arquivo registrado (sem preview por limite de armazenamento)');
+  }
+  _docUpData='';_docUpFileName='';_docUpSize=0;closeModal();rDocs();if(!doc.tooLarge)toast('Arquivo salvo');
 }
 
 function editDoc(id){
