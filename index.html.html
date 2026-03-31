@@ -2114,12 +2114,13 @@ function rDocs(){
       const fName=folders.find(f=>f.id===d.folder);
       const isImg=d.fileName&&d.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
       return `<tr>
-        <td><div style="display:flex;align-items:center;gap:10px">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:`<span style="width:24px;height:24px;flex-shrink:0;color:var(--text-muted)">${I.file}</span>`} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
+        <td><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="previewDoc('${d.id}')">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:`<span style="width:24px;height:24px;flex-shrink:0;color:var(--text-muted)">${I.file}</span>`} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
         <td>${fName?fName.name:'-'}</td>
         <td style="font-size:12px;color:var(--text-muted)">${d.size?formatSize(d.size):'-'}</td>
         <td style="font-size:12px;color:var(--text-muted)">${fmtD(d.date)}</td>
         <td style="text-align:right">
-          <a href="${d.data}" download="${d.fileName}" class="btn-icon" style="display:inline-flex;text-decoration:none">${I.download}</a>
+          ${d.data?`<button class="btn-icon" onclick="previewDoc('${d.id}')" title="Visualizar" style="display:inline-flex">${I.eye}</button>`:''}
+          <a href="${d.data}" download="${d.fileName}" class="btn-icon" style="display:inline-flex;text-decoration:none;margin-left:4px">${I.download}</a>
           <button class="btn-icon" onclick="editDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button>
           <button class="btn-icon" onclick="delDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button>
         </td>
@@ -2185,6 +2186,22 @@ function saveDocEdit(id){
   DB.set('mydocs',items);closeModal();rDocs();toast('Atualizado');
 }
 function delDoc(id){if(!confirm('Excluir documento?'))return;DB.set('mydocs',DB.get('mydocs').filter(x=>x.id!==id));rDocs();toast('Excluído');}
+
+function previewDoc(id){
+  const items=DB.get('mydocs'),d=items.find(x=>x.id===id);if(!d||!d.data)return;
+  const fn=d.fileName||'';
+  const isImg=fn.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+  const isPdf=fn.match(/\.pdf$/i);
+  let content='';
+  if(isImg){
+    content=`<div style="text-align:center;max-height:70vh;overflow:auto"><img src="${d.data}" style="max-width:100%;border-radius:var(--radius-md)"></div>`;
+  }else if(isPdf){
+    content=`<iframe src="${d.data}" style="width:100%;height:70vh;border:none;border-radius:var(--radius-md)"></iframe>`;
+  }else{
+    content=`<div style="text-align:center;padding:40px"><div style="width:48px;height:48px;margin:0 auto 16px;color:var(--text-muted)">${I.file}</div><p style="color:var(--text-muted);margin-bottom:16px">Pré-visualização não disponível para este tipo de arquivo</p><a href="${d.data}" download="${fn}" class="btn btn-primary" style="text-decoration:none">${I.download} Baixar arquivo</a></div>`;
+  }
+  openModal(d.name||fn,content,'<a href="'+d.data+'" download="'+fn+'" class="btn btn-secondary" style="text-decoration:none;margin-right:auto">'+I.download+' Baixar</a><button class="btn btn-secondary" onclick="closeModal()">Fechar</button>',true);
+}
 
 function openDocFolderModal(){
   const folders=DB.get('doc_folders');
