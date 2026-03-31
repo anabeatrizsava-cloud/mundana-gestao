@@ -576,10 +576,11 @@ const TABLE_MAP={
   empresa_users:{table:'empresa_users',cols:['id','name','email','role']},
   empresa_docs:{table:'empresa_docs',cols:['id','name'],isJsonStore:true},
   stockpa:{table:'stockpa',cols:['id','name'],isJsonStore:true},
+  roteiros:{table:'roteiros',cols:['id','name'],isJsonStore:true},
 };
 
 // Simple tables that store as name-only arrays
-const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types'];
+const SIMPLE_ARRAY_TABLES=['product_types','pag_types','idea_types','rot_fases','rot_tipos'];
 
 // Supabase REST helper
 async function sbFetch(path,opts={}){
@@ -743,10 +744,11 @@ const I={
   calCheck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>',
   bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>',
   copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
 };
 
 // ========== STATE ==========
-let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp'};
+let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp',rotFase:'all',rotTipo:'all'};
 
 // ========== NAV — Modules ==========
 const NAV=[
@@ -773,6 +775,9 @@ const NAV=[
     {id:'ideias',label:'Banco de Ideias',icon:'bulb'},
     {id:'docs',label:'Documentos',icon:'file'},
   ]},
+  { module:'Cliente', icon:'users', items:[
+    {id:'roteiros',label:'Roteiro Atendimento',icon:'chat'},
+  ]},
 ];
 
 function renderNav(){
@@ -790,7 +795,7 @@ function renderNav(){
 
 function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
 function render(){
-  const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs};
+  const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros};
   (fn[S.page]||rDash)();
   renderTopBar();
 }
@@ -2213,6 +2218,111 @@ function openDocFolderModal(){
 function addDocFolder(){const n=document.getElementById('ndfN').value;if(!n)return;const f=DB.get('doc_folders');f.push({id:uid(),name:n});DB.set('doc_folders',f);openDocFolderModal();toast('Pasta criada');}
 function updDocFolder(id,n){const f=DB.get('doc_folders'),x=f.find(v=>v.id===id);if(x)x.name=n;DB.set('doc_folders',f);}
 function delDocFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('doc_folders',DB.get('doc_folders').filter(f=>f.id!==id));const items=DB.get('mydocs');items.forEach(x=>{if(x.folder===id)x.folder='';});DB.set('mydocs',items);openDocFolderModal();toast('Pasta excluída');}
+
+// ========== ROTEIROS DE ATENDIMENTO ==========
+function getRotFases(){return DB.get('rot_fases').length?DB.get('rot_fases'):['1º Contato','Follow-up','Fechamento'];}
+function getRotTipos(){return DB.get('rot_tipos').length?DB.get('rot_tipos'):['Follow-up','Venda'];}
+
+function rRoteiros(){
+  const items=DB.get('roteiros');
+  const fases=getRotFases(),tipos=getRotTipos();
+  const filtered=items.filter(r=>{
+    if(S.rotFase!=='all'&&r.fase!==S.rotFase)return false;
+    if(S.rotTipo!=='all'&&r.tipo!==S.rotTipo)return false;
+    return true;
+  });
+  const faseColor=f=>{const map={'1º Contato':'oliva','Follow-up':'oliva','Fechamento':'rosa-antigo'};return map[f]||'oliva';};
+  const tipoColor=t=>{const map={'Follow-up':'lavanda','Venda':'rosa-antigo'};return map[t]||'lavanda';};
+  const faseBg=f=>{const map={'1º Contato':'var(--oliva-pale)','Follow-up':'var(--oliva-pale)','Fechamento':'var(--rose-pale)'};return map[f]||'var(--oliva-pale)';};
+  const tipoBg=t=>{const map={'Follow-up':'var(--lavanda-pale)','Venda':'var(--rose-pale)'};return map[t]||'var(--lavanda-pale)';};
+
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Roteiro de Atendimento</h2><p>${items.length} mensagen${items.length!==1?'s':''} cadastrada${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="manageRotFases()">${I.edit} Fases</button><button class="btn btn-secondary btn-sm" onclick="manageRotTipos()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button></div></div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px" class="anim d1">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Fase:</span>
+        <div class="folder-chip ${S.rotFase==='all'?'active':''}" onclick="S.rotFase='all';rRoteiros()">Todas <span class="count">${items.length}</span></div>
+        ${fases.map(f=>`<div class="folder-chip ${S.rotFase===f?'active':''}" onclick="S.rotFase='${f}';rRoteiros()">${f} <span class="count">${items.filter(r=>r.fase===f).length}</span></div>`).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Tipo:</span>
+        <div class="folder-chip ${S.rotTipo==='all'?'active':''}" onclick="S.rotTipo='all';rRoteiros()">Todos <span class="count">${items.length}</span></div>
+        ${tipos.map(t=>`<div class="folder-chip ${S.rotTipo===t?'active':''}" onclick="S.rotTipo='${t}';rRoteiros()">${t} <span class="count">${items.filter(r=>r.tipo===t).length}</span></div>`).join('')}
+      </div>
+    </div>
+    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.chat}</div><h3>Nenhum roteiro cadastrado</h3><p>${items.length>0?'Nenhum resultado para os filtros selecionados':'Crie seu primeiro roteiro de atendimento'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button>`:''}</div>`:`
+    <div style="position:relative;padding-left:32px" class="anim d2">
+      <div style="position:absolute;left:13px;top:14px;bottom:14px;width:2px;background:var(--border);border-radius:1px"></div>
+      ${filtered.map((r,idx)=>{
+        const fc=faseColor(r.fase);const tc=tipoColor(r.tipo);
+        return`<div style="position:relative;margin-bottom:14px">
+          <div style="position:absolute;left:-32px;top:16px;width:24px;height:24px;border-radius:50%;background:var(--${fc});display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:600">${idx+1}</div>
+          <div class="card" style="border-radius:var(--radius-lg)">
+            <div style="padding:16px 20px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <div style="display:flex;gap:6px;align-items:center">
+                  ${r.fase?`<span style="background:${faseBg(r.fase)};color:var(--${faseColor(r.fase)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.fase}</span>`:''}
+                  ${r.tipo?`<span style="background:${tipoBg(r.tipo)};color:var(--${tipoColor(r.tipo)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.tipo}</span>`:''}
+                </div>
+                <div style="display:flex;gap:4px">
+                  <button class="btn-icon" onclick="openRotModal('${r.id}')" style="display:inline-flex">${I.edit}</button>
+                  <button class="btn-icon" onclick="delRot('${r.id}')" style="display:inline-flex">${I.trash}</button>
+                </div>
+              </div>
+              <div style="font-size:13px;line-height:1.8;color:var(--text-primary);background:var(--bg-warm);padding:12px 14px;border-radius:var(--radius-md);white-space:pre-wrap">${r.mensagem||''}</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}`;
+}
+
+function openRotModal(id){
+  const items=DB.get('roteiros');
+  const r=id?items.find(x=>x.id===id):{id:'',mensagem:'',fase:'',tipo:'',ordem:items.length+1};
+  const fases=getRotFases(),tipos=getRotTipos();
+  openModal(id?'Editar Roteiro':'Novo Roteiro',`
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Fase</label><select class="form-select" id="rotFase"><option value="">Selecione...</option>${fases.map(f=>`<option value="${f}" ${r.fase===f?'selected':''}>${f}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Tipo de Contato</label><select class="form-select" id="rotTipo"><option value="">Selecione...</option>${tipos.map(t=>`<option value="${t}" ${r.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Mensagem</label><textarea class="form-textarea" id="rotMsg" rows="8" placeholder="Escreva a mensagem do roteiro...">${r.mensagem||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Ordem</label><input class="form-input" id="rotOrdem" type="number" value="${r.ordem||items.length+1}" style="max-width:100px" min="1"></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delRot('${r.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveRot('${r.id||''}')">Salvar</button>`);
+}
+
+function saveRot(id){
+  const items=DB.get('roteiros');
+  const d={id:id||uid(),mensagem:document.getElementById('rotMsg').value,fase:document.getElementById('rotFase').value,tipo:document.getElementById('rotTipo').value,ordem:parseInt(document.getElementById('rotOrdem').value)||items.length+1};
+  if(!d.mensagem){toast('Preencha a mensagem');return;}
+  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
+  items.sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+  DB.set('roteiros',items);closeModal();rRoteiros();toast(id?'Roteiro atualizado':'Roteiro cadastrado');
+}
+
+function delRot(id){if(!confirm('Excluir este roteiro?'))return;DB.set('roteiros',DB.get('roteiros').filter(x=>x.id!==id));rRoteiros();toast('Roteiro excluído');}
+
+function manageRotFases(){
+  const fases=getRotFases();
+  openModal('Gerenciar Fases',`
+    <div id="rotFasesList">${fases.map((f,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f}" data-idx="${i}" onchange="updRotFase(${i},this.value)" style="flex:1"><button class="remove-btn" onclick="delRotFase(${i})">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:14px"><input class="form-input" id="newRotFase" placeholder="Nova fase" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addRotFase()">Criar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addRotFase(){const n=document.getElementById('newRotFase').value;if(!n)return;const f=getRotFases();f.push(n);DB.set('rot_fases',f);manageRotFases();toast('Fase adicionada');}
+function updRotFase(i,v){const f=getRotFases();f[i]=v;DB.set('rot_fases',f);}
+function delRotFase(i){if(!confirm('Excluir esta fase?'))return;const f=getRotFases();f.splice(i,1);DB.set('rot_fases',f);manageRotFases();toast('Fase excluída');}
+
+function manageRotTipos(){
+  const tipos=getRotTipos();
+  openModal('Gerenciar Tipos de Contato',`
+    <div id="rotTiposList">${tipos.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${t}" data-idx="${i}" onchange="updRotTipo(${i},this.value)" style="flex:1"><button class="remove-btn" onclick="delRotTipo(${i})">${I.trash}</button></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:14px"><input class="form-input" id="newRotTipo" placeholder="Novo tipo" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addRotTipo()">Criar</button></div>
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');
+}
+function addRotTipo(){const n=document.getElementById('newRotTipo').value;if(!n)return;const t=getRotTipos();t.push(n);DB.set('rot_tipos',t);manageRotTipos();toast('Tipo adicionado');}
+function updRotTipo(i,v){const t=getRotTipos();t[i]=v;DB.set('rot_tipos',t);}
+function delRotTipo(i){if(!confirm('Excluir este tipo?'))return;const t=getRotTipos();t.splice(i,1);DB.set('rot_tipos',t);manageRotTipos();toast('Tipo excluído');}
 
 // ========== INIT ==========
 renderNav();
