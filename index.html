@@ -771,7 +771,7 @@ const I={
 };
 
 // ========== STATE ==========
-let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp',rotFase:'all',rotTipo:'all'};
+let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp',rotFase:'all',rotTipo:'all',pagStatus:'all',pagTipo:'all'};
 
 // ========== NAV — Modules ==========
 const NAV=[
@@ -1966,17 +1966,143 @@ function getPagTypes(){const c=DB.get('pag_types');return c.length?c:DEFAULT_PAG
 
 function rPagar(){
   const items=DB.get('pagar');
+  const types=getPagTypes();
+  const todayStr=localDateStr();
+  const now=new Date();
+  const curM=now.getMonth(),curY=now.getFullYear();
+  const prevM=curM===0?11:curM-1,prevY=curM===0?curY-1:curY;
+  if(!S._pagMes)S._pagMes='all';
+  if(!S._pagSort)S._pagSort='vencimento';
+  if(!S._pagDir)S._pagDir='asc';
+  if(!S._pagBusca)S._pagBusca='';
+
+  // Period filter
+  const allMonths=[...new Set(items.map(i=>{if(!i.vencimento)return null;const d=new Date(i.vencimento+'T12:00:00');return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}).filter(Boolean))].sort().reverse();
+
+  // Filter items
+  const filtered=items.filter(i=>{
+    if(S.pagStatus!=='all'){
+      if(S.pagStatus==='pendente'&&(i.status==='pago'||(i.vencimento&&i.vencimento<todayStr)))return false;
+      if(S.pagStatus==='pago'&&i.status!=='pago')return false;
+      if(S.pagStatus==='vencido'&&(i.status==='pago'||!i.vencimento||i.vencimento>=todayStr))return false;
+      if(S.pagStatus==='emdia'&&(i.status==='pago'||!i.vencimento||i.vencimento<todayStr))return false;
+    }
+    if(S.pagTipo!=='all'&&i.tipo!==S.pagTipo)return false;
+    if(S._pagMes!=='all'&&i.vencimento){const d=new Date(i.vencimento+'T12:00:00');const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');if(ym!==S._pagMes)return false;}
+    if(S._pagBusca){const q=S._pagBusca.toLowerCase();if(!(i.descricao||'').toLowerCase().includes(q)&&!(i.fornecedor||'').toLowerCase().includes(q)&&!(i.tipo||'').toLowerCase().includes(q))return false;}
+    return true;
+  });
+
+  // Sort
+  const sorted=[...filtered].sort((a,b)=>{
+    let va,vb;
+    if(S._pagSort==='valor'){va=parseFloat(a.valor)||0;vb=parseFloat(b.valor)||0;}
+    else if(S._pagSort==='descricao'){va=(a.descricao||'').toLowerCase();vb=(b.descricao||'').toLowerCase();}
+    else{va=a.vencimento||'';vb=b.vencimento||'';}
+    if(va<vb)return S._pagDir==='asc'?-1:1;
+    if(va>vb)return S._pagDir==='asc'?1:-1;
+    return 0;
+  });
+
+  // Totals
   const total=items.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
   const paid=items.filter(i=>i.status==='pago').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const vencidos=items.filter(i=>i.status!=='pago'&&i.vencimento&&i.vencimento<todayStr);
+  const vencidoTotal=vencidos.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const emDia=items.filter(i=>i.status!=='pago'&&i.vencimento&&i.vencimento>=todayStr);
+  const emDiaTotal=emDia.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const filtTotal=sorted.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+
+  // Month comparison
+  const mesAtual=items.filter(i=>{if(!i.vencimento)return false;const d=new Date(i.vencimento+'T12:00:00');return d.getMonth()===curM&&d.getFullYear()===curY;});
+  const mesAnterior=items.filter(i=>{if(!i.vencimento)return false;const d=new Date(i.vencimento+'T12:00:00');return d.getMonth()===prevM&&d.getFullYear()===prevY;});
+  const totalMesAtual=mesAtual.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const totalMesAnterior=mesAnterior.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const diffMes=totalMesAtual-totalMesAnterior;
+  const diffPct=totalMesAnterior>0?((diffMes/totalMesAnterior)*100).toFixed(1):0;
+
+  // By category
+  const byTipo={};items.forEach(i=>{const t=i.tipo||'Sem tipo';byTipo[t]=(byTipo[t]||0)+(parseFloat(i.valor)||0);});
+  const tipoEntries=Object.entries(byTipo).sort((a,b)=>b[1]-a[1]);
+  const maxTipo=tipoEntries.length>0?tipoEntries[0][1]:1;
+
+  const sa=(col)=>S._pagSort===col?(S._pagDir==='asc'?'↑':'↓'):'';
+  const sc=(col)=>`onclick="S._pagSort='${col}';S._pagDir=S._pagSort==='${col}'&&S._pagDir==='asc'?'desc':'asc';rPagar()" style="cursor:pointer"`;
+
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''} — Total: ${fmtR(total)} | Pago: ${fmtR(paid)}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
-    ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.arrowOut}</div><h3>Nenhum lançamento registrado</h3><p>Cadastre seus pagamentos</p><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div>`:`
-    <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Descrição</th><th>Fornecedor</th><th>Tipo</th><th>Vencimento</th><th>Valor</th><th>Detalhes</th><th>Status</th><th></th></tr></thead><tbody>${items.map(i=>{
+    <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._pagBusca}" oninput="S._pagBusca=this.value;rPagar()" style="width:180px"></div><button class="btn btn-secondary btn-sm" onclick="exportPagarCSV()">${I.download} CSV</button><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;margin-bottom:22px" class="anim d1">
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='all'?'border-left:3px solid var(--carvao)':''}" onclick="S.pagStatus='all';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Total</div><div style="font-size:18px;font-weight:800">${fmtR(total)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${items.length} lançamentos</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pendente'?'border-left:3px solid var(--sol-ancestral)':''}" onclick="S.pagStatus='pendente';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pendente</div><div style="font-size:18px;font-weight:800;color:var(--sol-ancestral)">${fmtR(emDiaTotal+vencidoTotal)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${emDia.length+vencidos.length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='vencido'?'border-left:3px solid var(--rosa-antigo)':''}" onclick="S.pagStatus='vencido';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:4px">Vencido</div><div style="font-size:18px;font-weight:800;color:var(--rosa-antigo)">${fmtR(vencidoTotal)}</div><div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px">${vencidos.length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='emdia'?'border-left:3px solid var(--oliva)':''}" onclick="S.pagStatus='emdia';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--oliva);font-weight:700;margin-bottom:4px">Em dia</div><div style="font-size:18px;font-weight:800;color:var(--oliva)">${fmtR(emDiaTotal)}</div><div style="font-size:11px;color:var(--oliva);margin-top:2px">${emDia.length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pago'?'border-left:3px solid var(--musgo)':''}" onclick="S.pagStatus='pago';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pago</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${fmtR(paid)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${items.filter(i=>i.status==='pago').length} itens</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px" class="anim d2">
+      <div class="card" style="padding:16px 20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:12px">Comparativo mensal</div>
+        <div style="display:flex;gap:16px;align-items:flex-end;margin-bottom:12px">
+          <div style="flex:1"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${MO[prevM].slice(0,3)}/${prevY}</div><div style="font-size:18px;font-weight:700">${fmtR(totalMesAnterior)}</div></div>
+          <div style="font-size:20px;color:var(--text-muted)">→</div>
+          <div style="flex:1"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${MO[curM].slice(0,3)}/${curY}</div><div style="font-size:18px;font-weight:700">${fmtR(totalMesAtual)}</div></div>
+          <div style="text-align:right"><div style="font-size:10px;color:var(--text-muted);margin-bottom:2px">Variação</div><div style="font-size:16px;font-weight:800;color:${diffMes>0?'var(--rosa-antigo)':diffMes<0?'var(--oliva)':'var(--text-muted)'}">${diffMes>0?'+':''}${fmtR(diffMes)}</div><div style="font-size:11px;color:${diffMes>0?'var(--rosa-antigo)':diffMes<0?'var(--oliva)':'var(--text-muted)'}">${diffMes>0?'+':''}${diffPct}%</div></div>
+        </div>
+        <div style="display:flex;gap:4px;height:6px;border-radius:3px;overflow:hidden;background:var(--border-light)"><div style="flex:${totalMesAnterior||1};background:var(--areia);border-radius:3px"></div><div style="flex:${totalMesAtual||1};background:${diffMes>0?'var(--rosa-antigo)':'var(--oliva)'};border-radius:3px"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-muted)"><span>${MO[prevM].slice(0,3)}</span><span>${MO[curM].slice(0,3)}</span></div>
+      </div>
+      <div class="card" style="padding:16px 20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:12px">Despesas por categoria</div>
+        ${tipoEntries.length===0?'<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">Nenhuma despesa cadastrada</div>':tipoEntries.slice(0,6).map(([tipo,val])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:600;color:var(--text-primary)">${tipo}</span><span style="font-weight:700">${fmtR(val)}</span></div><div style="height:5px;border-radius:3px;background:var(--border-light);overflow:hidden"><div style="height:100%;width:${Math.round(val/maxTipo*100)}%;background:var(--lavanda);border-radius:3px"></div></div></div>`).join('')}
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap" class="anim d3">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Período:</span>
+        <select class="form-select" style="min-width:150px;font-size:12px" onchange="S._pagMes=this.value;rPagar()">
+          <option value="all" ${S._pagMes==='all'?'selected':''}>Todos os meses</option>
+          ${allMonths.map(ym=>{const[yy,mm]=ym.split('-');return`<option value="${ym}" ${S._pagMes===ym?'selected':''}>${MO[parseInt(mm)-1].slice(0,3)}/${yy}</option>`;}).join('')}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Tipo:</span>
+        <div class="folder-chip ${S.pagTipo==='all'?'active':''}" onclick="S.pagTipo='all';rPagar()">Todos <span class="count">${items.length}</span></div>
+        ${types.map(t=>`<div class="folder-chip ${S.pagTipo===t?'active':''}" onclick="S.pagTipo='${t}';rPagar()">${t} <span class="count">${items.filter(i=>i.tipo===t).length}</span></div>`).join('')}
+      </div>
+    </div>
+
+    ${sorted.length!==items.length||S._pagBusca?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px" class="anim d3">Exibindo <strong>${sorted.length}</strong> de ${items.length} — Subtotal: <strong style="color:var(--carvao)">${fmtR(filtTotal)}</strong></div>`:''}
+
+    ${sorted.length===0?`<div class="empty-state anim d4"><div class="empty-icon">${I.arrowOut}</div><h3>Nenhum lançamento</h3><p>${items.length>0?'Nenhum resultado para os filtros selecionados':'Cadastre seus pagamentos'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button>`:''}</div>`:`
+    <div class="card anim d4"><div class="table-wrapper"><table><thead><tr><th ${sc('descricao')}>Descrição ${sa('descricao')}</th><th>Fornecedor</th><th>Tipo</th><th ${sc('vencimento')}>Vencimento ${sa('vencimento')}</th><th ${sc('valor')}>Valor ${sa('valor')}</th><th>Detalhes</th><th>Status</th><th></th></tr></thead><tbody>${sorted.map(i=>{
       let detalhes='À vista';
       if(i.parcelado==='sim') detalhes=(i.parcela||'1')+'/'+(i.totalParcelas||'1');
       if(i.recorrente&&i.recorrente!=='nao') detalhes=({mensal:'Mensal',semanal:'Semanal',personalizado:'Recorrente'})[i.recorrente]||detalhes;
-      return `<tr><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td>${fmtD(i.vencimento)}</td><td><strong>${fmtR(i.valor)}</strong></td><td><span style="font-size:11px;color:var(--text-muted)">${detalhes}</span></td><td><span class="badge ${i.status==='pago'?'badge-oliva':'badge-rose'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':'Pendente'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;
+      const isVencido=i.status!=='pago'&&i.vencimento&&i.vencimento<todayStr;
+      const isEmDia=i.status!=='pago'&&i.vencimento&&i.vencimento>=todayStr;
+      return `<tr style="${isVencido?'background:var(--rose-pale)':''}"><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td style="${isVencido?'color:var(--rosa-antigo);font-weight:600':''}">${fmtD(i.vencimento)}${isVencido?' <span style="font-size:10px">(vencido)</span>':''}</td><td><strong>${fmtR(i.valor)}</strong></td><td><span style="font-size:11px;color:var(--text-muted)">${detalhes}</span></td><td><span class="badge ${i.status==='pago'?'badge-oliva':isVencido?'badge-rose':'badge-oliva'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':isVencido?'Vencido':'Em dia'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;
     }).join('')}</tbody></table></div></div>`}`;
+}
+
+function exportPagarCSV(){
+  const items=DB.get('pagar');
+  const todayStr=localDateStr();
+  const header='Descrição;Fornecedor;Tipo;Vencimento;Valor;Status;Detalhes;Observações';
+  const rows=items.map(i=>{
+    let det='À vista';
+    if(i.parcelado==='sim')det=(i.parcela||'1')+'/'+(i.totalParcelas||'1');
+    if(i.recorrente&&i.recorrente!=='nao')det=({mensal:'Mensal',semanal:'Semanal',personalizado:'Recorrente'})[i.recorrente]||det;
+    const isVencido=i.status!=='pago'&&i.vencimento&&i.vencimento<todayStr;
+    const status=i.status==='pago'?'Pago':isVencido?'Vencido':'Em dia';
+    return `"${i.descricao||''}";"${i.fornecedor||''}";"${i.tipo||''}";"${i.vencimento||''}";"${i.valor||''}";"${status}";"${det}";"${i.obs||''}"`;
+  });
+  const csv='\uFEFF'+header+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='mundana_a_pagar_'+localDateStr()+'.csv';a.click();URL.revokeObjectURL(url);
+  toast('CSV exportado');
 }
 
 function openPagarModal(id){
