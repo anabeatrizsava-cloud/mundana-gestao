@@ -1982,13 +1982,13 @@ function rPagar(){
   // Filter items
   const filtered=items.filter(i=>{
     if(S.pagStatus!=='all'){
-      if(S.pagStatus==='pendente'&&(i.status==='pago'||(i.vencimento&&i.vencimento<todayStr)))return false;
+      if(S.pagStatus==='pendente'&&i.status==='pago')return false;
       if(S.pagStatus==='pago'&&i.status!=='pago')return false;
       if(S.pagStatus==='vencido'&&(i.status==='pago'||!i.vencimento||i.vencimento>=todayStr))return false;
       if(S.pagStatus==='emdia'&&(i.status==='pago'||!i.vencimento||i.vencimento<todayStr))return false;
     }
     if(S.pagTipo!=='all'&&i.tipo!==S.pagTipo)return false;
-    if(S._pagMes!=='all'&&i.vencimento){const d=new Date(i.vencimento+'T12:00:00');const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');if(ym!==S._pagMes)return false;}
+    if(S._pagMes!=='all'){if(!i.vencimento)return false;const d=new Date(i.vencimento+'T12:00:00');const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');if(ym!==S._pagMes)return false;}
     if(S._pagBusca){const q=S._pagBusca.toLowerCase();if(!(i.descricao||'').toLowerCase().includes(q)&&!(i.fornecedor||'').toLowerCase().includes(q)&&!(i.tipo||'').toLowerCase().includes(q))return false;}
     return true;
   });
@@ -2004,12 +2004,13 @@ function rPagar(){
     return 0;
   });
 
-  // Totals
-  const total=items.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-  const paid=items.filter(i=>i.status==='pago').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-  const vencidos=items.filter(i=>i.status!=='pago'&&i.vencimento&&i.vencimento<todayStr);
+  // Totals - based on month filter (cards reflect selected period)
+  const baseItems=S._pagMes==='all'?items:items.filter(i=>{if(!i.vencimento)return false;const d=new Date(i.vencimento+'T12:00:00');const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');return ym===S._pagMes;});
+  const total=baseItems.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const paid=baseItems.filter(i=>i.status==='pago').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
+  const vencidos=baseItems.filter(i=>i.status!=='pago'&&i.vencimento&&i.vencimento<todayStr);
   const vencidoTotal=vencidos.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-  const emDia=items.filter(i=>i.status!=='pago'&&i.vencimento&&i.vencimento>=todayStr);
+  const emDia=baseItems.filter(i=>i.status!=='pago'&&i.vencimento&&i.vencimento>=todayStr);
   const emDiaTotal=emDia.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
   const filtTotal=sorted.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
 
@@ -2021,8 +2022,8 @@ function rPagar(){
   const diffMes=totalMesAtual-totalMesAnterior;
   const diffPct=totalMesAnterior>0?((diffMes/totalMesAnterior)*100).toFixed(1):0;
 
-  // By category
-  const byTipo={};items.forEach(i=>{const t=i.tipo||'Sem tipo';byTipo[t]=(byTipo[t]||0)+(parseFloat(i.valor)||0);});
+  // By category (respects month filter)
+  const byTipo={};baseItems.forEach(i=>{const t=i.tipo||'Sem tipo';byTipo[t]=(byTipo[t]||0)+(parseFloat(i.valor)||0);});
   const tipoEntries=Object.entries(byTipo).sort((a,b)=>b[1]-a[1]);
   const maxTipo=tipoEntries.length>0?tipoEntries[0][1]:1;
 
@@ -2033,11 +2034,11 @@ function rPagar(){
     <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._pagBusca}" oninput="S._pagBusca=this.value;rPagar()" style="width:180px"></div><button class="btn btn-secondary btn-sm" onclick="exportPagarCSV()">${I.download} CSV</button><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;margin-bottom:22px" class="anim d1">
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='all'?'border-left:3px solid var(--carvao)':''}" onclick="S.pagStatus='all';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Total</div><div style="font-size:18px;font-weight:800">${fmtR(total)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${items.length} lançamentos</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='all'?'border-left:3px solid var(--carvao)':''}" onclick="S.pagStatus='all';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Total${S._pagMes!=='all'?' (mês)':''}</div><div style="font-size:18px;font-weight:800">${fmtR(total)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.length} lançamentos</div></div>
       <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pendente'?'border-left:3px solid var(--sol-ancestral)':''}" onclick="S.pagStatus='pendente';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pendente</div><div style="font-size:18px;font-weight:800;color:var(--sol-ancestral)">${fmtR(emDiaTotal+vencidoTotal)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${emDia.length+vencidos.length} itens</div></div>
       <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='vencido'?'border-left:3px solid var(--rosa-antigo)':''}" onclick="S.pagStatus='vencido';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:4px">Vencido</div><div style="font-size:18px;font-weight:800;color:var(--rosa-antigo)">${fmtR(vencidoTotal)}</div><div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px">${vencidos.length} itens</div></div>
       <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='emdia'?'border-left:3px solid var(--oliva)':''}" onclick="S.pagStatus='emdia';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--oliva);font-weight:700;margin-bottom:4px">Em dia</div><div style="font-size:18px;font-weight:800;color:var(--oliva)">${fmtR(emDiaTotal)}</div><div style="font-size:11px;color:var(--oliva);margin-top:2px">${emDia.length} itens</div></div>
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pago'?'border-left:3px solid var(--musgo)':''}" onclick="S.pagStatus='pago';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pago</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${fmtR(paid)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${items.filter(i=>i.status==='pago').length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pago'?'border-left:3px solid var(--musgo)':''}" onclick="S.pagStatus='pago';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pago</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${fmtR(paid)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.filter(i=>i.status==='pago').length} itens</div></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px" class="anim d2">
