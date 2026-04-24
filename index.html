@@ -2696,12 +2696,12 @@ async function deleteLeadRow(id){
 }
 
 async function rLeads(){
-  document.getElementById('main').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
+  document.querySelector('.main').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
   let leads=[];
   try{
     leads=await sbFetch('leads_quiz?select=*&order=criado_em.desc')||[];
   }catch(e){
-    document.getElementById('main').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
+    document.querySelector('.main').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
     return;
   }
   window._leadsData=leads;
@@ -2732,7 +2732,7 @@ async function rLeads(){
     ? `<div class="empty-state"><div class="empty-icon">${I.quiz}</div><h3>Nenhum lead ainda</h3><p>Os contatos captados pelo quiz aparecerão aqui</p></div>`
     : `<table><thead><tr><th>#</th><th>Telefone</th><th>Linha Resultado</th><th>Data Cadastro</th><th></th></tr></thead><tbody id="leadsTableBody">${rowsHtml}</tbody></table>`;
 
-  document.getElementById('main').innerHTML=`
+  document.querySelector('.main').innerHTML=`
     <div class="page-header anim">
       <div class="page-header-left">
         <h2>Leads Quiz</h2>
