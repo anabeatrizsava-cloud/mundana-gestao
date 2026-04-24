@@ -2700,8 +2700,15 @@ async function rLeads(){
   document.getElementById('content').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
   let leads=[];
   try{
-    const raw=await sbFetch('leads_quiz?select=*&order=criado_em.desc');
-    leads=Array.isArray(raw)?raw:(raw&&Array.isArray(raw.data)?raw.data:[]);
+    const res=await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?select=*&order=criado_em.desc',{
+      headers:{
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+SUPABASE_KEY,
+        'Content-Type':'application/json'
+      }
+    });
+    leads=await res.json();
+    if(!Array.isArray(leads)) leads=[];
   }catch(e){
     document.getElementById('content').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
     return;
