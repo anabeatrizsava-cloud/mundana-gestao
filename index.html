@@ -820,7 +820,8 @@ function renderNav(){
 
 function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
 function render(){
-  const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,leads:rLeads};
+  const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros};
+  if(S.page==='leads'){rLeads();return;}
   (fn[S.page]||rDash)();
   renderTopBar();
 }
@@ -2699,7 +2700,8 @@ async function rLeads(){
   document.querySelector('.main').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
   let leads=[];
   try{
-    leads=await sbFetch('leads_quiz?select=*&order=criado_em.desc')||[];
+    const raw=await sbFetch('leads_quiz?select=*&order=criado_em.desc');
+    leads=Array.isArray(raw)?raw:(raw&&Array.isArray(raw.data)?raw.data:[]);
   }catch(e){
     document.querySelector('.main').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
     return;
@@ -2760,6 +2762,7 @@ async function rLeads(){
       </div>
     </div>
     <div class="card anim d2"><div class="table-wrapper">${tableHtml}</div></div>`;
+  renderTopBar();
 }
 
 </script>
