@@ -2730,7 +2730,7 @@ async function rLeads(){
     const color=LINE_COLORS[r.linha_resultado]||'var(--rose)';
     return `<tr>
       <td style="color:var(--text-muted);font-size:11px">${i+1}</td>
-      <td><a href="https://wa.me/55${phone}" target="_blank" style="color:var(--oliva);font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px">${I.chat} ${r.telefone}</a></td>
+      <td><a href="https://wa.me/55${phone}" target="_blank" style="color:var(--carvao);font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:12px;height:12px;flex-shrink:0;color:var(--oliva);opacity:.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${r.telefone}</a></td>
       <td><span style="background:${color};color:white;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:600">${r.linha_resultado||'-'}</span></td>
       <td style="color:var(--text-muted);font-size:12px">${fmtDateTime(r.criado_em)}</td>
       <td style="text-align:right"><button class="btn-icon" onclick="deleteLeadRow(${r.id})" title="Remover" style="display:inline-flex">${I.trash}</button></td>
