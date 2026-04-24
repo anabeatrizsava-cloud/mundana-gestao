@@ -2697,13 +2697,13 @@ async function deleteLeadRow(id){
 }
 
 async function rLeads(){
-  document.querySelector('.main').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
+  document.getElementById('content').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
   let leads=[];
   try{
     const raw=await sbFetch('leads_quiz?select=*&order=criado_em.desc');
     leads=Array.isArray(raw)?raw:(raw&&Array.isArray(raw.data)?raw.data:[]);
   }catch(e){
-    document.querySelector('.main').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
+    document.getElementById('content').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
     return;
   }
   window._leadsData=leads;
@@ -2734,17 +2734,32 @@ async function rLeads(){
     ? `<div class="empty-state"><div class="empty-icon">${I.quiz}</div><h3>Nenhum lead ainda</h3><p>Os contatos captados pelo quiz aparecerão aqui</p></div>`
     : `<table><thead><tr><th>#</th><th>Telefone</th><th>Linha Resultado</th><th>Data Cadastro</th><th></th></tr></thead><tbody id="leadsTableBody">${rowsHtml}</tbody></table>`;
 
-  document.querySelector('.main').innerHTML=`
+  document.getElementById('content').innerHTML=`
+    <div style="padding-top:8px">
     <div class="page-header anim">
       <div class="page-header-left">
         <h2>Leads Quiz</h2>
         <p>${total} contato${total!==1?'s':''} captado${total!==1?'s':''} via quiz de fragr&acirc;ncias</p>
       </div>
       <div class="page-header-actions">
+        <a href="https://quiz.mundana.com.br" target="_blank" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none">${I.eye} Ver quiz</a>
         <div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterLeads(this.value)" style="width:180px"></div>
         <button class="btn btn-secondary btn-sm" onclick="exportLeadsCSV()">${I.download} Exportar CSV</button>
       </div>
     </div>
+    <div class="anim" style="margin-bottom:20px;padding:14px 18px;background:var(--lavanda-pale);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="color:var(--lavanda);width:18px;height:18px">${I.quiz}</span>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--carvao)">quiz.mundana.com.br</div>
+          <div style="font-size:11px;color:var(--text-muted)">Link p&uacute;blico do quiz de fragr&acirc;ncias</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('https://quiz.mundana.com.br').then(()=>toast('Link copiado!'))" style="font-size:11px">${I.copy} Copiar link</button>
+        <a href="https://quiz.mundana.com.br" target="_blank" class="btn btn-sm btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:11px">${I.eye} Abrir quiz</a>
+      </div>
+    </div></div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" class="anim d1">
       <div class="card" style="padding:20px">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px">Total de leads</div>
