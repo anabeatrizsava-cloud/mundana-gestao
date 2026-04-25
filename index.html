@@ -768,7 +768,6 @@ const I={
   bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>',
   copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-  quiz:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
 };
 
 // ========== STATE ==========
@@ -801,7 +800,6 @@ const NAV=[
   ]},
   { module:'Cliente', icon:'users', items:[
     {id:'roteiros',label:'Roteiro Atendimento',icon:'chat'},
-    {id:'leads',label:'Leads Quiz',icon:'quiz'},
   ]},
 ];
 
@@ -811,7 +809,7 @@ function renderNav(){
       <div class="nav-module-header">${I[m.icon]} ${m.module}</div>
       ${m.items.map(i=>`
         <div class="nav-item ${S.page===i.id?'active':''}" onclick="go('${i.id}')">
-          ${I[i.icon]} ${i.label}${i.id==='leads'&&window._leadsNewCount?` <span style="display:inline-flex;align-items:center;justify-content:center;background:#cca2a6;color:white;border-radius:10px;font-size:9px;font-weight:500;padding:1px 6px;margin-left:4px">${window._leadsNewCount}</span>`:''}
+          ${I[i.icon]} ${i.label}
         </div>
       `).join('')}
     </div>
@@ -821,7 +819,6 @@ function renderNav(){
 function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
 function render(){
   const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros};
-  if(S.page==='leads'){rLeads();return;}
   (fn[S.page]||rDash)();
   renderTopBar();
 }
@@ -1021,7 +1018,7 @@ function rDash(){
           DB.get('stockpa').filter(i=>{const d=new Date(i.validade);const diff=Math.ceil((d-now2)/(1000*60*60*24));return diff<=90&&diff>0&&i.status==='disponivel';}).slice(0,2).forEach(i=>tasks.push({done:false,text:'Validade próxima: <strong>'+i.name+'</strong> — lote '+i.lotNumber,color:'sol-ancestral',action:"S.stockTab='pa';go('stockmp')"}));
           if(tasks.length===0) return '<div style="text-align:center;padding:20px;color:var(--oliva);font-size:13px"><strong>Tudo em dia!</strong><br><span style="color:var(--text-muted)">Nenhuma pendência para hoje</span></div>';
           return tasks.map((t,i)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;${i<tasks.length-1?'border-bottom:1px solid var(--border-light)':''}">
-            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--${t.color});flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:var(--transition)" onclick="${t.action}" onmouseover="this.style.background='var(--${t.color})';" onmouseout="this.style.background='transparent';" ></div>
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--${t.color});flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:var(--transition)" onclick="${t.action}" onmouseover="this.style.background='var(--${t.color})';this.innerHTML='${I.check.replace(/'/g,"\\'")}';" onmouseout="this.style.background='transparent';this.innerHTML='';"></div>
             <div style="font-size:12.5px;line-height:1.5;color:var(--text-primary);flex:1">${t.text}</div>
           </div>`).join('');
         })()}</div>
@@ -1191,7 +1188,7 @@ function rForms(){
   const forms=DB.get('formulas');
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>Fórmulas</h2><p>${forms.length} fórmula${forms.length!==1?'s':''} cadastrada${forms.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div></div>
-    ${forms.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.formula}</div><h3>Nenhuma fórmula cadastrada</h3><p>Cadastre a primeira fórmula dos seus produtos</p><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div>`:`<div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th>Linha</th><th>Tipo</th><th>Lote</th><th>Un/Lote</th><th>MP Total</th><th>Custo Un.</th><th>Preço Sug.</th><th>Margem</th><th></th></tr></thead><tbody>${forms.map(f=>{const c=calcFormula(f);return`<tr style="cursor:pointer" onclick="viewFormula('${f.id}')"><td><strong>${f.name}</strong></td><td><span class="badge badge-oliva">${f.productType||'-'}</span></td><td>${f.lotSize||'-'}g</td><td>${c.unitsLot}</td><td>${fmtR(c.totalMP)}</td><td>${fmtR(c.costTotalUnit)}</td><td><strong>${fmtR(c.priceSuggested)}</strong></td><td><span class="badge ${c.marginReal>=0.3?'badge-oliva':'badge-rose'}">${(c.marginReal*100).toFixed(1)}%</span></td><td style="text-align:right" onclick="event.stopPropagation()"><button class="btn-icon" onclick="duplicateForm('${f.id}')" title="Duplicar" style="display:inline-flex">${I.copy}</button><button class="btn-icon" onclick="openFormModal('${f.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button><button class="btn-icon" onclick="delForm('${f.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div></div>`}`;
+    ${forms.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.formula}</div><h3>Nenhuma fórmula cadastrada</h3><p>Cadastre a primeira fórmula dos seus produtos</p><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div>`:`<div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th>Linha</th><th>Tipo</th><th>Lote</th><th>Un/Lote</th><th>MP Total</th><th>Custo Un.</th><th>Preço Sug.</th><th>Margem</th><th></th></tr></thead><tbody>${forms.map(f=>{const c=calcFormula(f);return`<tr style="cursor:pointer" onclick="viewFormula('${f.id}')"><td><strong>${f.name}</strong></td><td>${f.line||'-'}</td><td><span class="badge badge-oliva">${f.productType||'-'}</span></td><td>${f.lotSize||'-'}g</td><td>${c.unitsLot}</td><td>${fmtR(c.totalMP)}</td><td>${fmtR(c.costTotalUnit)}</td><td><strong>${fmtR(c.priceSuggested)}</strong></td><td><span class="badge ${c.marginReal>=0.3?'badge-oliva':'badge-rose'}">${(c.marginReal*100).toFixed(1)}%</span></td><td style="text-align:right" onclick="event.stopPropagation()"><button class="btn-icon" onclick="duplicateForm('${f.id}')" title="Duplicar" style="display:inline-flex">${I.copy}</button><button class="btn-icon" onclick="openFormModal('${f.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button><button class="btn-icon" onclick="delForm('${f.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div></div>`}`;
 }
 
 function viewFormula(id){
@@ -1916,18 +1913,28 @@ function renderEmpresaUsers(){
 }
 function openUserModal(id){
   const users=DB.get('empresa_users');
-  const u=id?users.find(x=>x.id===id):{id:'',name:'',email:'',role:'viewer'};
+  const u=id?users.find(x=>x.id===id):{id:'',name:'',email:'',role:'viewer',modules:[]};
+  const allMods=[{id:'dashboard',label:'Dashboard'},{id:'products',label:'Produtos'},{id:'formulas',label:'Fórmulas'},{id:'production',label:'Modo Produção'},{id:'stockmp',label:'Estoques'},{id:'pricing',label:'Precificação'},{id:'suppliers',label:'Fornecedores'},{id:'empresa',label:'Dados Mundana'},{id:'receber',label:'A Receber'},{id:'pagar',label:'A Pagar'},{id:'calpag',label:'Calendário Pgto'},{id:'ideias',label:'Banco de Ideias'},{id:'docs',label:'Documentos'},{id:'roteiros',label:'Roteiro Atendimento'}];
+  const uMods=u.modules||[];
+  const isAll=u.role==='admin'||uMods.length===0;
   openModal(id?'Editar Usuário':'Novo Usuário',`
     <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="uN" value="${u.name}" placeholder="Nome completo"></div>
     <div class="form-row form-row-2">
       <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="uE" value="${u.email||''}" placeholder="email@exemplo.com"></div>
-      <div class="form-group"><label class="form-label">Perfil de Acesso</label><select class="form-select" id="uR"><option value="admin" ${u.role==='admin'?'selected':''}>Administrador</option><option value="editor" ${u.role==='editor'?'selected':''}>Editor</option><option value="viewer" ${u.role==='viewer'?'selected':''}>Visualizador</option></select></div>
+      <div class="form-group"><label class="form-label">Perfil de Acesso</label><select class="form-select" id="uR" onchange="document.getElementById('modPerms').style.display=this.value==='admin'?'none':'block'"><option value="admin" ${u.role==='admin'?'selected':''}>Administrador</option><option value="editor" ${u.role==='editor'?'selected':''}>Editor</option><option value="viewer" ${u.role==='viewer'?'selected':''}>Visualizador</option></select></div>
+    </div>
+    <div id="modPerms" style="display:${u.role==='admin'?'none':'block'}">
+      <label class="form-label" style="margin-bottom:8px">Módulos permitidos</label>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('#modPerms input[type=checkbox]').forEach(c=>c.checked=true)" style="font-size:11px">Marcar todos</button><button class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('#modPerms input[type=checkbox]').forEach(c=>c.checked=false)" style="font-size:11px;margin-left:6px">Desmarcar</button></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${allMods.map(m=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 10px;background:var(--bg-warm);border-radius:var(--radius-md);cursor:pointer"><input type="checkbox" value="${m.id}" class="uMod" ${isAll||uMods.includes(m.id)?'checked':''}> ${m.label}</label>`).join('')}</div>
     </div>
   `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delUser('${u.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveUser('${u.id||''}')">Salvar</button>`);
 }
 function saveUser(id){
   const users=DB.get('empresa_users');
-  const d={id:id||uid(),name:document.getElementById('uN').value,email:document.getElementById('uE').value,role:document.getElementById('uR').value};
+  const role=document.getElementById('uR').value;
+  const modules=role==='admin'?[]:[...document.querySelectorAll('.uMod:checked')].map(c=>c.value);
+  const d={id:id||uid(),name:document.getElementById('uN').value,email:document.getElementById('uE').value,role,modules};
   if(!d.name){toast('Preencha o nome');return;}
   if(id){const i=users.findIndex(u=>u.id===id);if(i>=0)users[i]=d;}else users.push(d);
   DB.set('empresa_users',users);closeModal();rEmpresa();toast(id?'Usuário atualizado':'Usuário cadastrado');
@@ -2652,338 +2659,6 @@ renderNav();
 render();
 // Load from Supabase in background (will re-render when done)
 loadFromSupabase();
-// ========== LEADS QUIZ ==========
-const LINE_COLORS = {
-  'Copacabana Glow':'var(--sol-ancestral)',
-  'Boreal Mist':'var(--oliva)',
-  'Urban Shine':'var(--violeta-suave)',
-  'Bora Breeze':'var(--luz)',
-  'Coco Blanc':'var(--areia)',
-  'Moon Milk':'var(--lavanda)',
-};
-
-const STATUS_LABELS = {novo:'Novo', contatado:'Contatado', cliente:'Cliente'};
-const STATUS_COLORS = {
-  novo:'background:#E6F1FB;color:#185FA5;border:1px solid #B5D4F4',
-  contatado:'background:#faeeda;color:#854F0B;border:1px solid #FAC775',
-  cliente:'background:#e8efe9;color:#3B6D11;border:1px solid #C0DD97',
-};
-
-function fmtDateTime(dt){
-  if(!dt) return '-';
-  const d=new Date(dt);
-  return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-}
-
-function fmtRelative(dt){
-  if(!dt) return '-';
-  const diff=Math.floor((Date.now()-new Date(dt))/1000);
-  if(diff<60) return 'agora mesmo';
-  if(diff<3600) return 'há '+Math.floor(diff/60)+' min';
-  if(diff<86400) return 'há '+Math.floor(diff/3600)+' hora'+(Math.floor(diff/3600)>1?'s':'');
-  if(diff<604800) return 'há '+Math.floor(diff/86400)+' dia'+(Math.floor(diff/86400)>1?'s':'');
-  return fmtDateTime(dt);
-}
-
-function exportLeadsCSV(){
-  const rows=window._leadsData||[];
-  if(!rows.length){toast('Nenhum lead para exportar');return;}
-  const header=['Telefone','Linha Resultado','Status','Observação','Data Cadastro'];
-  const lines=rows.map(r=>[r.telefone,r.linha_resultado,r.status||'novo',r.obs||'',fmtDateTime(r.criado_em)].join(';'));
-  const csv=[header.join(';'),...lines].join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='leads_quiz_mundana.csv';a.click();URL.revokeObjectURL(url);
-  toast('CSV exportado!');
-}
-
-function filterLeads(q){
-  const lq=q.toLowerCase();
-  document.querySelectorAll('#leadsTableBody tr').forEach(tr=>{
-    tr.style.display=tr.textContent.toLowerCase().includes(lq)?'':'none';
-  });
-}
-
-function filterLeadsByStatus(status){
-  window._leadsFilter=status;
-  document.querySelectorAll('.leads-filter-chip').forEach(c=>{
-    c.style.background=c.dataset.val===status?'#252829':'';
-    c.style.color=c.dataset.val===status?'white':'';
-    c.style.borderColor=c.dataset.val===status?'#252829':'';
-  });
-  document.querySelectorAll('#leadsTableBody tr').forEach(tr=>{
-    if(!status||status==='all') tr.style.display='';
-    else tr.style.display=tr.dataset.status===status?'':'none';
-  });
-}
-
-function filterLeadsByLine(line){
-  window._leadsLineFilter=line;
-  document.querySelectorAll('.leads-line-chip').forEach(c=>{
-    c.style.background=c.dataset.val===line?'#252829':'';
-    c.style.color=c.dataset.val===line?'white':'';
-    c.style.borderColor=c.dataset.val===line?'#252829':'';
-  });
-  document.querySelectorAll('#leadsTableBody tr').forEach(tr=>{
-    if(!line||line==='all') tr.style.display='';
-    else tr.style.display=tr.dataset.line===line?'':'none';
-  });
-}
-
-async function updateLeadStatus(id, status){
-  try{
-    await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{
-      method:'PATCH',
-      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({status})
-    });
-    if(window._leadsData){
-      const r=window._leadsData.find(x=>x.id===id);
-      if(r) r.status=status;
-    }
-    const el=document.getElementById('status-'+id);
-    if(el){
-      const styles=STATUS_COLORS[status]||STATUS_COLORS.novo;
-      el.style.cssText='display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:10px;cursor:pointer;'+styles;
-      el.textContent='● '+(STATUS_LABELS[status]||status);
-      el.onclick=()=>cycleStatus(id);
-    }
-    toast('Status atualizado');
-  }catch(e){toast('Erro ao atualizar');}
-}
-
-function cycleStatus(id){
-  const r=window._leadsData&&window._leadsData.find(x=>x.id===id);
-  const cur=r&&r.status||'novo';
-  const next={novo:'contatado',contatado:'cliente',cliente:'novo'};
-  updateLeadStatus(id,next[cur]||'novo');
-}
-
-async function saveObs(id){
-  const val=document.getElementById('obs-input-'+id).value;
-  try{
-    await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{
-      method:'PATCH',
-      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({obs:val})
-    });
-    if(window._leadsData){
-      const r=window._leadsData.find(x=>x.id===id);
-      if(r) r.obs=val;
-    }
-    closeModal();
-    toast('Observação salva');
-  }catch(e){toast('Erro ao salvar');}
-}
-
-function openObsModal(id){
-  const r=window._leadsData&&window._leadsData.find(x=>x.id===id);
-  const obs=r&&r.obs||'';
-  openModal(
-    'Observação — '+(r&&r.telefone||''),
-    `<textarea id="obs-input-${id}" style="width:100%;height:100px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical">${obs}</textarea>`,
-    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveObs(${id})">Salvar</button>`
-  );
-}
-
-async function deleteLeadRow(id){
-  if(!confirm('Remover este lead?')) return;
-  try{
-    await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{
-      method:'DELETE',
-      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
-    });
-    toast('Lead removido');
-    rLeads();
-  }catch(e){toast('Erro ao remover');}
-}
-
-function copyPhone(phone){
-  navigator.clipboard&&navigator.clipboard.writeText(phone).then(()=>toast('Número copiado!')).catch(()=>{});
-}
-
-function toggleChart(){
-  const c=document.getElementById('leads-chart-area');
-  const btn=document.getElementById('leads-chart-btn');
-  if(!c||!btn) return;
-  const open=c.style.display==='block';
-  c.style.display=open?'none':'block';
-  btn.textContent=open?'ver evolução ▾':'ocultar ▴';
-}
-
-async function rLeads(){
-  document.getElementById('content').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:13px">Carregando leads...</div>';
-  let leads=[];
-  try{
-    const res=await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?select=*&order=criado_em.desc',{
-      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'}
-    });
-    leads=await res.json();
-    if(!Array.isArray(leads)) leads=[];
-  }catch(e){
-    document.getElementById('content').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted)">Erro ao carregar leads.</div>';
-    return;
-  }
-  window._leadsData=leads;
-
-  const total=leads.length;
-  const byLine={};
-  leads.forEach(r=>{const l=r.linha_resultado||'Outro';byLine[l]=(byLine[l]||0)+1;});
-  const sorted=Object.entries(byLine).sort((a,b)=>b[1]-a[1]);
-  const topLine=sorted[0];
-
-  // This week count
-  const weekAgo=new Date(Date.now()-7*24*3600*1000);
-  const thisWeek=leads.filter(r=>new Date(r.criado_em)>weekAgo).length;
-
-  // Chart data — last 7 days
-  const days=['dom','seg','ter','qua','qui','sex','sáb'];
-  const dayCounts=Array(7).fill(0);
-  leads.forEach(r=>{
-    const d=new Date(r.criado_em);
-    const diff=Math.floor((Date.now()-d)/86400000);
-    if(diff<7) dayCounts[6-diff]++;
-  });
-  const maxDay=Math.max(...dayCounts,1);
-  const chartBars=dayCounts.map((n,i)=>{
-    const h=Math.max(4,Math.round((n/maxDay)*60));
-    const isToday=i===6;
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">
-      <span style="font-size:10px;color:var(--text-muted)">${n||''}</span>
-      <div style="width:100%;height:${h}px;background:${isToday?'#cca2a6':'#e8d0d2'};border-radius:3px 3px 0 0"></div>
-      <span style="font-size:9px;color:var(--text-muted)">${days[(new Date().getDay()-6+i+7)%7]}</span>
-    </div>`;
-  }).join('');
-
-  // Line filter chips
-  const lineChips=Object.keys(byLine).map(l=>
-    `<span class="leads-line-chip" data-val="${l}" onclick="filterLeadsByLine('${l}')"
-      style="padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:var(--surface);cursor:pointer;white-space:nowrap">${l.split(' ')[0]}</span>`
-  ).join('');
-
-  // Rows
-  const rowsHtml=leads.map((r,i)=>{
-    const phone=(r.telefone||'').replace(/\D/g,'');
-    const lineColor=LINE_COLORS[r.linha_resultado]||'var(--rose)';
-    const status=r.status||'novo';
-    const statusStyle=STATUS_COLORS[status]||STATUS_COLORS.novo;
-    const isNew=!r.status||r.status==='novo';
-    return `<tr data-status="${status}" data-line="${r.linha_resultado||''}">
-      <td style="color:var(--text-muted);font-size:11px">${isNew?'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#cca2a6;margin-right:4px;vertical-align:middle"></span>':''}${i+1}</td>
-      <td>
-        <div style="display:flex;align-items:center;gap:6px">
-          <a href="https://wa.me/55${phone}" target="_blank" style="color:var(--carvao);font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:12px;height:12px;flex-shrink:0;color:var(--oliva);opacity:.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            ${r.telefone}
-          </a>
-          <button onclick="copyPhone('${r.telefone}')" style="padding:2px 8px;border-radius:4px;font-size:10px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer">copiar</button>
-        </div>
-      </td>
-      <td><span style="background:${lineColor};color:white;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:600">${r.linha_resultado||'-'}</span></td>
-      <td>
-        <span id="status-${r.id}" onclick="cycleStatus(${r.id})"
-          style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:10px;cursor:pointer;${statusStyle}">
-          ● ${STATUS_LABELS[status]||status}
-        </span>
-      </td>
-      <td style="max-width:150px">
-        ${r.obs
-          ?`<span style="font-size:11px;color:var(--text-secondary);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:150px">${r.obs}</span>`
-          :`<span style="font-size:11px;color:var(--text-muted);opacity:.5">—</span>`
-        }
-      </td>
-      <td>
-        <div style="font-size:11px;color:var(--text-secondary)">${fmtRelative(r.criado_em)}</div>
-        <div style="font-size:10px;color:var(--text-muted);opacity:.6">${fmtDateTime(r.criado_em)}</div>
-      </td>
-      <td style="text-align:right;white-space:nowrap">
-        <button class="btn-icon" onclick="openObsModal(${r.id})" title="Observação" style="display:inline-flex">${I.edit}</button>
-        <button class="btn-icon" onclick="deleteLeadRow(${r.id})" title="Remover" style="display:inline-flex;margin-left:4px">${I.trash}</button>
-      </td>
-    </tr>`;
-  }).join('');
-
-  const tableHtml=leads.length===0
-    ?`<div class="empty-state"><div class="empty-icon">${I.quiz}</div><h3>Nenhum lead ainda</h3><p>Os contatos captados pelo quiz aparecerão aqui</p></div>`
-    :`<table><thead><tr>
-        <th>#</th><th>Telefone</th><th>Linha resultado</th><th>Status</th><th>Observação</th><th>Cadastro</th><th></th>
-      </tr></thead>
-      <tbody id="leadsTableBody">${rowsHtml}</tbody>
-    </table>`;
-
-  document.getElementById('content').innerHTML=`
-    <div style="padding-top:8px">
-    <div class="page-header anim">
-      <div class="page-header-left">
-        <h2>Leads Quiz</h2>
-        <p>${total} contato${total!==1?'s':''} captado${total!==1?'s':''} via quiz de fragr&acirc;ncias</p>
-      </div>
-      <div class="page-header-actions">
-        <a href="https://quiz.mundana.com.br" target="_blank" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none">${I.eye} Ver quiz</a>
-        <div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterLeads(this.value)" style="width:180px"></div>
-        <button class="btn btn-secondary btn-sm" onclick="exportLeadsCSV()">${I.download} Exportar CSV</button>
-      </div>
-    </div>
-
-    <div class="anim" style="margin-bottom:20px;padding:14px 18px;background:var(--lavanda-pale);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:var(--lavanda);width:18px;height:18px">${I.quiz}</span>
-        <div>
-          <div style="font-size:12px;font-weight:600;color:var(--carvao)">quiz.mundana.com.br</div>
-          <div style="font-size:11px;color:var(--text-muted)">link p&uacute;blico do quiz de fragr&acirc;ncias</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('https://quiz.mundana.com.br').then(()=>toast('Link copiado!'))" style="font-size:11px">${I.copy} Copiar link</button>
-        <a href="https://quiz.mundana.com.br" target="_blank" class="btn btn-sm btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:11px">${I.eye} Abrir quiz</a>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" class="anim d1">
-      <div class="card" style="padding:20px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px">Total de leads</div>
-        <div style="font-size:32px;font-weight:700;color:var(--carvao)">${total}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">via quiz de fragr&acirc;ncias</div>
-      </div>
-      <div class="card" style="padding:20px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px">Linha mais escolhida</div>
-        <div style="font-size:20px;font-weight:700;color:var(--rosa-antigo)">${topLine?topLine[0]:'-'}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${topLine?topLine[1]+' pessoa'+(topLine[1]!==1?'s':''):''}</div>
-      </div>
-      <div class="card" style="padding:20px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px">Esta semana</div>
-        <div style="font-size:32px;font-weight:700;color:var(--carvao)">${thisWeek}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">últimos 7 dias</div>
-      </div>
-    </div>
-
-    <div class="card anim d2" style="margin-bottom:16px">
-      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border-light)">
-        <span style="font-size:11px;color:var(--text-muted)">evolução dos últimos 7 dias</span>
-        <button id="leads-chart-btn" onclick="toggleChart()" style="background:none;border:none;font-size:11px;color:var(--rosa-antigo);cursor:pointer;font-family:inherit">ver evolução ▾</button>
-      </div>
-      <div id="leads-chart-area" style="display:none;padding:16px 20px">
-        <div style="display:flex;align-items:flex-end;gap:6px;height:70px">${chartBars}</div>
-      </div>
-    </div>
-
-    <div class="card anim d2">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border-light);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:11px;color:var(--text-muted)">status:</span>
-        <span class="leads-filter-chip" data-val="all" onclick="filterLeadsByStatus('all')" style="padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:#252829;color:white;cursor:pointer">Todos</span>
-        <span class="leads-filter-chip" data-val="novo" onclick="filterLeadsByStatus('novo')" style="padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Novo</span>
-        <span class="leads-filter-chip" data-val="contatado" onclick="filterLeadsByStatus('contatado')" style="padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Contatado</span>
-        <span class="leads-filter-chip" data-val="cliente" onclick="filterLeadsByStatus('cliente')" style="padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Cliente</span>
-        <span style="margin-left:8px;font-size:11px;color:var(--text-muted)">linha:</span>
-        <span class="leads-line-chip" data-val="all" onclick="filterLeadsByLine('all')" style="padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:var(--surface);cursor:pointer">Todas</span>
-        ${lineChips}
-      </div>
-      <div class="table-wrapper">${tableHtml}</div>
-    </div>
-    </div>`;
-  renderTopBar();
-}
-
 </script>
 </body>
 </html>
