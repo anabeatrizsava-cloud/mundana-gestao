@@ -757,6 +757,7 @@ const I={
   calCheck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>',
   bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>',
   copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>',
   cart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
   history:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>',
   chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
@@ -768,6 +769,7 @@ let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear()
 // ========== NAV — Modules ==========
 const NAV=[
   { module:'Visão Geral', icon:'eye', items:[
+    {id:'mododia',label:'Modo Dia',icon:'sun'},
     {id:'dashboard',label:'Dashboard',icon:'dashboard'},
   ]},
   { module:'Produção', icon:'layers', items:[
@@ -805,6 +807,7 @@ function renderNav(){
       ${m.items.map(i=>`
         <div class="nav-item ${S.page===i.id?'active':''}" onclick="go('${i.id}')">
           ${I[i.icon]} ${i.label}
+          ${i.id==='mododia'&&getModoDiaPending()>0?'<span style="width:8px;height:8px;border-radius:50%;background:var(--rosa-antigo);display:inline-block;margin-left:4px;flex-shrink:0"></span>':''}
         </div>
       `).join('')}
     </div>
@@ -813,7 +816,7 @@ function renderNav(){
 
 function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
 function render(){
-  const fn={dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,pedidos:rPedidos};
+  const fn={mododia:rModoDia,dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,pedidos:rPedidos};
   (fn[S.page]||rDash)();
   renderTopBar();
 }
@@ -2716,6 +2719,187 @@ function addRotFreq(){const n=document.getElementById('newRotFreq').value;if(!n)
 function updRotFreq(i,v){const f=getRotFreqs();f[i]=v;DB.set('rot_freqs',f);}
 function delRotFreq(i){if(!confirm('Excluir?'))return;const f=getRotFreqs();f.splice(i,1);DB.set('rot_freqs',f);manageRotFreqs();toast('Frequência excluída');}
 
+// ========== MODO DIA ==========
+function getModoDiaTasks(){
+  const tasks=[];
+  const todayStr=localDateStr();
+  const now=new Date();
+
+  // 1. URGENTES — Pagamentos vencidos
+  const pagar=DB.get('pagar');
+  pagar.filter(p=>p.status!=='pago'&&p.vencimento&&p.vencimento<todayStr).forEach(p=>{
+    const days=Math.ceil((now-new Date(p.vencimento+'T12:00:00'))/(1000*60*60*24));
+    tasks.push({priority:1,type:'urgente',cat:'Financeiro',catColor:'amber',text:'Pagar '+p.descricao+' — '+fmtR(p.valor),sub:'Venceu há '+days+' dia'+(days!==1?'s':''),action:"go('pagar')",btnLabel:'Ir para A Pagar',id:'pag_'+p.id});
+  });
+
+  // 2. URGENTES — Pedidos para despachar
+  const pedidos=DB.get('pedidos');
+  pedidos.filter(p=>p.status==='preparando').forEach(p=>{
+    tasks.push({priority:1,type:'urgente',cat:'Vendas',catColor:'teal',text:'Despachar pedido #'+p.numero+' — '+(p.cliente||''),sub:(p.itens||[]).map(it=>it.qty+'x '+it.name).join(', ')+' — '+fmtR(p.total),action:"go('pedidos')",btnLabel:'Ir para Pedidos',id:'ped_desp_'+p.id});
+  });
+
+  // 3. Pagamentos do dia
+  pagar.filter(p=>p.status!=='pago'&&p.vencimento===todayStr).forEach(p=>{
+    tasks.push({priority:2,type:'hoje',cat:'Financeiro',catColor:'amber',text:'Pagar '+p.descricao+' — '+fmtR(p.valor),sub:'Vence hoje',action:"go('pagar')",btnLabel:'Ir para A Pagar',id:'pag_hoje_'+p.id});
+  });
+
+  // 4. Pedidos novos para preparar
+  pedidos.filter(p=>p.status==='novo').forEach(p=>{
+    tasks.push({priority:2,type:'hoje',cat:'Vendas',catColor:'teal',text:'Preparar pedido #'+p.numero+' — '+(p.cliente||''),sub:(p.itens||[]).map(it=>it.qty+'x '+it.name).join(', ')+' — '+fmtR(p.total),action:"go('pedidos')",btnLabel:'Ir para Pedidos',id:'ped_new_'+p.id});
+  });
+
+  // 5. A Receber pendente
+  const receber=DB.get('receber');
+  receber.filter(r=>r.status!=='recebido'&&r.vencimento&&r.vencimento<=todayStr).slice(0,3).forEach(r=>{
+    tasks.push({priority:3,type:'hoje',cat:'Financeiro',catColor:'amber',text:'Cobrar '+r.descricao+' — '+fmtR(r.valor),sub:'Pendente'+(r.vencimento<todayStr?' há '+Math.ceil((now-new Date(r.vencimento+'T12:00:00'))/(1000*60*60*24))+' dias':''),action:"go('receber')",btnLabel:'Ir para A Receber',id:'rec_'+r.id});
+  });
+
+  // 6. Estoque MP crítico
+  const stock=DB.get('stockmp');const formulas=DB.get('formulas');
+  const cMap={};formulas.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)cMap[n]=(cMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
+  const hist=DB.get('mp_price_hist');
+  stock.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=cMap[n]||0;return c>0&&q<=(c*0.3);}).slice(0,3).forEach(s=>{
+    const n=(s.name||'').toLowerCase().trim();const pct=cMap[n]>0?Math.round(((parseFloat(s.quantity)||0)/cMap[n])*100):0;
+    const mpHist=hist.filter(h=>h.mpName.toLowerCase().trim()===n).sort((a,b)=>b.date.localeCompare(a.date));
+    const bestSup=mpHist.length>0?mpHist[0]:null;
+    tasks.push({priority:3,type:'hoje',cat:'Estoque',catColor:'green',text:'Repor '+s.name+' — '+(s.quantity||0)+' '+(s.unit||'')+' restante ('+pct+'%)',sub:bestSup?'Último preço: '+fmtR(bestSup.price)+'/'+(bestSup.unit||'un')+' em '+fmtD(bestSup.date):'Sem histórico de compra',action:"go('stockmp')",btnLabel:'Ver Estoque',id:'stock_'+s.id});
+  });
+
+  // 7. Lotes com validade próxima
+  DB.get('stockpa').filter(i=>{const d=new Date(i.validade);const diff=Math.ceil((d-now)/(1000*60*60*24));return diff<=90&&diff>0&&i.status==='disponivel';}).slice(0,3).forEach(i=>{
+    const diff=Math.ceil((new Date(i.validade)-now)/(1000*60*60*24));
+    tasks.push({priority:4,type:'atencao',cat:'Estoque',catColor:'green',text:i.name+' — lote '+i.lotNumber+' vence em '+diff+' dias',sub:(i.quantity||0)+' un em estoque',action:"S.stockTab='pa';go('stockmp')",btnLabel:'Ver Estoque PA',id:'val_'+i.id});
+  });
+
+  // SUGESTÕES — Produção baseada em estoque
+  const pa=DB.get('stockpa');
+  formulas.forEach(f=>{
+    const totalPA=pa.filter(i=>i.name===f.name&&i.status==='disponivel').reduce((s,i)=>s+(parseInt(i.quantity)||0),0);
+    const c=calcFormula(f);
+    // Suggest production if stock < unitsLot (less than 1 batch worth)
+    if(c.unitsLot>0&&totalPA<c.unitsLot){
+      // Check if MP is available
+      let mpOk=true;
+      (f.ingredients||[]).forEach(ing=>{
+        const ingName=(ing.name||'').toLowerCase().trim();
+        const needed=parseFloat(ing.qtyLot)||0;
+        const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);
+        if(avail<needed)mpOk=false;
+      });
+      tasks.push({priority:10,type:'sugestao',cat:'Produção',catColor:'purple',text:'Produzir '+f.name,sub:'Estoque: '+totalPA+' un — Lote rende '+c.unitsLot+' un'+(mpOk?' — MP disponível':' — MP insuficiente'),action:"go('production')",btnLabel:'Iniciar produção',mpOk,id:'sug_prod_'+f.id});
+    }
+  });
+
+  tasks.sort((a,b)=>a.priority-b.priority);
+  return tasks;
+}
+function getModoDiaPending(){
+  const tasks=getModoDiaTasks();
+  const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
+  return tasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)).length;
+}
+function toggleModoDiaTask(id){
+  const key='mundana_mododia_done_'+localDateStr();
+  const done=JSON.parse(localStorage.getItem(key)||'[]');
+  if(done.includes(id)){done.splice(done.indexOf(id),1);}else{done.push(id);}
+  localStorage.setItem(key,JSON.stringify(done));
+  rModoDia();renderNav();
+}
+function rModoDia(){
+  // Mark as seen today
+  localStorage.setItem('mundana_mododia_seen',localDateStr());
+
+  const tasks=getModoDiaTasks();
+  const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
+  const pending=tasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)).length;
+  const total=tasks.filter(t=>t.type!=='sugestao').length;
+  const completed=total-pending;
+  const sugestoes=tasks.filter(t=>t.type==='sugestao');
+  const urgentes=tasks.filter(t=>t.type==='urgente'&&!done.includes(t.id));
+  const hoje=tasks.filter(t=>(t.type==='hoje'||t.type==='atencao')&&!done.includes(t.id));
+
+  const now=new Date();const hour=now.getHours();
+  const greeting=hour<12?'Bom dia':hour<18?'Boa tarde':'Boa noite';
+  const dayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  const dateStr=dayNames[now.getDay()]+', '+now.getDate()+' de '+MO[now.getMonth()].toLowerCase()+' de '+now.getFullYear();
+
+  const catColors={amber:{bg:'var(--rose-pale)',text:'var(--rosa-antigo)',label:'#854F0B',labelBg:'#FAEEDA'},teal:{bg:'#E1F5EE',text:'#0F6E56',label:'#0F6E56',labelBg:'#E1F5EE'},green:{bg:'var(--oliva-pale)',text:'var(--oliva)',label:'#0F6E56',labelBg:'#E1F5EE'},purple:{bg:'var(--lavanda-pale)',text:'var(--lavanda)',label:'#534AB7',labelBg:'#EEEDFE'}};
+
+  function renderTask(t,idx){
+    const isDone=done.includes(t.id);
+    const isSug=t.type==='sugestao';
+    const isUrg=t.type==='urgente';
+    const cc=catColors[t.catColor]||catColors.amber;
+    const circleColor=isUrg?'var(--rosa-antigo)':isSug?'var(--lavanda)':'var(--sol-ancestral)';
+    const circleIcon=isUrg?'!':isSug?'✦':idx+1;
+    return `<div style="position:relative;margin-bottom:12px;opacity:${isDone?'0.5':'1'};transition:opacity 0.3s">
+      <div style="position:absolute;left:-34px;top:12px;width:24px;height:24px;border-radius:50%;background:${isDone?'var(--oliva)':isSug?'var(--lavanda-pale)':circleColor};${isSug?'border:1.5px dashed var(--lavanda)':''}display:flex;align-items:center;justify-content:center;font-size:11px;color:${isDone?'#fff':isSug?'var(--lavanda)':'#fff'};font-weight:600">${isDone?'✓':circleIcon}</div>
+      <div style="background:var(--card-bg);border:0.5px ${isSug?'dashed':'solid'} var(--border);${isUrg&&!isDone?'border-left:3px solid var(--rosa-antigo);':'border-left:3px '+(isSug?'dashed':'solid')+' '+(isDone?'var(--oliva)':circleColor)+';'}border-radius:0 var(--radius-lg) var(--radius-lg) 0;padding:14px 18px;${isUrg&&!isDone?'background:var(--rose-pale)':''}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              ${isUrg&&!isDone?'<span style="background:var(--rose-pale);color:var(--rosa-antigo);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;border:0.5px solid var(--rosa-antigo)">Urgente</span>':''}
+              ${isSug?'<span style="background:var(--lavanda-pale);color:var(--lavanda);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">Sugestão</span>':''}
+              <span style="background:${cc.labelBg};color:${cc.label};font-size:10px;padding:2px 8px;border-radius:10px">${t.cat}</span>
+            </div>
+            <p style="font-size:13px;font-weight:600;margin:0 0 2px;${isDone?'text-decoration:line-through':''}">${t.text}</p>
+            <p style="font-size:11px;color:var(--text-muted);margin:0">${t.sub}</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();${t.action}" style="font-size:11px;white-space:nowrap">${t.btnLabel}</button>
+            ${!isSug?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--oliva)':circleColor};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:var(--transition);color:${isDone?'var(--oliva)':'transparent'};background:${isDone?'var(--oliva-pale)':'transparent'}" onclick="event.stopPropagation();toggleModoDiaTask('${t.id}')" onmouseover="if(!${isDone})this.style.background='${circleColor}',this.style.color='#fff',this.textContent='✓'" onmouseout="if(!${isDone})this.style.background='transparent',this.style.color='transparent',this.textContent='✓'">${isDone?'✓':''}</div>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  let taskIdx=0;
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>${greeting}, Ana</h2><p>${dateStr}</p></div><div class="page-header-actions">
+      ${pending===0&&total>0?'<span style="background:var(--oliva-pale);color:var(--oliva);font-size:12px;padding:6px 14px;border-radius:20px;font-weight:600">Tudo em dia ✓</span>':''}
+      ${urgentes.length>0?'<span style="background:var(--rose-pale);color:var(--rosa-antigo);font-size:11px;padding:4px 12px;border-radius:20px;font-weight:600">'+urgentes.length+' urgente'+(urgentes.length>1?'s':'')+'</span>':''}
+      ${sugestoes.length>0?'<span style="background:var(--lavanda-pale);color:var(--lavanda);font-size:11px;padding:4px 12px;border-radius:20px;font-weight:600">'+sugestoes.length+' sugestão'+(sugestoes.length>1?'ões':'')+'</span>':''}
+    </div></div>
+
+    <div style="display:flex;gap:4px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:6px" class="anim d1">
+      <div style="flex:${completed||0.01};background:var(--oliva);border-radius:4px;transition:flex 0.5s"></div>
+      <div style="flex:${pending||0.01};background:var(--border);border-radius:4px;transition:flex 0.5s"></div>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 24px" class="anim d1">${completed} de ${total} concluída${completed!==1?'s':''} ${total===0?'— nenhuma pendência hoje!':completed===total?'— parabéns!':'— vamos lá!'}</p>
+
+    ${urgentes.length>0?`
+    <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--rosa-antigo);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d1">Resolver primeiro</p>
+    <div style="position:relative;padding-left:34px;margin-bottom:24px" class="anim d2">
+      <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--rosa-antigo);opacity:0.3;border-radius:1px"></div>
+      ${urgentes.map(t=>renderTask(t,++taskIdx)).join('')}
+    </div>`:''}
+
+    ${hoje.length>0?`
+    <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d2">Pendências do dia</p>
+    <div style="position:relative;padding-left:34px;margin-bottom:24px" class="anim d3">
+      <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--border);border-radius:1px"></div>
+      ${hoje.map(t=>renderTask(t,++taskIdx)).join('')}
+    </div>`:''}
+
+    ${done.length>0&&tasks.filter(t=>t.type!=='sugestao'&&done.includes(t.id)).length>0?`
+    <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--oliva);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d3">Concluídas</p>
+    <div style="position:relative;padding-left:34px;margin-bottom:24px" class="anim d3">
+      <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--oliva);opacity:0.3;border-radius:1px"></div>
+      ${tasks.filter(t=>t.type!=='sugestao'&&done.includes(t.id)).map(t=>renderTask(t,++taskIdx)).join('')}
+    </div>`:''}
+
+    ${sugestoes.length>0?`
+    <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--lavanda);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d3">Sugestões inteligentes</p>
+    <div style="position:relative;padding-left:34px" class="anim d4">
+      <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--lavanda);opacity:0.2;border-radius:1px;border-style:dashed"></div>
+      ${sugestoes.map(t=>renderTask(t,++taskIdx)).join('')}
+    </div>`:''}
+
+    ${tasks.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.check}</div><h3>Dia tranquilo!</h3><p>Nenhuma pendência ou sugestão para hoje. Aproveite para criar conteúdo ou planejar o próximo lote.</p></div>`:''}
+  `;
+}
+
 // ========== PEDIDOS / VENDAS ==========
 function rPedidos(){
   const items=DB.get('pedidos');
@@ -2890,6 +3074,10 @@ try{
     console.log('Cleaned mydocs localStorage: freed '+(rawDocs.length-JSON.stringify(stripped).length)+' chars');
   }
 }catch(e){}
+// Check if Modo Dia was seen today
+const _mdLastSeen=localStorage.getItem('mundana_mododia_seen');
+const _mdToday=localDateStr();
+if(_mdLastSeen!==_mdToday){S.page='mododia';}
 renderNav();
 render();
 // Load from Supabase in background (will re-render when done)
