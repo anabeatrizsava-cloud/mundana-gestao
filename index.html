@@ -957,72 +957,33 @@ function rDash(){
   }
   const rem=(7-(fd+dim)%7)%7;
   for(let i=1;i<=rem;i++)cal+=`<div class="cal-day other-month">${i}</div>`;
-  const hr=today.getHours();
-  const gr=hr<12?'Bom dia':hr<18?'Boa tarde':'Boa noite';
+
+  // Estoque MP crítico
+  const stock=DB.get('stockmp');
+  const consumoMap={};forms.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)consumoMap[n]=(consumoMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
+  const critico=stock.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;return c>0&&q<=(c*0.3);});
+
+  const mdPending=getModoDiaPending();
 
   document.getElementById('content').innerHTML=`
     <div class="page-header anim">
       <div class="page-header-left">
-        <h2>${gr}, Ana</h2>
-        <p>Resumo do dia — ${today.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</p>
+        <h2>Dashboard</h2>
+        <p>Visão geral da Mundana</p>
       </div>
+      ${mdPending>0?`<div class="page-header-actions"><button class="btn btn-secondary" onclick="go('mododia')" style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--rosa-antigo);display:inline-block"></span> ${mdPending} pendência${mdPending>1?'s':''} no Modo Dia</button></div>`:''}
     </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px">
       <div class="stat-card stat-rose anim d1"><div class="stat-deco"></div><div class="stat-icon">${I.box}</div><div class="stat-value">${prods.length}</div><div class="stat-label">Produtos</div></div>
       <div class="stat-card stat-oliva anim d2"><div class="stat-deco"></div><div class="stat-icon">${I.beaker}</div><div class="stat-value">${forms.length}</div><div class="stat-label">Fórmulas</div></div>
       <div class="stat-card stat-lavanda anim d3"><div class="stat-deco"></div><div class="stat-icon">${I.archive}</div><div class="stat-value">${lots.length}</div><div class="stat-label">Lotes</div></div>
       <div class="stat-card stat-sol anim d4"><div class="stat-deco"></div><div class="stat-icon">${I.clock}</div><div class="stat-value">${lots.filter(l=>l.status==='em_estoque').length}</div><div class="stat-label">Em estoque</div></div>
     </div>
-    ${ (()=>{
-      const receber=DB.get('receber'), pagar=DB.get('pagar');
-      const totalRec=receber.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-      const recebido=receber.filter(i=>i.status==='recebido').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-      const totalPag=pagar.reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-      const pago=pagar.filter(i=>i.status==='pago').reduce((s,i)=>s+(parseFloat(i.valor)||0),0);
-      const pagHoje=pagar.filter(p=>p.vencimento===todayStr&&p.status!=='pago');
-      const vencidos=pagar.filter(p=>p.vencimento<todayStr&&p.status!=='pago');
-      const stock=DB.get('stockmp');const formulas=DB.get('formulas');
-      const consumoMap={};formulas.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)consumoMap[n]=(consumoMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
-      const stockCritico=stock.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;return c>0&&q<=(c*0.3);});
-      return `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:22px">
-      <div class="card anim d1" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">A Receber</div><div style="font-size:20px;font-weight:800;color:var(--oliva)">${fmtR(totalRec)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Recebido: ${fmtR(recebido)}</div></div>
-      <div class="card anim d2" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">A Pagar</div><div style="font-size:20px;font-weight:800;color:var(--rosa-antigo)">${fmtR(totalPag)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Pago: ${fmtR(pago)}</div></div>
-      <div class="card anim d3" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">Saldo Estimado</div><div style="font-size:20px;font-weight:800;color:${(recebido-pago)>=0?'var(--oliva)':'var(--rosa-antigo)'}">${fmtR(recebido-pago)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Recebido - Pago</div></div>
-      <div class="card anim d4" style="padding:16px 18px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:6px">Pagamentos Hoje</div><div style="font-size:20px;font-weight:800;color:${pagHoje.length>0?'var(--rosa-antigo)':'var(--carvao)'}">${pagHoje.length}</div>${vencidos.length>0?`<div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px;font-weight:600">${vencidos.length} vencido${vencidos.length>1?'s':''}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Em dia</div>`}</div>
-    </div>`;
-    })()}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
-      <!-- MODO OPERAÇÃO DO DIA -->
-      <div class="card anim d2" style="border-left:3px solid var(--oliva)">
-        <div class="card-header"><h3 style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;color:var(--oliva)">${I.check}</span> O que fazer hoje</h3></div>
-        <div class="card-body" style="padding:8px 20px 16px">${(()=>{
-          const tasks=[];
-          // Pagamentos do dia
-          const pagHoje2=pagar.filter(p=>p.vencimento===todayStr&&p.status!=='pago');
-          pagHoje2.forEach(p=>tasks.push({done:false,text:'Pagar: <strong>'+p.descricao+'</strong> — '+fmtR(p.valor),color:'rosa-antigo',action:"togglePagar('"+p.id+"');rDash()"}));
-          // Vencidos
-          const venc2=pagar.filter(p=>p.vencimento<todayStr&&p.status!=='pago');
-          venc2.slice(0,3).forEach(p=>tasks.push({done:false,text:'Vencido: <strong>'+p.descricao+'</strong> — '+fmtR(p.valor)+' ('+fmtD(p.vencimento)+')',color:'rosa-antigo',action:"togglePagar('"+p.id+"');rDash()"}));
-          // A Receber pendente
-          const recPend=DB.get('receber').filter(r=>r.status!=='recebido'&&r.vencimento&&r.vencimento<=todayStr);
-          recPend.slice(0,3).forEach(r=>tasks.push({done:false,text:'Cobrar: <strong>'+r.descricao+'</strong> — '+fmtR(r.valor),color:'sol-ancestral',action:"toggleReceber('"+r.id+"');rDash()"}));
-          // Estoque MP crítico
-          const stock2=DB.get('stockmp');const forms2=DB.get('formulas');
-          const cMap={};forms2.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)cMap[n]=(cMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
-          stock2.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=cMap[n]||0;return c>0&&q<=(c*0.3);}).slice(0,3).forEach(s=>tasks.push({done:false,text:'Repor MP: <strong>'+s.name+'</strong> — '+s.quantity+' '+(s.unit||'')+'restante',color:'sol-ancestral',action:"go('stockmp')"}));
-          // Lotes com validade próxima (90 dias)
-          const now2=new Date();
-          DB.get('stockpa').filter(i=>{const d=new Date(i.validade);const diff=Math.ceil((d-now2)/(1000*60*60*24));return diff<=90&&diff>0&&i.status==='disponivel';}).slice(0,2).forEach(i=>tasks.push({done:false,text:'Validade próxima: <strong>'+i.name+'</strong> — lote '+i.lotNumber,color:'sol-ancestral',action:"S.stockTab='pa';go('stockmp')"}));
-          if(tasks.length===0) return '<div style="text-align:center;padding:20px;color:var(--oliva);font-size:13px"><strong>Tudo em dia!</strong><br><span style="color:var(--text-muted)">Nenhuma pendência para hoje</span></div>';
-          return tasks.map((t,i)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;${i<tasks.length-1?'border-bottom:1px solid var(--border-light)':''}">
-            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--${t.color});flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:var(--transition);font-size:11px;font-weight:700" onclick="${t.action}" onmouseover="this.style.background='var(--'+this.dataset.c+')';this.style.color='#fff';this.textContent='✓'" onmouseout="this.style.background='transparent';this.style.color='';this.textContent=''" data-c="${t.color}"></div>
-            <div style="font-size:12.5px;line-height:1.5;color:var(--text-primary);flex:1">${t.text}</div>
-          </div>`).join('');
-        })()}</div>
-      </div>
+
+    <div style="margin-bottom:22px">
       <!-- SIMULADOR WHAT-IF -->
-      <div class="card anim d3" style="border-left:3px solid var(--lavanda)">
+      <div class="card anim d2" style="border-left:3px solid var(--lavanda)">
         <div class="card-header"><h3 style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;color:var(--lavanda)">${I.production}</span> Simulação What-If</h3></div>
         <div class="card-body" style="padding:8px 20px 16px">${(()=>{
           const cfg=getCfg();const allForms=DB.get('formulas');
@@ -1037,6 +998,7 @@ function rDash(){
         })()}</div>
       </div>
     </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="cal-container anim d2">
@@ -1048,26 +1010,10 @@ function rDash(){
             <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--lavanda)"></span> Lote</div>
           </div>
         </div>
-        ${ (()=>{
-          const stock=DB.get('stockmp');const formulas=DB.get('formulas');
-          const consumoMap={};formulas.forEach(f=>{(f.ingredients||[]).forEach(ing=>{const n=(ing.name||'').toLowerCase().trim();if(n)consumoMap[n]=(consumoMap[n]||0)+(parseFloat(ing.qtyLot)||0);});});
-          const critico=stock.filter(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;return c>0&&q<=(c*0.3);});
-          if(critico.length===0) return '';
-          return `<div class="card anim d3"><div class="card-header"><h3 style="color:var(--rosa-antigo)">Estoque Critico</h3><span style="font-size:11px;color:var(--text-muted)">${critico.length} ite${critico.length>1?'ns':'m'}</span></div><div class="card-body">${critico.map(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;const pct=c>0?Math.round((q/c)*100):0;return `<div class="activity-item"><div class="activity-dot" style="background:var(--rosa-antigo)"></div><div class="activity-text"><strong>${s.name}</strong> — ${q} ${s.unit||''} <span style="color:var(--rosa-antigo);font-weight:600">(${pct}%)</span></div></div>`;}).join('')}</div></div>`;
-        })()}
+        ${critico.length>0?`<div class="card anim d3"><div class="card-header"><h3 style="color:var(--rosa-antigo)">Estoque MP crítico</h3><span style="font-size:11px;color:var(--text-muted)">${critico.length} ite${critico.length>1?'ns':'m'}</span></div><div class="card-body">${critico.map(s=>{const n=(s.name||'').toLowerCase().trim();const q=parseFloat(s.quantity)||0;const c=consumoMap[n]||0;const pct=c>0?Math.round((q/c)*100):0;return `<div class="activity-item"><div class="activity-dot" style="background:var(--rosa-antigo)"></div><div class="activity-text"><strong>${s.name}</strong> — ${q} ${s.unit||''} <span style="color:var(--rosa-antigo);font-weight:600">(${pct}%)</span></div></div>`;}).join('')}</div></div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="card anim d3" style="flex:1"><div class="card-header"><h3>Pagamentos do dia</h3></div><div class="card-body">${ (()=>{
-          const pagar=DB.get('pagar');
-          const pagHoje=pagar.filter(p=>p.vencimento===todayStr&&p.status!=='pago');
-          const vencidos=pagar.filter(p=>p.vencimento<todayStr&&p.status!=='pago');
-          let html='';
-          if(vencidos.length>0) html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:6px">Vencidos (${vencidos.length})</div>`+vencidos.slice(0,3).map(p=>`<div class="activity-item"><div class="activity-dot" style="background:var(--rosa-antigo)"></div><div class="activity-text"><strong>${p.descricao}</strong> — ${fmtR(p.valor)}</div><div class="activity-time">${fmtD(p.vencimento)}</div></div>`).join('')+(vencidos.length>3?`<div style="font-size:11px;color:var(--text-muted);padding:4px 14px">+${vencidos.length-3} mais</div>`:'');
-          if(pagHoje.length>0) html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--sol-ancestral);font-weight:700;margin:${vencidos.length>0?'12px':'0'} 0 6px">Hoje (${pagHoje.length})</div>`+pagHoje.map(p=>`<div class="activity-item"><div class="activity-dot" style="background:var(--sol-ancestral)"></div><div class="activity-text"><strong>${p.descricao}</strong> — ${fmtR(p.valor)}</div></div>`).join('');
-          if(!html) html='<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px">Nenhum pagamento pendente</div>';
-          return html;
-        })()}</div></div>
-        <div class="card anim d4" style="flex:1"><div class="card-header"><h3>Últimos lotes</h3></div><div class="card-body" style="padding:0 22px 12px">${lots.length>0?lots.slice(-4).reverse().map(l=>`<div class="activity-item"><div class="activity-dot" style="background:var(--lavanda)"></div><div class="activity-text"><strong>${l.lotNumber}</strong> — ${l.formulaName}</div><div class="activity-time">${fmtD(l.date)}</div></div>`).join(''):'<div style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px">Nenhum lote produzido</div>'}</div></div>
+        <div class="card anim d3"><div class="card-header"><h3>Últimos lotes</h3></div><div class="card-body" style="padding:0 22px 12px">${lots.length>0?lots.slice(-4).reverse().map(l=>`<div class="activity-item"><div class="activity-dot" style="background:var(--lavanda)"></div><div class="activity-text"><strong>${l.lotNumber}</strong> — ${l.formulaName}</div><div class="activity-time">${fmtD(l.date)}</div></div>`).join(''):'<div style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px">Nenhum lote produzido</div>'}</div></div>
       </div>
     </div>`;
 }
@@ -1354,7 +1300,7 @@ function rProdExec(){
   const forms=DB.get('formulas'),f=forms.find(x=>x.id===S.prodFId);if(!f){S.prodFId=null;rProd();return;}
   const q=S.prodQty,steps=f.prepSteps?f.prepSteps.split('\n').filter(s=>s.trim()):[];
   if(S.prodSteps.length!==steps.length)S.prodSteps=steps.map(()=>false);
-  const done=S.prodSteps.filter(Boolean).length,pct=steps.length>0?(done/steps.length)*100:0,allDone=steps.length>0&&done===steps.length&&q>0;
+  const done=S.prodSteps.filter(Boolean).length,pct=steps.length>0?(done/steps.length)*100:(q>0?100:0),allDone=(steps.length===0&&q>0)||(steps.length>0&&done===steps.length&&q>0);
   const lotSize=parseFloat(f.lotSize)||1;
   const ratio=q>0?q/lotSize:0;
   document.getElementById('content').innerHTML=`
@@ -2796,7 +2742,8 @@ function getModoDiaTasks(){
 function getModoDiaPending(){
   const tasks=getModoDiaTasks();
   const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
-  return tasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)).length;
+  const dismissed=JSON.parse(localStorage.getItem('mundana_mododia_dismiss_'+localDateStr())||'[]');
+  return tasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)&&!dismissed.includes(t.id)).length;
 }
 function toggleModoDiaTask(id){
   const key='mundana_mododia_done_'+localDateStr();
@@ -2805,18 +2752,35 @@ function toggleModoDiaTask(id){
   localStorage.setItem(key,JSON.stringify(done));
   rModoDia();renderNav();
 }
+function dismissModoDiaTask(id){
+  const key='mundana_mododia_dismiss_'+localDateStr();
+  const dismissed=JSON.parse(localStorage.getItem(key)||'[]');
+  if(!dismissed.includes(id))dismissed.push(id);
+  localStorage.setItem(key,JSON.stringify(dismissed));
+  rModoDia();renderNav();toast('Tarefa dispensada por hoje');
+}
+function undoDismiss(id){
+  const key='mundana_mododia_dismiss_'+localDateStr();
+  const dismissed=JSON.parse(localStorage.getItem(key)||'[]');
+  const idx=dismissed.indexOf(id);if(idx>=0)dismissed.splice(idx,1);
+  localStorage.setItem(key,JSON.stringify(dismissed));
+  rModoDia();renderNav();toast('Tarefa restaurada');
+}
 function rModoDia(){
   // Mark as seen today
   localStorage.setItem('mundana_mododia_seen',localDateStr());
 
   const tasks=getModoDiaTasks();
   const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
-  const pending=tasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)).length;
-  const total=tasks.filter(t=>t.type!=='sugestao').length;
+  const dismissed=JSON.parse(localStorage.getItem('mundana_mododia_dismiss_'+localDateStr())||'[]');
+  const activeTasks=tasks.filter(t=>!dismissed.includes(t.id));
+  const pending=activeTasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)).length;
+  const total=activeTasks.filter(t=>t.type!=='sugestao').length;
   const completed=total-pending;
-  const sugestoes=tasks.filter(t=>t.type==='sugestao');
-  const urgentes=tasks.filter(t=>t.type==='urgente'&&!done.includes(t.id));
-  const hoje=tasks.filter(t=>(t.type==='hoje'||t.type==='atencao')&&!done.includes(t.id));
+  const sugestoes=activeTasks.filter(t=>t.type==='sugestao');
+  const urgentes=activeTasks.filter(t=>t.type==='urgente'&&!done.includes(t.id));
+  const hoje=activeTasks.filter(t=>(t.type==='hoje'||t.type==='atencao')&&!done.includes(t.id));
+  const dismissedTasks=tasks.filter(t=>dismissed.includes(t.id));
 
   const now=new Date();const hour=now.getHours();
   const greeting=hour<12?'Bom dia':hour<18?'Boa tarde':'Boa noite';
@@ -2848,6 +2812,7 @@ function rModoDia(){
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();${t.action}" style="font-size:11px;white-space:nowrap">${t.btnLabel}</button>
             ${!isSug?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--oliva)':circleColor};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:var(--transition);color:${isDone?'var(--oliva)':'transparent'};background:${isDone?'var(--oliva-pale)':'transparent'}" onclick="event.stopPropagation();toggleModoDiaTask('${t.id}')" onmouseover="if(!${isDone})this.style.background='${circleColor}',this.style.color='#fff',this.textContent='✓'" onmouseout="if(!${isDone})this.style.background='transparent',this.style.color='transparent',this.textContent='✓'">${isDone?'✓':''}</div>`:''}
+            ${!isSug&&!isDone?`<div style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted);transition:var(--transition)" onclick="event.stopPropagation();dismissModoDiaTask('${t.id}')" onmouseover="this.style.borderColor='var(--rosa-antigo)';this.style.color='var(--rosa-antigo)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'" title="Dispensar por hoje">✕</div>`:''}
           </div>
         </div>
       </div>
@@ -2897,6 +2862,12 @@ function rModoDia(){
     </div>`:''}
 
     ${tasks.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.check}</div><h3>Dia tranquilo!</h3><p>Nenhuma pendência ou sugestão para hoje. Aproveite para criar conteúdo ou planejar o próximo lote.</p></div>`:''}
+
+    ${dismissedTasks.length>0?`
+    <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px" class="anim d4">
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin:0 0 8px;padding-left:34px">Dispensadas hoje (${dismissedTasks.length})</p>
+      <div style="padding-left:34px">${dismissedTasks.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;opacity:0.4"><span style="font-size:12px;text-decoration:line-through">${t.text}</span><button class="btn btn-sm" onclick="undoDismiss('${t.id}')" style="font-size:10px;padding:2px 8px">Restaurar</button></div>`).join('')}</div>
+    </div>`:''}
   `;
 }
 
