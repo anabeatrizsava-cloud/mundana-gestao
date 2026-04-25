@@ -642,74 +642,61 @@ const DB={
 // ========== INITIAL LOAD FROM SUPABASE ==========
 async function loadFromSupabase(){
   try{
-    // Load mapped tables — only if local is empty
-    for(const[k,map] of Object.entries(TABLE_MAP)){
+    // Helper: merge strategy - keep the version with more data
+    function mergeData(k,remote){
       const local=DB.get(k);
-      if(local&&local.length>0)continue; // Already have local data, skip
+      if(!remote||!Array.isArray(remote)||remote.length===0)return; // No remote data
+      if(!local||!Array.isArray(local)||local.length===0){
+        // Local empty, use remote
+        DB._mem[k]=remote;
+        try{localStorage.setItem('mundana_'+k,JSON.stringify(remote));}catch(e){}
+        return;
+      }
+      // Both have data - use the one with more items (most recent edits)
+      if(remote.length>=local.length){
+        DB._mem[k]=remote;
+        try{localStorage.setItem('mundana_'+k,JSON.stringify(remote));}catch(e){}
+      }
+    }
+
+    // Load mapped tables
+    for(const[k,map] of Object.entries(TABLE_MAP)){
       if(map.isJsonStore){
         const rows=await sbFetch('app_data?key=eq.'+k+'&select=value');
-        if(rows&&Array.isArray(rows)&&rows[0]&&rows[0].value&&rows[0].value.length>0){
-          DB._mem[k]=rows[0].value;
-          try{localStorage.setItem('mundana_'+k,JSON.stringify(rows[0].value));}catch(e){}
+        if(rows&&Array.isArray(rows)&&rows[0]&&rows[0].value){
+          mergeData(k,rows[0].value);
         }
       } else {
         const rows=await sbFetch(map.table+'?select=*');
         if(rows&&Array.isArray(rows)&&rows.length>0){
           const data=map.fromRow?rows.map(map.fromRow):rows;
-          DB._mem[k]=data;
-          try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
+          mergeData(k,data);
         }
       }
     }
-    // Load simple array tables — only if local is empty
+    // Load simple array tables
     for(const k of SIMPLE_ARRAY_TABLES){
-      const local=DB.get(k);
-      if(local&&local.length>0)continue;
       const rows=await sbFetch(k+'?select=name');
       if(rows&&Array.isArray(rows)&&rows.length>0){
-        const data=rows.map(r=>r.name);
-        DB._mem[k]=data;
-        try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
+        mergeData(k,rows.map(r=>r.name));
       }
     }
-    // Load app_data entries — only if local is empty
+    // Load app_data entries
     const appRows=await sbFetch('app_data?select=key,value');
     if(appRows&&Array.isArray(appRows)){
       appRows.forEach(r=>{
-        if(!TABLE_MAP[r.key]){
-          const local=DB.get(r.key);
-          if(local&&((Array.isArray(local)&&local.length>0)||(!Array.isArray(local)&&local)))return;
-          DB._mem[r.key]=r.value;
-          try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));}catch(e){}
+        if(!TABLE_MAP[r.key]&&r.value){
+          if(Array.isArray(r.value)){mergeData(r.key,r.value);}
+          else{
+            // Non-array data (empresa, config, etc)
+            const local=DB.get(r.key);
+            if(!local||local.length===0||(typeof local==='object'&&Object.keys(local).length===0)){
+              DB._mem[r.key]=r.value;
+              try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));}catch(e){}
+            }
+          }
         }
       });
-    }
-    // Special: empresa data
-    const localEmp=localStorage.getItem('mundana_empresa');
-    if(!localEmp||localEmp==='{}' ||localEmp==='null'){
-      const empRow=await sbFetch('app_data?key=eq.empresa&select=value');
-      if(empRow&&empRow[0]&&empRow[0].value){
-        DB._mem['empresa']=empRow[0].value;
-        try{localStorage.setItem('mundana_empresa',JSON.stringify(empRow[0].value));}catch(e){}
-      }
-    }
-    // Special: pricing_lines
-    const localPl=localStorage.getItem('mundana_pricing_lines');
-    if(!localPl||localPl==='{}' ||localPl==='null'){
-      const plRow=await sbFetch('app_data?key=eq.pricing_lines&select=value');
-      if(plRow&&plRow[0]&&plRow[0].value){
-        DB._mem['pricing_lines']=plRow[0].value;
-        try{localStorage.setItem('mundana_pricing_lines',JSON.stringify(plRow[0].value));}catch(e){}
-      }
-    }
-    // Special: alerts_read
-    const localAr=localStorage.getItem('mundana_alerts_read');
-    if(!localAr||localAr==='[]'||localAr==='null'){
-      const arRow=await sbFetch('app_data?key=eq.alerts_read&select=value');
-      if(arRow&&arRow[0]&&arRow[0].value){
-        DB._mem['alerts_read']=arRow[0].value;
-        try{localStorage.setItem('mundana_alerts_read',JSON.stringify(arRow[0].value));}catch(e){}
-      }
     }
   }catch(e){console.warn('Load from Supabase failed, using local cache:',e);}
   // Re-render after load
@@ -1026,7 +1013,7 @@ function rDash(){
           DB.get('stockpa').filter(i=>{const d=new Date(i.validade);const diff=Math.ceil((d-now2)/(1000*60*60*24));return diff<=90&&diff>0&&i.status==='disponivel';}).slice(0,2).forEach(i=>tasks.push({done:false,text:'Validade próxima: <strong>'+i.name+'</strong> — lote '+i.lotNumber,color:'sol-ancestral',action:"S.stockTab='pa';go('stockmp')"}));
           if(tasks.length===0) return '<div style="text-align:center;padding:20px;color:var(--oliva);font-size:13px"><strong>Tudo em dia!</strong><br><span style="color:var(--text-muted)">Nenhuma pendência para hoje</span></div>';
           return tasks.map((t,i)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;${i<tasks.length-1?'border-bottom:1px solid var(--border-light)':''}">
-            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--${t.color});flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:var(--transition)" onclick="${t.action}" onmouseover="this.style.background='var(--${t.color})';this.innerHTML='${I.check.replace(/'/g,"\\'")}';" onmouseout="this.style.background='transparent';this.innerHTML='';"></div>
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--${t.color});flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:var(--transition);font-size:11px;font-weight:700" onclick="${t.action}" onmouseover="this.style.background='var(--'+this.dataset.c+')';this.style.color='#fff';this.textContent='✓'" onmouseout="this.style.background='transparent';this.style.color='';this.textContent=''" data-c="${t.color}"></div>
             <div style="font-size:12.5px;line-height:1.5;color:var(--text-primary);flex:1">${t.text}</div>
           </div>`).join('');
         })()}</div>
