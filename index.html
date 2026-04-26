@@ -940,7 +940,9 @@ function renderWhatIf(mode,cfg,forms){
 }
 
 function rDash(){
-  const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots'),pagar=DB.get('pagar');
+  const prods=DB.get('products'),forms=DB.get('formulas'),lots=DB.get('lots'),pagar=DB.get('pagar'),pa=DB.get('stockpa');
+  const paDisp=pa.filter(i=>i.status==='disponivel');
+  const totalPAUnits=paDisp.reduce((s,i)=>s+(parseInt(i.quantity)||0),0);
   const today=new Date(),todayStr=localDateStr(today);
   const y=S.calY,m=S.calM,fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate(),dip=new Date(y,m,0).getDate();
   let cal='';
@@ -979,8 +981,8 @@ function rDash(){
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px">
       <div class="stat-card stat-rose anim d1"><div class="stat-deco"></div><div class="stat-icon">${I.box}</div><div class="stat-value">${prods.length}</div><div class="stat-label">Produtos</div></div>
       <div class="stat-card stat-oliva anim d2"><div class="stat-deco"></div><div class="stat-icon">${I.beaker}</div><div class="stat-value">${forms.length}</div><div class="stat-label">Fórmulas</div></div>
-      <div class="stat-card stat-lavanda anim d3"><div class="stat-deco"></div><div class="stat-icon">${I.archive}</div><div class="stat-value">${lots.length}</div><div class="stat-label">Lotes</div></div>
-      <div class="stat-card stat-sol anim d4"><div class="stat-deco"></div><div class="stat-icon">${I.clock}</div><div class="stat-value">${lots.filter(l=>l.status==='em_estoque').length}</div><div class="stat-label">Em estoque</div></div>
+      <div class="stat-card stat-lavanda anim d3"><div class="stat-deco"></div><div class="stat-icon">${I.archive}</div><div class="stat-value">${pa.length}</div><div class="stat-label">Lotes PA</div></div>
+      <div class="stat-card stat-sol anim d4"><div class="stat-deco"></div><div class="stat-icon">${I.box}</div><div class="stat-value">${totalPAUnits}</div><div class="stat-label">Unidades disponíveis</div></div>
     </div>
 
     <div style="margin-bottom:22px">
@@ -2738,6 +2740,17 @@ function getModoDiaTasks(){
     }
   });
 
+  // SUGESTÕES — Ciclo de recompra (produtos duram ~45 dias)
+  const RECOMPRA_DIAS=40;
+  pedidos.filter(p=>p.status==='entregue'&&p.data&&p.cliente).forEach(p=>{
+    const entregaDate=new Date(p.data+'T12:00:00');
+    const diasDesdeEntrega=Math.floor((now-entregaDate)/(1000*60*60*24));
+    if(diasDesdeEntrega>=RECOMPRA_DIAS&&diasDesdeEntrega<=90){
+      const itensResumo=(p.itens||[]).map(it=>it.qty+'x '+it.name).join(', ');
+      tasks.push({priority:11,type:'sugestao',cat:'Recompra',catColor:'pink',text:'Contatar '+(p.cliente||'cliente')+' — produto deve estar acabando',sub:itensResumo+' — entregue há '+diasDesdeEntrega+' dias'+(p.telefone?' — '+p.telefone:''),action:"openPedidoRecompra('"+p.id+"')",btnLabel:'Novo pedido',id:'recompra_'+p.id});
+    }
+  });
+
   tasks.sort((a,b)=>a.priority-b.priority);
   return tasks;
 }
@@ -2789,7 +2802,7 @@ function rModoDia(){
   const dayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
   const dateStr=dayNames[now.getDay()]+', '+now.getDate()+' de '+MO[now.getMonth()].toLowerCase()+' de '+now.getFullYear();
 
-  const catColors={amber:{bg:'var(--rose-pale)',text:'var(--rosa-antigo)',label:'#854F0B',labelBg:'#FAEEDA'},teal:{bg:'#E1F5EE',text:'#0F6E56',label:'#0F6E56',labelBg:'#E1F5EE'},green:{bg:'var(--oliva-pale)',text:'var(--oliva)',label:'#0F6E56',labelBg:'#E1F5EE'},purple:{bg:'var(--lavanda-pale)',text:'var(--lavanda)',label:'#534AB7',labelBg:'#EEEDFE'}};
+  const catColors={amber:{bg:'var(--rose-pale)',text:'var(--rosa-antigo)',label:'#854F0B',labelBg:'#FAEEDA'},teal:{bg:'#E1F5EE',text:'#0F6E56',label:'#0F6E56',labelBg:'#E1F5EE'},green:{bg:'var(--oliva-pale)',text:'var(--oliva)',label:'#0F6E56',labelBg:'#E1F5EE'},purple:{bg:'var(--lavanda-pale)',text:'var(--lavanda)',label:'#534AB7',labelBg:'#EEEDFE'},pink:{bg:'var(--rose-pale)',text:'var(--rosa-antigo)',label:'#72243E',labelBg:'#FBEAF0'}};
 
   function renderTask(t,idx){
     const isDone=done.includes(t.id);
@@ -3097,6 +3110,35 @@ function viewPedido(id){
   `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>',true);
 }
 function delPedido(id){if(!confirm('Excluir pedido?'))return;DB.set('pedidos',DB.get('pedidos').filter(x=>x.id!==id));rPedidos();toast('Pedido excluído');}
+
+function openPedidoRecompra(origId){
+  const pedidos=DB.get('pedidos');
+  const orig=pedidos.find(x=>x.id===origId);
+  if(!orig){go('pedidos');return;}
+  // Navigate to pedidos and open modal pre-filled with client data and same items
+  S.page='pedidos';renderNav();render();
+  const pa=DB.get('stockpa').filter(i=>i.status==='disponivel'&&(parseInt(i.quantity)||0)>0);
+  const prods=[...new Set(pa.map(i=>i.name))];
+  const nextNum=String(pedidos.length+1).padStart(4,'0');
+  openModal('Novo Pedido — Recompra de #'+orig.numero,`
+    <div style="background:var(--lavanda-pale);padding:10px 14px;border-radius:var(--radius-md);margin-bottom:14px;font-size:12px;color:var(--lavanda)">Baseado no pedido #${orig.numero} de ${orig.cliente} — entregue em ${fmtD(orig.data)}</div>
+    <div class="form-row" style="grid-template-columns:80px 1fr 1fr">
+      <div class="form-group"><label class="form-label">Nº</label><input class="form-input" id="pedNum" value="${nextNum}" style="font-family:monospace;font-weight:700"></div>
+      <div class="form-group"><label class="form-label">Cliente</label><input class="form-input" id="pedCli" value="${orig.cliente||''}"></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="pedTel" value="${orig.telefone||''}"></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="form-group"><label class="form-label">Canal</label><select class="form-select" id="pedCanal">${['WhatsApp','NuvemShop','Shopee','Instagram','Presencial','Outro'].map(c=>`<option value="${c}" ${orig.canal===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Pagamento</label><select class="form-select" id="pedPag">${['PIX','Cartão','Boleto','Link','Dinheiro'].map(p=>`<option value="${p}" ${orig.pagamento===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Data</label><input class="form-input" id="pedData" type="date" value="${localDateStr()}"></div>
+    </div>
+    <label class="form-label" style="margin-bottom:8px">Itens do pedido</label>
+    <div id="pedItens">${(orig.itens||[]).map(it=>`<div class="ped-item-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center"><select class="form-select pedProd" style="flex:2"><option value="">Selecione...</option>${prods.map(pr=>`<option value="${pr}" ${it.name===pr?'selected':''}>${pr}</option>`).join('')}</select><input class="form-input pedQty" type="number" min="1" value="${it.qty||1}" style="flex:0 0 70px" oninput="calcPedTotal()"><input class="form-input pedPrice" type="number" step="0.01" value="${it.price||''}" style="flex:0 0 100px" oninput="calcPedTotal()"><button class="remove-btn" onclick="this.closest('.ped-item-row').remove();calcPedTotal()">${I.trash}</button></div>`).join('')}</div>
+    <button class="btn btn-sm btn-secondary" onclick="addPedItem()" style="margin-bottom:14px">${I.plus} Adicionar item</button>
+    <div style="display:flex;justify-content:flex-end;gap:12px;margin-bottom:14px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-md)"><span style="font-size:13px;color:var(--text-muted)">Total:</span><strong id="pedTotalDisplay" style="font-size:16px">${fmtR(orig.total||0)}</strong></div>
+    <div class="form-group"><label class="form-label">Observações</label><textarea class="form-textarea" id="pedObs" rows="2">Recompra do pedido #${orig.numero}</textarea></div>
+  `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePedido('')">Salvar Pedido</button>`);
+}
 
 // ========== INIT ==========
 // Cleanup: strip base64 from mydocs in localStorage to free space
