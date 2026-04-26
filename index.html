@@ -580,6 +580,7 @@ const TABLE_MAP={
   leads:{table:'leads',cols:['id','name'],isJsonStore:true},
   sup_mp_link:{table:'sup_mp_link',cols:['id','name'],isJsonStore:true},
   mp_price_hist:{table:'mp_price_hist',cols:['id','name'],isJsonStore:true},
+  price_history:{table:'price_history',cols:['id','name'],isJsonStore:true},
   roteiros:{table:'roteiros',cols:['id','name'],isJsonStore:true},
 };
 
@@ -821,6 +822,9 @@ function render(){
   const fn={mododia:rModoDia,dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,pedidos:rPedidos,leads:rLeads};
   (fn[S.page]||rDash)();
   renderTopBar();
+  // Update tab title with pending count
+  const pending=getModoDiaPending();
+  document.title=pending>0?`(${pending}) Mundana Gestão`:'Mundana Gestão';
 }
 
 // ========== MODAL ==========
@@ -1032,7 +1036,7 @@ function rProds(){
     return true;
   });
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="openFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
+    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="viewPriceHistory()">${I.history} Histórico</button><button class="btn btn-secondary btn-sm" onclick="openFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
     <div style="display:grid;grid-template-columns:200px 1fr;gap:16px" class="anim d1">
       <div style="align-self:start">
         <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._prodBusca}" oninput="S._prodBusca=this.value;rProds()" style="width:100%"></div>
@@ -1085,7 +1089,21 @@ function handlePh(e){const f=e.target.files[0];if(!f)return;const r=new FileRead
     });
   } else { tmpPhoto=raw; document.getElementById('phPrev').innerHTML=`<img src="${tmpPhoto}"><input type="file" id="phIn" accept="image/*" onchange="handlePh(event)">`; }
 };r.readAsDataURL(f);}
-function saveProd(id){const prods=DB.get('products');const d={id:id||uid(),name:document.getElementById('pN').value,line:document.getElementById('pL').value,type:document.getElementById('pT').value,ml:document.getElementById('pMl').value,price:document.getElementById('pP').value,notes:document.getElementById('pNo').value,description:document.getElementById('pD').value,folder:document.getElementById('pF').value,photo:tmpPhoto};if(!d.name){toast('Preencha o nome do produto');return;}if(id){const i=prods.findIndex(p=>p.id===id);if(i>=0)prods[i]=d;}else prods.push(d);DB.set('products',prods);tmpPhoto='';closeModal();rProds();toast(id?'Produto atualizado':'Produto cadastrado');}
+function saveProd(id){const prods=DB.get('products');const d={id:id||uid(),name:document.getElementById('pN').value,line:document.getElementById('pL').value,type:document.getElementById('pT').value,ml:document.getElementById('pMl').value,price:document.getElementById('pP').value,notes:document.getElementById('pNo').value,description:document.getElementById('pD').value,folder:document.getElementById('pF').value,photo:tmpPhoto};if(!d.name){toast('Preencha o nome do produto');return;}
+  // Track price history
+  if(id){const old=prods.find(p=>p.id===id);if(old&&old.price!==d.price&&old.price){const ph=DB.get('price_history');ph.push({id:uid(),productId:id,productName:d.name,oldPrice:parseFloat(old.price)||0,newPrice:parseFloat(d.price)||0,date:localDateStr()});DB.set('price_history',ph);}}
+  if(id){const i=prods.findIndex(p=>p.id===id);if(i>=0)prods[i]=d;}else prods.push(d);DB.set('products',prods);tmpPhoto='';closeModal();rProds();toast(id?'Produto atualizado':'Produto cadastrado');}
+function viewPriceHistory(){
+  const hist=DB.get('price_history').sort((a,b)=>b.date.localeCompare(a.date));
+  const byProd={};hist.forEach(h=>{const n=h.productName||'?';if(!byProd[n])byProd[n]=[];byProd[n].push(h);});
+  openModal('Histórico de preços',`
+    ${hist.length===0?'<div style="text-align:center;padding:30px;color:var(--text-muted)">Nenhuma alteração de preço registrada ainda</div>':`
+    ${Object.entries(byProd).map(([name,entries])=>`<div style="margin-bottom:18px">
+      <strong style="font-size:14px">${name}</strong>
+      <table style="width:100%;font-size:12px;margin-top:6px"><tbody>${entries.map(h=>{const delta=h.newPrice-h.oldPrice;const pct=h.oldPrice>0?((delta/h.oldPrice)*100).toFixed(1):'';return`<tr style="border-bottom:1px solid var(--border-light)"><td style="padding:6px 0;color:var(--text-muted)">${fmtD(h.date)}</td><td style="padding:6px 0">${fmtR(h.oldPrice)}</td><td style="padding:6px 0;font-size:14px">→</td><td style="padding:6px 0;font-weight:700">${fmtR(h.newPrice)}</td><td style="padding:6px 0;font-weight:600;color:${delta>=0?'var(--rosa-antigo)':'var(--oliva)'}">${delta>=0?'+':''}${fmtR(delta)} (${delta>=0?'+':''}${pct}%)</td></tr>`;}).join('')}</tbody></table>
+    </div>`).join('')}`}
+  `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>',true);
+}
 function delProd(id){if(!confirm('Excluir este produto?'))return;DB.set('products',DB.get('products').filter(p=>p.id!==id));rProds();toast('Produto excluído');}
 function openFolderModal(){const folders=DB.get('product_folders');openModal('Gerenciar Pastas',`<div id="fList">${folders.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input class="form-input" value="${f.name}" onchange="updFolder('${f.id}',this.value)" style="flex:1"><button class="remove-btn" onclick="delFolder('${f.id}')">${I.trash}</button></div>`).join('')}</div><div style="display:flex;gap:8px;margin-top:14px"><input class="form-input" id="nfN" placeholder="Nome da nova pasta" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addFolder()">Criar</button></div>`,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>');}
 function addFolder(){const n=document.getElementById('nfN').value;if(!n)return;const f=DB.get('product_folders');f.push({id:uid(),name:n});DB.set('product_folders',f);openFolderModal();toast('Pasta criada');}
@@ -1325,7 +1343,8 @@ function rProdExec(){
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>${f.name}</h2><p>${f.productType||'Produção em andamento'}</p></div><div class="page-header-actions"><button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">${I.back} Voltar</button></div></div>
     <div class="prod-info-grid anim d1"><div class="prod-info-card"><label>Tamanho do lote (g)</label><input class="form-input" type="number" id="prodQtyInput" value="${q||''}" placeholder="${f.lotSize||'Ex: 3000'}" oninput="S.prodQty=parseFloat(this.value)||0;clearTimeout(window._pqt);window._pqt=setTimeout(()=>{const v=document.getElementById('prodQtyInput');const cv=v?v.value:'';rProdExec();setTimeout(()=>{const v2=document.getElementById('prodQtyInput');if(v2){v2.value=cv;v2.focus();}},10);},800)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();rProdExec();}" style="text-align:center;font-size:20px;font-weight:800;max-width:180px;margin:4px auto 0;border:none;background:transparent"></div><div class="prod-info-card"><label>Ingredientes</label><div class="value">${(f.ingredients||[]).length}</div></div><div class="prod-info-card"><label>Progresso</label><div class="value" style="color:${pct===100?'var(--oliva)':'var(--carvao)'}">${Math.round(pct)}%</div></div></div>
-    ${q>0?`<div class="card anim d2" style="margin-bottom:18px"><div class="card-header"><h3>Ingredientes para ${q}g ${ratio!==1?`(fator ${ratio.toFixed(2)}x)`:''}</h3></div><div class="card-body"><div class="calc-row" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1.5px solid var(--border)"><span>Ingrediente</span><span class="pct">Unidade</span><span class="qty">Quantidade</span></div>${(f.ingredients||[]).map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;return`<div class="calc-row"><span>${ing.name}</span><span class="pct">${ing.unit||'-'}</span><span class="qty">${amt.toFixed(2)}</span></div>`;}).join('')}</div></div>`:''}
+    ${q>0?`<div class="card anim d2" style="margin-bottom:18px"><div class="card-header"><h3>Ingredientes para ${q}g ${ratio!==1?`(fator ${ratio.toFixed(2)}x)`:''}</h3></div><div class="card-body"><div class="calc-row" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1.5px solid var(--border)"><span>Ingrediente</span><span class="pct">Unidade</span><span class="qty">Necessário</span><span class="qty">Estoque</span><span class="qty">Status</span></div>${(()=>{const stock=DB.get('stockmp');const hist=DB.get('mp_price_hist');return(f.ingredients||[]).map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);const ok=avail>=amt;const falta=ok?0:Math.ceil((amt-avail)*100)/100;return`<div class="calc-row"><span>${ing.name}</span><span class="pct">${ing.unit||'-'}</span><span class="qty">${amt.toFixed(2)}</span><span class="qty" style="color:${ok?'var(--oliva)':'var(--rosa-antigo)';font-weight:600}">${avail.toFixed(1)}</span><span class="qty">${ok?'<span style="color:var(--oliva);font-weight:600">OK</span>':`<span style="color:var(--rosa-antigo);font-weight:600">Falta ${falta} ${ing.unit||''}</span>`}</span></div>`;}).join('');})()}</div></div>
+    ${(()=>{const stock=DB.get('stockmp');const hist=DB.get('mp_price_hist');const faltas=(f.ingredients||[]).filter(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);return avail<amt;});if(faltas.length===0)return'';return`<div class="card anim d2" style="margin-bottom:18px;border-left:3px solid var(--rosa-antigo);border-radius:0 var(--radius-lg) var(--radius-lg) 0"><div class="card-body" style="padding:14px 20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="color:var(--rosa-antigo);font-weight:700;font-size:13px">MP insuficiente para este lote</span></div>${faltas.map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);const falta=Math.ceil((amt-avail)*100)/100;const mpHist=hist.filter(h=>h.mpName.toLowerCase().trim()===ingName).sort((a,b)=>b.date.localeCompare(a.date));const best=mpHist.length>0?mpHist[0]:null;const sups=DB.get('suppliers');const supName=best?(sups.find(s=>s.id===best.supplierId)||{}).name:'';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light)"><div><strong style="font-size:13px">${ing.name}</strong><span style="font-size:12px;color:var(--rosa-antigo);margin-left:8px">falta ${falta} ${ing.unit||''}</span></div><div style="font-size:12px;color:var(--text-muted)">${best?supName+' — '+fmtR(best.price)+'/'+(best.unit||'un'):'Sem histórico de fornecedor'}</div></div>`;}).join('')}</div></div>`;})()}`:''}
     ${steps.length>0?`<div class="card anim d3" style="margin-bottom:18px"><div class="card-header"><h3>Modo de preparo</h3><span style="font-size:12px;color:var(--text-muted);font-weight:600">${done} de ${steps.length}</span></div><div class="card-body"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>${steps.map((s,i)=>`<div class="production-step"><div class="step-check ${S.prodSteps[i]?'checked':''}" onclick="S.prodSteps[${i}]=!S.prodSteps[${i}];rProdExec()">${I.check}</div><div class="step-content ${S.prodSteps[i]?'done':''}"><div class="step-num">Passo ${i+1}</div><div class="step-text">${s}</div></div></div>`).join('')}</div></div>`:''}
     ${allDone?`<div style="text-align:center;padding:18px" class="anim d4"><button class="btn btn-primary" onclick="finishProd()" style="font-size:13.5px;padding:12px 32px">${I.check} Finalizar produção e gerar lote</button></div>`:''}`;
 }
@@ -2800,6 +2819,15 @@ function getModoDiaTasks(){
     }
   });
 
+  // SUGESTÕES — Produtos parados no estoque (giro lento, 60+ dias)
+  const GIRO_DIAS=60;
+  pa.filter(i=>i.status==='disponivel'&&i.fabricacao&&(parseInt(i.quantity)||0)>0).forEach(i=>{
+    const diasEmEstoque=Math.floor((now-new Date(i.fabricacao+'T12:00:00'))/(1000*60*60*24));
+    if(diasEmEstoque>=GIRO_DIAS){
+      tasks.push({priority:12,type:'sugestao',cat:'Giro lento',catColor:'amber',text:i.name+' parado há '+diasEmEstoque+' dias',sub:(i.quantity||0)+' un — lote '+(i.lotNumber||'?')+' — considere promoção ou conteúdo focado',action:"S.stockTab='pa';go('stockmp')",btnLabel:'Ver estoque',id:'giro_'+i.id});
+    }
+  });
+
   tasks.sort((a,b)=>a.priority-b.priority);
   return tasks;
 }
@@ -2989,7 +3017,32 @@ function filterLeads(q){const lq=q.toLowerCase();document.querySelectorAll('#lea
 
 async function cycleLeadStatus(id){
   const cycle=['novo','potencial','em_contato','ganho','perdido'];
-  try{const res=await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id+'&select=status',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});const rows=await res.json();const cur=(rows&&rows[0]&&rows[0].status)||'novo';const next=cycle[(cycle.indexOf(cur)+1)%cycle.length];await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({status:next})});rLeads();toast('Status: '+(LEAD_STATUS[next]||{}).label||next);}catch(e){toast('Erro ao atualizar');console.error(e);}
+  try{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id+'&select=*',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+    const rows=await res.json();const lead=rows&&rows[0]?rows[0]:{};
+    const cur=lead.status||'novo';
+    const next=cycle[(cycle.indexOf(cur)+1)%cycle.length];
+    await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({status:next})});
+    // Auto-create draft pedido when lead becomes "ganho"
+    if(next==='ganho'&&lead.linha_resultado){
+      const linha=lead.linha_resultado;
+      const pa=DB.get('stockpa').filter(i=>i.status==='disponivel'&&(parseInt(i.quantity)||0)>0&&i.line===linha);
+      const prodsLine=[...new Set(pa.map(i=>i.name))];
+      if(prodsLine.length>0){
+        const pedidos=DB.get('pedidos');
+        const itens=prodsLine.map(name=>{
+          const f=DB.get('formulas').find(x=>x.name===name);
+          const price=f?calcFormula(f).priceSuggested:0;
+          return{name,line:linha,qty:1,price:Math.round(price*100)/100};
+        });
+        const total=itens.reduce((s,it)=>s+it.qty*it.price,0);
+        const ped={id:uid(),numero:String(pedidos.length+1).padStart(4,'0'),cliente:'Lead Quiz — '+(lead.telefone||''),telefone:lead.telefone||'',canal:'WhatsApp',pagamento:'PIX',data:localDateStr(),itens,total,obs:'Pedido rascunho criado automaticamente a partir do Lead Quiz — Linha: '+linha,status:'novo'};
+        pedidos.push(ped);DB.set('pedidos',pedidos);
+        toast('Pedido rascunho #'+ped.numero+' criado para '+linha);
+      }
+    }
+    rLeads();toast('Status: '+((LEAD_STATUS[next]||{}).label||next));
+  }catch(e){toast('Erro ao atualizar');console.error(e);}
 }
 async function saveLeadObs(id,obs){
   try{await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({obs})});}catch(e){console.warn('Erro ao salvar obs',e);}
