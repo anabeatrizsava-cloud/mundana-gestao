@@ -1329,7 +1329,7 @@ function rProdExec(){
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>${f.name}</h2><p>${f.productType||'Produção em andamento'}</p></div><div class="page-header-actions"><button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">${I.back} Voltar</button></div></div>
     <div class="prod-info-grid anim d1"><div class="prod-info-card"><label>Tamanho do lote (g)</label><input class="form-input" type="number" id="prodQtyInput" value="${q||''}" placeholder="${f.lotSize||'Ex: 3000'}" oninput="S.prodQty=parseFloat(this.value)||0;clearTimeout(window._pqt);window._pqt=setTimeout(()=>{const v=document.getElementById('prodQtyInput');const cv=v?v.value:'';rProdExec();setTimeout(()=>{const v2=document.getElementById('prodQtyInput');if(v2){v2.value=cv;v2.focus();}},10);},800)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();rProdExec();}" style="text-align:center;font-size:20px;font-weight:800;max-width:180px;margin:4px auto 0;border:none;background:transparent"></div><div class="prod-info-card"><label>Ingredientes</label><div class="value">${(f.ingredients||[]).length}</div></div><div class="prod-info-card"><label>Progresso</label><div class="value" style="color:${pct===100?'var(--oliva)':'var(--carvao)'}">${Math.round(pct)}%</div></div></div>
-    ${q>0?`<div class="card anim d2" style="margin-bottom:18px"><div class="card-header"><h3>Ingredientes para ${q}g ${ratio!==1?`(fator ${ratio.toFixed(2)}x)`:''}</h3></div><div class="card-body"><div class="calc-row" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1.5px solid var(--border)"><span>Ingrediente</span><span class="pct">Unidade</span><span class="qty">Necessário</span><span class="qty">Estoque</span><span class="qty">Status</span></div>${(()=>{const stock=DB.get('stockmp');const hist=DB.get('mp_price_hist');return(f.ingredients||[]).map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);const ok=avail>=amt;const falta=ok?0:Math.ceil((amt-avail)*100)/100;return`<div class="calc-row"><span>${ing.name}</span><span class="pct">${ing.unit||'-'}</span><span class="qty">${amt.toFixed(2)}</span><span class="qty" style="color:${ok?'var(--oliva)':'var(--rosa-antigo)'};font-weight:600">${avail.toFixed(1)}</span><span class="qty">${ok?'<span style="color:var(--oliva);font-weight:600">OK</span>':`<span style="color:var(--rosa-antigo);font-weight:600">Falta ${falta} ${ing.unit||''}</span>`}</span></div>`;}).join('');})()}</div></div>
+    ${q>0?`<div class="card anim d2" style="margin-bottom:18px"><div class="card-header"><h3>Ingredientes para ${q}g ${ratio!==1?`(fator ${ratio.toFixed(2)}x)`:''}</h3></div><div class="card-body"><div class="calc-row" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1.5px solid var(--border);grid-template-columns:2fr 0.8fr 1fr 1fr 1.2fr"><span>Ingrediente</span><span class="pct">Unidade</span><span class="qty">Necessário</span><span class="qty">Estoque</span><span class="qty">Status</span></div>${(()=>{const stock=DB.get('stockmp');const hist=DB.get('mp_price_hist');return(f.ingredients||[]).map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);const ok=avail>=amt;const falta=ok?0:Math.ceil((amt-avail)*100)/100;return`<div class="calc-row" style="grid-template-columns:2fr 0.8fr 1fr 1fr 1.2fr"><span>${ing.name}</span><span class="pct">${ing.unit||'-'}</span><span class="qty">${amt.toFixed(2)}</span><span class="qty" style="color:${ok?'var(--oliva)':'var(--rosa-antigo)'};font-weight:600">${avail.toFixed(1)}</span><span class="qty">${ok?'<span style="color:var(--oliva);font-weight:600">OK</span>':`<span style="color:var(--rosa-antigo);font-weight:600">Falta ${falta} ${ing.unit||''}</span>`}</span></div>`;}).join('');})()}</div></div>
     ${(()=>{const stock=DB.get('stockmp');const hist=DB.get('mp_price_hist');const faltas=(f.ingredients||[]).filter(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);return avail<amt;});if(faltas.length===0)return'';return`<div class="card anim d2" style="margin-bottom:18px;border-left:3px solid var(--rosa-antigo);border-radius:0 var(--radius-lg) var(--radius-lg) 0"><div class="card-body" style="padding:14px 20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="color:var(--rosa-antigo);font-weight:700;font-size:13px">MP insuficiente para este lote</span></div>${faltas.map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;const ingName=(ing.name||'').toLowerCase().trim();const avail=stock.filter(s=>(s.name||'').toLowerCase().trim()===ingName).reduce((s,x)=>s+(parseFloat(x.quantity)||0),0);const falta=Math.ceil((amt-avail)*100)/100;const mpHist=hist.filter(h=>h.mpName.toLowerCase().trim()===ingName).sort((a,b)=>b.date.localeCompare(a.date));const best=mpHist.length>0?mpHist[0]:null;const sups=DB.get('suppliers');const supName=best?(sups.find(s=>s.id===best.supplierId)||{}).name:'';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light)"><div><strong style="font-size:13px">${ing.name}</strong><span style="font-size:12px;color:var(--rosa-antigo);margin-left:8px">falta ${falta} ${ing.unit||''}</span></div><div style="font-size:12px;color:var(--text-muted)">${best?supName+' — '+fmtR(best.price)+'/'+(best.unit||'un'):'Sem histórico de fornecedor'}</div></div>`;}).join('')}</div></div>`;})()}`:''}
     ${steps.length>0?`<div class="card anim d3" style="margin-bottom:18px"><div class="card-header"><h3>Modo de preparo</h3><span style="font-size:12px;color:var(--text-muted);font-weight:600">${done} de ${steps.length}</span></div><div class="card-body"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>${steps.map((s,i)=>`<div class="production-step"><div class="step-check ${S.prodSteps[i]?'checked':''}" onclick="S.prodSteps[${i}]=!S.prodSteps[${i}];rProdExec()">${I.check}</div><div class="step-content ${S.prodSteps[i]?'done':''}"><div class="step-num">Passo ${i+1}</div><div class="step-text">${s}</div></div></div>`).join('')}</div></div>`:''}
     ${allDone?`<div style="text-align:center;padding:18px" class="anim d4"><button class="btn btn-primary" onclick="finishProd()" style="font-size:13.5px;padding:12px 32px">${I.check} Finalizar produção e gerar lote</button></div>`:''}`;
@@ -2835,6 +2835,25 @@ function getModoDiaTasks(){
     });
   }
 
+  // ESCALADA DE URGÊNCIA — tarefas ignoradas por 5+ dias sobem para urgente
+  const ESCALA_DIAS=5;
+  const firstSeen=JSON.parse(localStorage.getItem('mundana_mododia_firstseen')||'{}');
+  const updated={...firstSeen};
+  tasks.forEach(t=>{
+    if(!updated[t.id])updated[t.id]=todayStr;
+    if(t.type!=='urgente'&&t.type!=='sugestao'){
+      const seenDate=new Date(updated[t.id]+'T12:00:00');
+      const diasIgnorado=Math.floor((now-seenDate)/(1000*60*60*24));
+      if(diasIgnorado>=ESCALA_DIAS){
+        t.priority=0;
+        t.type='urgente';
+        t.sub=(t.sub||'')+' — ignorada há '+diasIgnorado+' dias';
+        t.escalated=true;
+      }
+    }
+  });
+  localStorage.setItem('mundana_mododia_firstseen',JSON.stringify(updated));
+
   tasks.sort((a,b)=>a.priority-b.priority);
   return tasks;
 }
@@ -2849,6 +2868,10 @@ function toggleModoDiaTask(id){
   const done=JSON.parse(localStorage.getItem(key)||'[]');
   if(done.includes(id)){done.splice(done.indexOf(id),1);}else{done.push(id);}
   localStorage.setItem(key,JSON.stringify(done));
+  // Clean firstSeen for completed tasks
+  const fs=JSON.parse(localStorage.getItem('mundana_mododia_firstseen')||'{}');
+  if(done.includes(id))delete fs[id];
+  localStorage.setItem('mundana_mododia_firstseen',JSON.stringify(fs));
   rModoDia();renderNav();
 }
 function dismissModoDiaTask(id){
@@ -2901,7 +2924,7 @@ function rModoDia(){
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
           <div style="flex:1">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-              ${isUrg&&!isDone?'<span style="background:var(--rose-pale);color:var(--rosa-antigo);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;border:0.5px solid var(--rosa-antigo)">Urgente</span>':''}
+              ${isUrg&&!isDone?'<span style="background:var(--rose-pale);color:var(--rosa-antigo);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;border:0.5px solid var(--rosa-antigo)">'+(t.escalated?'Escalada':'Urgente')+'</span>':''}
               ${isSug?'<span style="background:var(--lavanda-pale);color:var(--lavanda);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">Sugestão</span>':''}
               <span style="background:${cc.labelBg};color:${cc.label};font-size:10px;padding:2px 8px;border-radius:10px">${t.cat}</span>
             </div>
