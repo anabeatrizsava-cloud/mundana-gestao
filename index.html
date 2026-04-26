@@ -2779,7 +2779,7 @@ function rModoDia(){
   const pending=activeTasks.filter(t=>t.type!=='sugestao'&&!done.includes(t.id)).length;
   const total=activeTasks.filter(t=>t.type!=='sugestao').length;
   const completed=total-pending;
-  const sugestoes=activeTasks.filter(t=>t.type==='sugestao');
+  const sugestoes=activeTasks.filter(t=>t.type==='sugestao'&&!done.includes(t.id));
   const urgentes=activeTasks.filter(t=>t.type==='urgente'&&!done.includes(t.id));
   const hoje=activeTasks.filter(t=>(t.type==='hoje'||t.type==='atencao')&&!done.includes(t.id));
   const dismissedTasks=tasks.filter(t=>dismissed.includes(t.id));
@@ -2813,7 +2813,7 @@ function rModoDia(){
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();${t.action}" style="font-size:11px;white-space:nowrap">${t.btnLabel}</button>
-            ${!isSug?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--oliva)':circleColor};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:var(--transition);color:${isDone?'var(--oliva)':'transparent'};background:${isDone?'var(--oliva-pale)':'transparent'}" onclick="event.stopPropagation();toggleModoDiaTask('${t.id}')" onmouseover="if(!${isDone})this.style.background='${circleColor}',this.style.color='#fff',this.textContent='✓'" onmouseout="if(!${isDone})this.style.background='transparent',this.style.color='transparent',this.textContent='✓'">${isDone?'✓':''}</div>`:''}
+            ${!isSug?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--oliva)':circleColor};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:var(--transition);color:${isDone?'var(--oliva)':'transparent'};background:${isDone?'var(--oliva-pale)':'transparent'}" onclick="event.stopPropagation();toggleModoDiaTask('${t.id}')" onmouseover="if(!${isDone})this.style.background='${circleColor}',this.style.color='#fff',this.textContent='✓'" onmouseout="if(!${isDone})this.style.background='transparent',this.style.color='transparent',this.textContent='✓'">${isDone?'✓':''}</div>`:`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--oliva)':'var(--lavanda)'};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:var(--transition);color:${isDone?'var(--oliva)':'transparent'};background:${isDone?'var(--oliva-pale)':'transparent'}" onclick="event.stopPropagation();toggleModoDiaTask('${t.id}')" onmouseover="if(!${isDone})this.style.background='var(--lavanda)',this.style.color='#fff',this.textContent='✓'" onmouseout="if(!${isDone})this.style.background='transparent',this.style.color='transparent',this.textContent='✓'">${isDone?'✓':''}</div>`}
             ${!isDone?`<div style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted);transition:var(--transition)" onclick="event.stopPropagation();dismissModoDiaTask('${t.id}')" onmouseover="this.style.borderColor='var(--rosa-antigo)';this.style.color='var(--rosa-antigo)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'" title="Dispensar por hoje">✕</div>`:''}
           </div>
         </div>
@@ -2849,11 +2849,11 @@ function rModoDia(){
       ${hoje.map(t=>renderTask(t,++taskIdx)).join('')}
     </div>`:''}
 
-    ${done.length>0&&tasks.filter(t=>t.type!=='sugestao'&&done.includes(t.id)).length>0?`
+    ${done.length>0&&activeTasks.filter(t=>done.includes(t.id)).length>0?`
     <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--oliva);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d3">Concluídas</p>
     <div style="position:relative;padding-left:34px;margin-bottom:24px" class="anim d3">
       <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--oliva);opacity:0.3;border-radius:1px"></div>
-      ${tasks.filter(t=>t.type!=='sugestao'&&done.includes(t.id)).map(t=>renderTask(t,++taskIdx)).join('')}
+      ${activeTasks.filter(t=>done.includes(t.id)).map(t=>renderTask(t,++taskIdx)).join('')}
     </div>`:''}
 
     ${sugestoes.length>0?`
