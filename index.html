@@ -2584,9 +2584,11 @@ function getRotFreqs(){return DB.get('rot_freqs').length?DB.get('rot_freqs'):['1
 function rRoteiros(){
   const items=DB.get('roteiros');
   const fases=getRotFases(),tipos=getRotTipos();
+  if(!S._rotBusca)S._rotBusca='';
   const filtered=items.filter(r=>{
     if(S.rotFase!=='all'&&r.fase!==S.rotFase)return false;
     if(S.rotTipo!=='all'&&r.tipo!==S.rotTipo)return false;
+    if(S._rotBusca){const q=S._rotBusca.toLowerCase();if(!(r.mensagem||'').toLowerCase().includes(q)&&!(r.fase||'').toLowerCase().includes(q)&&!(r.tipo||'').toLowerCase().includes(q))return false;}
     return true;
   });
   const faseColor=f=>{const map={'1º Contato':'oliva','Follow-up':'oliva','Fechamento':'rosa-antigo'};return map[f]||'oliva';};
@@ -2596,46 +2598,49 @@ function rRoteiros(){
 
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>Roteiro de Atendimento</h2><p>${items.length} mensagen${items.length!==1?'s':''} cadastrada${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="manageRotFases()">${I.edit} Fases</button><button class="btn btn-secondary btn-sm" onclick="manageRotTipos()">${I.edit} Tipos</button><button class="btn btn-secondary btn-sm" onclick="manageRotFreqs()">${I.edit} Frequências</button><button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button></div></div>
-    <div style="display:flex;gap:14px;margin-bottom:22px;align-items:center;flex-wrap:wrap" class="anim d1">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Fase:</span>
-        <select class="form-select" style="min-width:180px;font-size:13px" onchange="S.rotFase=this.value;rRoteiros()">
-          <option value="all" ${S.rotFase==='all'?'selected':''}>Todas (${items.length})</option>
-          ${fases.map(f=>`<option value="${f}" ${S.rotFase===f?'selected':''}>${f} (${items.filter(r=>r.fase===f).length})</option>`).join('')}
-        </select>
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:16px" class="anim d1">
+      <div style="align-self:start">
+        <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._rotBusca}" oninput="S._rotBusca=this.value;rRoteiros()" style="width:100%"></div>
+        <div class="card" style="padding:8px;margin-bottom:10px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;padding:6px 12px 4px">Tipo</div>
+          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.rotTipo==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S.rotTipo='all';rRoteiros()">Todos <span style="float:right;font-size:12px;color:var(--text-muted)">${items.length}</span></div>
+          ${tipos.map(t=>`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.rotTipo===t?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S.rotTipo='${t}';rRoteiros()">${t} <span style="float:right;font-size:12px;color:var(--text-muted)">${items.filter(r=>r.tipo===t).length}</span></div>`).join('')}
+        </div>
+        <div class="card" style="padding:8px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;padding:6px 12px 4px">Fase</div>
+          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.rotFase==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S.rotFase='all';rRoteiros()">Todas <span style="float:right;font-size:12px;color:var(--text-muted)">${items.length}</span></div>
+          ${fases.map(f=>`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.rotFase===f?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S.rotFase='${f}';rRoteiros()">${f} <span style="float:right;font-size:12px;color:var(--text-muted)">${items.filter(r=>r.fase===f).length}</span></div>`).join('')}
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Tipo:</span>
-        <div class="folder-chip ${S.rotTipo==='all'?'active':''}" onclick="S.rotTipo='all';rRoteiros()">Todos <span class="count">${items.length}</span></div>
-        ${tipos.map(t=>`<div class="folder-chip ${S.rotTipo===t?'active':''}" onclick="S.rotTipo='${t}';rRoteiros()">${t} <span class="count">${items.filter(r=>r.tipo===t).length}</span></div>`).join('')}
-      </div>
-    </div>
-    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.chat}</div><h3>Nenhum roteiro cadastrado</h3><p>${items.length>0?'Nenhum resultado para os filtros selecionados':'Crie seu primeiro roteiro de atendimento'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button>`:''}</div>`:`
-    <div style="position:relative;padding-left:32px" class="anim d2">
-      <div style="position:absolute;left:13px;top:14px;bottom:14px;width:2px;background:var(--border);border-radius:1px"></div>
-      ${filtered.map((r,idx)=>{
-        const fc=faseColor(r.fase);const tc=tipoColor(r.tipo);
-        return`<div style="position:relative;margin-bottom:14px">
-          <div style="position:absolute;left:-32px;top:16px;width:24px;height:24px;border-radius:50%;background:var(--${fc});display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:600">${idx+1}</div>
-          <div class="card" style="border-radius:var(--radius-lg)">
-            <div style="padding:16px 20px">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <div style="display:flex;gap:6px;align-items:center">
-                  ${r.fase?`<span style="background:${faseBg(r.fase)};color:var(--${faseColor(r.fase)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.fase}</span>`:''}
-                  ${r.tipo?`<span style="background:${tipoBg(r.tipo)};color:var(--${tipoColor(r.tipo)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.tipo}</span>`:''}
-                  ${r.frequencia?`<span style="background:var(--bg-warm);color:var(--text-secondary);font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500">${I.clock ? '<span style="width:12px;height:12px;display:inline-flex;vertical-align:middle;margin-right:3px">'+I.clock+'</span>' : ''}${r.frequencia}</span>`:''}
-                </div>
-                <div style="display:flex;gap:4px">
-                  <button class="btn-icon" onclick="openRotModal('${r.id}')" style="display:inline-flex">${I.edit}</button>
-                  <button class="btn-icon" onclick="delRot('${r.id}')" style="display:inline-flex">${I.trash}</button>
+      <div>
+        ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.chat}</div><h3>Nenhum roteiro</h3><p>${items.length>0?'Nenhum resultado para os filtros':'Crie seu primeiro roteiro de atendimento'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openRotModal()">${I.plus} Novo Roteiro</button>`:''}</div>`:`
+        <div style="position:relative;padding-left:32px">
+          <div style="position:absolute;left:13px;top:14px;bottom:14px;width:2px;background:var(--border);border-radius:1px"></div>
+          ${filtered.map((r,idx)=>{
+            const fc=faseColor(r.fase);
+            return`<div style="position:relative;margin-bottom:14px">
+              <div style="position:absolute;left:-32px;top:16px;width:24px;height:24px;border-radius:50%;background:var(--${fc});display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:600">${idx+1}</div>
+              <div class="card" style="border-radius:var(--radius-lg)">
+                <div style="padding:16px 20px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                    <div style="display:flex;gap:6px;align-items:center">
+                      ${r.fase?`<span style="background:${faseBg(r.fase)};color:var(--${faseColor(r.fase)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.fase}</span>`:''}
+                      ${r.tipo?`<span style="background:${tipoBg(r.tipo)};color:var(--${tipoColor(r.tipo)});font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600">${r.tipo}</span>`:''}
+                      ${r.frequencia?`<span style="background:var(--bg-warm);color:var(--text-secondary);font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500">${r.frequencia}</span>`:''}
+                    </div>
+                    <div style="display:flex;gap:4px">
+                      <button class="btn-icon" onclick="openRotModal('${r.id}')" style="display:inline-flex">${I.edit}</button>
+                      <button class="btn-icon" onclick="delRot('${r.id}')" style="display:inline-flex">${I.trash}</button>
+                    </div>
+                  </div>
+                  <div style="font-size:13px;line-height:1.8;color:var(--text-primary);background:var(--bg-warm);padding:12px 14px;border-radius:var(--radius-md);white-space:pre-wrap">${r.mensagem||''}</div>
                 </div>
               </div>
-              <div style="font-size:13px;line-height:1.8;color:var(--text-primary);background:var(--bg-warm);padding:12px 14px;border-radius:var(--radius-md);white-space:pre-wrap">${r.mensagem||''}</div>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`}`;
+            </div>`;
+          }).join('')}
+        </div>`}
+      </div>
+    </div>`;
 }
 
 function openRotModal(id){
