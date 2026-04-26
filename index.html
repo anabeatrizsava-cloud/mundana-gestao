@@ -1025,11 +1025,26 @@ function rDash(){
 // ========== PRODUCTS ==========
 function rProds(){
   const prods=DB.get('products'),folders=DB.get('product_folders');
-  const filtered=S.folder==='all'?prods:prods.filter(p=>p.folder===S.folder);
+  if(!S._prodBusca)S._prodBusca='';
+  const filtered=prods.filter(p=>{
+    if(S.folder!=='all'&&p.folder!==S.folder)return false;
+    if(S._prodBusca){const q=S._prodBusca.toLowerCase();if(!(p.name||'').toLowerCase().includes(q)&&!(p.line||'').toLowerCase().includes(q)&&!(p.type||'').toLowerCase().includes(q))return false;}
+    return true;
+  });
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterP(this.value)" style="width:180px"></div><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="openFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
-    <div class="folder-bar anim d1"><div class="folder-chip ${S.folder==='all'?'active':''}" onclick="S.folder='all';rProds()">Todos <span class="count">${prods.length}</span></div>${folders.map(f=>`<div class="folder-chip ${S.folder===f.id?'active':''}" onclick="S.folder='${f.id}';rProds()">${f.name} <span class="count">${prods.filter(p=>p.folder===f.id).length}</span></div>`).join('')}</div>
-    <div id="prodList" class="anim d2">${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.products}</div><h3>Nenhum produto cadastrado</h3><p>Comece adicionando seu primeiro produto</p><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div>`:S.pView==='grid'?`<div class="grid-cards">${filtered.map(p=>`<div class="product-card" onclick="openProdModal('${p.id}')"><div class="product-card-img">${p.photo?`<img src="${p.photo}">`:`${I.camera}`}</div><div class="product-card-body"><div class="product-line">${p.line||''}</div><h4>${p.name}</h4><div class="product-type">${p.type||''} · ${p.ml||''}ml</div><div class="product-price">${fmtR(p.price)}</div></div></div>`).join('')}</div>`:`<div class="card"><div class="table-wrapper"><table><thead><tr><th>Produto</th><th>Linha</th><th>Tipo</th><th>Vol.</th><th>Preço</th><th></th></tr></thead><tbody>${filtered.map(p=>`<tr><td><strong>${p.name}</strong></td><td>${p.line||'-'}</td><td><span class="badge badge-oliva">${p.type||'-'}</span></td><td>${p.ml||'-'}ml</td><td><strong>${fmtR(p.price)}</strong></td><td style="text-align:right"><button class="btn-icon" onclick="event.stopPropagation();openProdModal('${p.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="event.stopPropagation();delProd('${p.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}</div>`;
+    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="openFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:16px" class="anim d1">
+      <div style="align-self:start">
+        <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._prodBusca}" oninput="S._prodBusca=this.value;rProds()" style="width:100%"></div>
+        <div class="card" style="padding:8px">
+          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.folder==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S.folder='all';rProds()">Todos <span style="float:right;font-size:12px;color:var(--text-muted)">${prods.length}</span></div>
+          ${folders.map(f=>`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.folder===f.id?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S.folder='${f.id}';rProds()">${f.name} <span style="float:right;font-size:12px;color:var(--text-muted)">${prods.filter(p=>p.folder===f.id).length}</span></div>`).join('')}
+        </div>
+      </div>
+      <div id="prodList">
+        ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.products}</div><h3>Nenhum produto</h3><p>${prods.length>0?'Nenhum resultado para busca/filtro':'Comece adicionando seu primeiro produto'}</p>${prods.length===0?`<button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button>`:''}</div>`:S.pView==='grid'?`<div class="grid-cards">${filtered.map(p=>`<div class="product-card" onclick="openProdModal('${p.id}')"><div class="product-card-img">${p.photo?`<img src="${p.photo}">`:`${I.camera}`}</div><div class="product-card-body"><div class="product-line">${p.line||''}</div><h4>${p.name}</h4><div class="product-type">${p.type||''} · ${p.ml||''}ml</div><div class="product-price">${fmtR(p.price)}</div></div></div>`).join('')}</div>`:`<div class="card"><div class="table-wrapper"><table><thead><tr><th>Produto</th><th>Linha</th><th>Tipo</th><th>Vol.</th><th>Preço</th><th></th></tr></thead><tbody>${filtered.map(p=>`<tr><td><strong>${p.name}</strong></td><td>${p.line||'-'}</td><td><span class="badge badge-oliva">${p.type||'-'}</span></td><td>${p.ml||'-'}ml</td><td><strong>${fmtR(p.price)}</strong></td><td style="text-align:right"><button class="btn-icon" onclick="event.stopPropagation();openProdModal('${p.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="event.stopPropagation();delProd('${p.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}
+      </div>
+    </div>`;
 }
 function filterP(q){const lq=q.toLowerCase();document.querySelectorAll('.product-card,#prodList table tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
 
@@ -1599,6 +1614,7 @@ function openSupModal(id){
       </div>
       ${hist.length>0?`<div style="max-height:150px;overflow-y:auto;margin-top:8px"><table style="width:100%;font-size:11px"><thead><tr style="font-size:10px;color:var(--text-muted)"><th>MP</th><th>Qtd</th><th>Preço</th><th>Data</th><th>R$/un</th><th></th></tr></thead><tbody>${hist.map(h=>{const unitPrice=(parseFloat(h.price)||0)/(parseFloat(h.qty)||1);return`<tr><td>${h.mpName}</td><td>${h.qty||'-'} ${h.unit||''}</td><td>${fmtR(h.price)}</td><td>${fmtD(h.date)}</td><td style="font-weight:600">${fmtR(unitPrice)}</td><td><button class="remove-btn" onclick="delMPPriceEntry('${h.id}')" style="width:16px;height:16px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div>`:''}
     </div>`:'<div style="font-size:12px;color:var(--text-muted);margin-top:14px;padding:10px;background:var(--bg-warm);border-radius:var(--radius-md)">Salve o fornecedor primeiro para vincular matérias-primas e registrar compras.</div>'}
+    <div class="form-group" style="margin-top:14px"><label class="form-label">Observações</label><textarea class="form-textarea" id="supObs" rows="2" placeholder="Anotações sobre o fornecedor...">${s.obs||''}</textarea></div>
     <div class="form-group" style="margin-top:14px"><label class="form-label">Documento Anexo</label>
       <div id="supDocArea">
         ${s.docName?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-sm)"><span style="flex:1;font-size:12px">${I.file} ${s.docName}</span><button class="remove-btn" onclick="removeSupDoc()">${I.trash}</button></div>`:`<div class="photo-upload" onclick="document.getElementById('supDocIn').click()" style="height:70px">${I.file}<span>Clique para anexar documento</span><input type="file" id="supDocIn" onchange="handleSupDoc(event)"></div>`}
@@ -1616,7 +1632,7 @@ function handleSupDoc(e){
 function removeSupDoc(){window._supDoc='';window._supDocName='';document.getElementById('supDocArea').innerHTML=`<div class="photo-upload" onclick="document.getElementById('supDocIn').click()" style="height:70px">${I.file}<span>Clique para anexar documento</span><input type="file" id="supDocIn" onchange="handleSupDoc(event)"></div>`;}
 function saveSup(id){
   const sups=DB.get('suppliers');
-  const d={id:id||uid(),name:document.getElementById('supN').value,phone:document.getElementById('supPh').value,email:document.getElementById('supEm').value,site:document.getElementById('supSite').value,doc:window._supDoc,docName:window._supDocName};
+  const d={id:id||uid(),name:document.getElementById('supN').value,phone:document.getElementById('supPh').value,email:document.getElementById('supEm').value,site:document.getElementById('supSite').value,obs:document.getElementById('supObs').value,doc:window._supDoc,docName:window._supDocName};
   if(!d.name){toast('Preencha o nome');return;}
   if(id){const i=sups.findIndex(s=>s.id===id);if(i>=0)sups[i]=d;}else sups.push(d);
   DB.set('suppliers',sups);closeModal();rSuppliers();toast(id?'Fornecedor atualizado':'Fornecedor cadastrado');
@@ -3019,7 +3035,7 @@ function rPedidos(){
 
     ${filtered.length===0?`<div class="empty-state anim d3"><div class="empty-icon">${I.cart}</div><h3>Nenhum pedido</h3><p>${items.length>0?'Nenhum resultado para os filtros':'Registre sua primeira venda'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openPedidoModal()">${I.plus} Novo Pedido</button>`:''}</div>`:`
     <div class="card anim d3"><div class="table-wrapper"><table id="pedTable"><thead><tr><th>Pedido</th><th>Cliente</th><th>Canal</th><th>Itens</th><th>Total</th><th>Data</th><th>Pagamento</th><th>Status</th><th></th></tr></thead><tbody>${filtered.map(p=>{
-      const itensResumo=(p.itens||[]).map(it=>it.qty+'x '+it.name).join(', ');
+      const itensResumo=(p.itens||[]).map(it=>it.qty+'x '+it.name+(it.line?' ('+it.line+')':'')).join(', ');
       return`<tr><td style="font-family:monospace;font-size:12px;font-weight:600">#${p.numero||'-'}</td><td><strong>${p.cliente||'-'}</strong></td><td><span class="badge badge-lavanda">${p.canal||'-'}</span></td><td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itensResumo}">${itensResumo||'-'}</td><td><strong>${fmtR(p.total)}</strong></td><td>${fmtD(p.data)}</td><td>${p.pagamento||'-'}</td><td><span class="badge ${statusBadge[p.status]||'badge-lavanda'}" style="cursor:pointer" onclick="advancePedido('${p.id}')">${statusLabel[p.status]||p.status}</span></td><td style="text-align:right"><button class="btn-icon" onclick="viewPedido('${p.id}')" style="display:inline-flex">${I.eye}</button><button class="btn-icon" onclick="openPedidoModal('${p.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button><button class="btn-icon" onclick="delPedido('${p.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;
     }).join('')}</tbody></table></div></div>`}`;
 }
@@ -3030,6 +3046,7 @@ function openPedidoModal(id){
   const p=id?items.find(x=>x.id===id):{id:'',numero:'',cliente:'',telefone:'',canal:'WhatsApp',pagamento:'PIX',data:localDateStr(),itens:[],obs:'',status:'novo'};
   const pa=DB.get('stockpa').filter(i=>i.status==='disponivel'&&(parseInt(i.quantity)||0)>0);
   const prods=[...new Set(pa.map(i=>i.name))];
+  const lines=[...new Set(DB.get('products').map(p=>p.line).filter(Boolean))];
   const nextNum=id?p.numero:String(items.length+1).padStart(4,'0');
 
   openModal(id?'Editar Pedido #'+p.numero:'Novo Pedido',`
@@ -3044,7 +3061,7 @@ function openPedidoModal(id){
       <div class="form-group"><label class="form-label">Data</label><input class="form-input" id="pedData" type="date" value="${p.data||localDateStr()}"></div>
     </div>
     <label class="form-label" style="margin-bottom:8px">Itens do pedido</label>
-    <div id="pedItens">${(p.itens||[]).map((it,idx)=>`<div class="ped-item-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center"><select class="form-select pedProd" style="flex:2"><option value="">Selecione...</option>${prods.map(pr=>`<option value="${pr}" ${it.name===pr?'selected':''}>${pr}</option>`).join('')}</select><input class="form-input pedQty" type="number" min="1" value="${it.qty||1}" style="flex:0 0 70px" placeholder="Qtd"><input class="form-input pedPrice" type="number" step="0.01" value="${it.price||''}" style="flex:0 0 100px" placeholder="Preço"><button class="remove-btn" onclick="this.closest('.ped-item-row').remove();calcPedTotal()">${I.trash}</button></div>`).join('')}</div>
+    <div id="pedItens">${(p.itens||[]).map((it,idx)=>`<div class="ped-item-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center"><select class="form-select pedLine" style="flex:1"><option value="">Linha...</option>${lines.map(l=>`<option value="${l}" ${it.line===l?'selected':''}>${l}</option>`).join('')}</select><select class="form-select pedProd" style="flex:2"><option value="">Produto...</option>${prods.map(pr=>`<option value="${pr}" ${it.name===pr?'selected':''}>${pr}</option>`).join('')}</select><input class="form-input pedQty" type="number" min="1" value="${it.qty||1}" style="flex:0 0 60px" placeholder="Qtd"><input class="form-input pedPrice" type="number" step="0.01" value="${it.price||''}" style="flex:0 0 90px" placeholder="Preço"><button class="remove-btn" onclick="this.closest('.ped-item-row').remove();calcPedTotal()">${I.trash}</button></div>`).join('')}</div>
     <button class="btn btn-sm btn-secondary" onclick="addPedItem()" style="margin-bottom:14px">${I.plus} Adicionar item</button>
     <div style="display:flex;justify-content:flex-end;gap:12px;margin-bottom:14px;padding:10px 14px;background:var(--bg-warm);border-radius:var(--radius-md)"><span style="font-size:13px;color:var(--text-muted)">Total:</span><strong id="pedTotalDisplay" style="font-size:16px">${fmtR(p.total||0)}</strong></div>
     <div class="form-group"><label class="form-label">Observações</label><textarea class="form-textarea" id="pedObs" rows="2">${p.obs||''}</textarea></div>
@@ -3055,13 +3072,13 @@ function openPedidoModal(id){
 function addPedItem(){
   const pa=DB.get('stockpa').filter(i=>i.status==='disponivel'&&(parseInt(i.quantity)||0)>0);
   const prods=[...new Set(pa.map(i=>i.name))];
+  const plines=[...new Set(DB.get('products').map(p=>p.line).filter(Boolean))];
   const row=document.createElement('div');row.className='ped-item-row';row.style='display:flex;gap:8px;margin-bottom:8px;align-items:center';
-  row.innerHTML=`<select class="form-select pedProd" style="flex:2"><option value="">Selecione...</option>${prods.map(p=>`<option value="${p}">${p}</option>`).join('')}</select><input class="form-input pedQty" type="number" min="1" value="1" style="flex:0 0 70px" placeholder="Qtd" oninput="calcPedTotal()"><input class="form-input pedPrice" type="number" step="0.01" style="flex:0 0 100px" placeholder="Preço" oninput="calcPedTotal()"><button class="remove-btn" onclick="this.closest('.ped-item-row').remove();calcPedTotal()">${I.trash}</button>`;
+  row.innerHTML=`<select class="form-select pedLine" style="flex:1"><option value="">Linha...</option>${plines.map(l=>`<option value="${l}">${l}</option>`).join('')}</select><select class="form-select pedProd" style="flex:2"><option value="">Produto...</option>${prods.map(p=>`<option value="${p}">${p}</option>`).join('')}</select><input class="form-input pedQty" type="number" min="1" value="1" style="flex:0 0 60px" placeholder="Qtd" oninput="calcPedTotal()"><input class="form-input pedPrice" type="number" step="0.01" style="flex:0 0 90px" placeholder="Preço" oninput="calcPedTotal()"><button class="remove-btn" onclick="this.closest('.ped-item-row').remove();calcPedTotal()">${I.trash}</button>`;
   document.getElementById('pedItens').appendChild(row);
-  // Auto-fill price from pricing
   row.querySelector('.pedProd').addEventListener('change',function(){
     const name=this.value;const forms=DB.get('formulas');const f=forms.find(x=>x.name===name);
-    if(f){const c=calcFormula(f);row.querySelector('.pedPrice').value=c.priceSuggested.toFixed(2);calcPedTotal();}
+    if(f){const c=calcFormula(f);row.querySelector('.pedPrice').value=c.priceSuggested.toFixed(2);calcPedTotal();if(f.line){const ls=row.querySelector('.pedLine');if(ls){for(let o of ls.options){if(o.value===f.line){o.selected=true;break;}}}}}
   });
 }
 function calcPedTotal(){
@@ -3079,7 +3096,8 @@ function savePedido(id){
     const name=r.querySelector('.pedProd').value;
     const qty=parseInt(r.querySelector('.pedQty').value)||0;
     const price=parseFloat(r.querySelector('.pedPrice').value)||0;
-    if(name&&qty>0)itens.push({name,qty,price});
+    const line=r.querySelector('.pedLine')?r.querySelector('.pedLine').value:'';
+    if(name&&qty>0)itens.push({name,line,qty,price});
   });
   if(itens.length===0){toast('Adicione pelo menos um item');return;}
   const total=itens.reduce((s,it)=>s+it.qty*it.price,0);
@@ -3138,7 +3156,7 @@ function viewPedido(id){
       <div><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:2px">Canal / Pagamento</div><div style="font-size:14px">${p.canal} · ${p.pagamento}</div><div style="font-size:12px;color:var(--text-muted)">${fmtD(p.data)}</div></div>
     </div>
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:8px">Itens</div>
-    <div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px">${(p.itens||[]).map(it=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>${it.qty}x <strong>${it.name}</strong></span><span>${fmtR(it.qty*it.price)}</span></div>`).join('')}<div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:800;font-size:15px"><span>Total</span><span>${fmtR(p.total)}</span></div></div>
+    <div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px">${(p.itens||[]).map(it=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>${it.qty}x <strong>${it.name}</strong>${it.line?` <span style="font-size:11px;color:var(--text-muted)">(${it.line})</span>`:''}</span><span>${fmtR(it.qty*it.price)}</span></div>`).join('')}<div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:800;font-size:15px"><span>Total</span><span>${fmtR(p.total)}</span></div></div>
     ${p.obs?`<div style="font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--bg-warm);border-radius:var(--radius-md)">${p.obs}</div>`:''}
   `,'<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>',true);
 }
