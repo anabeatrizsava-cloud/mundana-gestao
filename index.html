@@ -2777,6 +2777,22 @@ function getModoDiaTasks(){
   const todayStr=localDateStr();
   const now=new Date();
 
+  // 0. LEMBRETES MANUAIS
+  const lembretes=DB.get('lembretes');
+  lembretes.forEach(l=>{
+    if(!l.text)return;
+    const lDate=l.date||localDateStr();
+    // Show if: date is today or past, OR repeat rule matches
+    let show=lDate<=todayStr;
+    if(l.repeat==='daily')show=true;
+    if(l.repeat==='weekly'){const d=new Date(lDate+'T12:00:00');show=d.getDay()===now.getDay();}
+    if(l.repeat==='monthly'){const d=new Date(lDate+'T12:00:00');show=d.getDate()===now.getDate();}
+    if(!show)return;
+    const pri=l.priority==='urgente'?1:l.priority==='atencao'?4:2;
+    const type=l.priority==='urgente'?'urgente':l.priority==='atencao'?'atencao':'hoje';
+    tasks.push({priority:pri,type,cat:'Lembrete',catColor:'purple',text:l.text,sub:(l.repeat&&l.repeat!=='none'?{daily:'Repete todo dia',weekly:'Repete toda semana',monthly:'Repete todo mês'}[l.repeat]+' · ':'')+fmtD(lDate),action:"openLembreteModal('"+l.id+"')",btnLabel:'Editar',id:'lembrete_'+l.id});
+  });
+
   // 1. URGENTES — Pagamentos vencidos
   const pagar=DB.get('pagar');
   pagar.filter(p=>p.status!=='pago'&&p.vencimento&&p.vencimento<todayStr).forEach(p=>{
@@ -2905,6 +2921,29 @@ function getModoDiaTasks(){
   tasks.sort((a,b)=>a.priority-b.priority);
   return tasks;
 }
+
+function openLembreteModal(id){
+  const lembretes=DB.get('lembretes');
+  const l=id?lembretes.find(x=>x.id===id):{id:'',text:'',date:localDateStr(),priority:'hoje',repeat:'none'};
+  openModal(id?'Editar Lembrete':'Novo Lembrete',`
+    <div class="form-group"><label class="form-label">O que precisa lembrar?</label><textarea class="form-textarea" id="lbText" rows="3" placeholder="Ex: Ligar para fornecedor de embalagens, postar Reel da produção...">${l.text||''}</textarea></div>
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="form-group"><label class="form-label">Data</label><input class="form-input" id="lbDate" type="date" value="${l.date||localDateStr()}"></div>
+      <div class="form-group"><label class="form-label">Prioridade</label><select class="form-select" id="lbPri"><option value="urgente" ${l.priority==='urgente'?'selected':''}>Urgente</option><option value="hoje" ${l.priority==='hoje'||!l.priority?'selected':''}>Normal</option><option value="atencao" ${l.priority==='atencao'?'selected':''}>Baixa</option></select></div>
+      <div class="form-group"><label class="form-label">Repetir</label><select class="form-select" id="lbRepeat"><option value="none" ${l.repeat==='none'||!l.repeat?'selected':''}>Não repetir</option><option value="daily" ${l.repeat==='daily'?'selected':''}>Todo dia</option><option value="weekly" ${l.repeat==='weekly'?'selected':''}>Toda semana</option><option value="monthly" ${l.repeat==='monthly'?'selected':''}>Todo mês</option></select></div>
+    </div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delLembrete('${l.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveLembrete('${l.id||''}')">Salvar</button>`);
+}
+function saveLembrete(id){
+  const lembretes=DB.get('lembretes');
+  const text=document.getElementById('lbText').value;
+  if(!text){toast('Escreva o lembrete');return;}
+  const d={id:id||uid(),text,date:document.getElementById('lbDate').value,priority:document.getElementById('lbPri').value,repeat:document.getElementById('lbRepeat').value,createdAt:localDateStr()};
+  if(id){const i=lembretes.findIndex(x=>x.id===id);if(i>=0)lembretes[i]=d;}else lembretes.push(d);
+  DB.set('lembretes',lembretes);closeModal();rModoDia();toast(id?'Lembrete atualizado':'Lembrete cadastrado');
+}
+function delLembrete(id){if(!confirm('Excluir lembrete?'))return;DB.set('lembretes',DB.get('lembretes').filter(x=>x.id!==id));rModoDia();toast('Lembrete excluído');}
+
 function getModoDiaPending(){
   const tasks=getModoDiaTasks();
   const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
@@ -2995,6 +3034,7 @@ function rModoDia(){
       ${pending===0&&total>0?'<span style="background:var(--oliva-pale);color:var(--oliva);font-size:12px;padding:6px 14px;border-radius:20px;font-weight:600">Tudo em dia ✓</span>':''}
       ${urgentes.length>0?'<span style="background:var(--rose-pale);color:var(--rosa-antigo);font-size:11px;padding:4px 12px;border-radius:20px;font-weight:600">'+urgentes.length+' urgente'+(urgentes.length>1?'s':'')+'</span>':''}
       ${sugestoes.length>0?'<span style="background:var(--lavanda-pale);color:var(--lavanda);font-size:11px;padding:4px 12px;border-radius:20px;font-weight:600">'+sugestoes.length+' sugestão'+(sugestoes.length>1?'ões':'')+'</span>':''}
+      <button class="btn btn-primary btn-sm" onclick="openLembreteModal()">${I.plus} Lembrete</button>
     </div></div>
 
     <div style="display:flex;gap:4px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:6px" class="anim d1">
