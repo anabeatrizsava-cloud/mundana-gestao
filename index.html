@@ -577,6 +577,7 @@ const TABLE_MAP={
   empresa_docs:{table:'empresa_docs',cols:['id','name'],isJsonStore:true},
   stockpa:{table:'stockpa',cols:['id','name'],isJsonStore:true},
   pedidos:{table:'pedidos',cols:['id','name'],isJsonStore:true},
+  leads:{table:'leads',cols:['id','name'],isJsonStore:true},
   sup_mp_link:{table:'sup_mp_link',cols:['id','name'],isJsonStore:true},
   mp_price_hist:{table:'mp_price_hist',cols:['id','name'],isJsonStore:true},
   roteiros:{table:'roteiros',cols:['id','name'],isJsonStore:true},
@@ -764,7 +765,7 @@ const I={
 };
 
 // ========== STATE ==========
-let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp',rotFase:'all',rotTipo:'all',pagStatus:'all',pagTipo:'all',pedStatus:'all',pedCanal:'all'};
+let S={page:'dashboard',calM:new Date().getMonth(),calY:new Date().getFullYear(),pView:'grid',folder:'all',prodFId:null,prodQty:0,prodSteps:[],pricingTab:'resumo',empresaTab:'dados',alertOpen:false,calFinM:new Date().getMonth(),calFinY:new Date().getFullYear(),ideiaFolder:'all',docFolder:'all',stockTab:'mp',rotFase:'all',rotTipo:'all',pagStatus:'all',pagTipo:'all',pedStatus:'all',pedCanal:'all',leadStatus:'all'};
 
 // ========== NAV — Modules ==========
 const NAV=[
@@ -797,6 +798,7 @@ const NAV=[
   ]},
   { module:'Cliente', icon:'users', items:[
     {id:'roteiros',label:'Roteiro Atendimento',icon:'chat'},
+    {id:'leads',label:'Leads Quiz',icon:'users'},
   ]},
 ];
 
@@ -816,7 +818,7 @@ function renderNav(){
 
 function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
 function render(){
-  const fn={mododia:rModoDia,dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,pedidos:rPedidos};
+  const fn={mododia:rModoDia,dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,pedidos:rPedidos,leads:rLeads};
   (fn[S.page]||rDash)();
   renderTopBar();
 }
@@ -1305,7 +1307,7 @@ function rProdExec(){
   const ratio=q>0?q/lotSize:0;
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>${f.name}</h2><p>${f.productType||'Produção em andamento'}</p></div><div class="page-header-actions"><button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">${I.back} Voltar</button></div></div>
-    <div class="prod-info-grid anim d1"><div class="prod-info-card"><label>Tamanho do lote (g)</label><input class="form-input" type="number" value="${q||''}" placeholder="${f.lotSize||'Ex: 3000'}" onchange="S.prodQty=parseFloat(this.value)||0;rProdExec()" style="text-align:center;font-size:20px;font-weight:800;max-width:180px;margin:4px auto 0;border:none;background:transparent"></div><div class="prod-info-card"><label>Ingredientes</label><div class="value">${(f.ingredients||[]).length}</div></div><div class="prod-info-card"><label>Progresso</label><div class="value" style="color:${pct===100?'var(--oliva)':'var(--carvao)'}">${Math.round(pct)}%</div></div></div>
+    <div class="prod-info-grid anim d1"><div class="prod-info-card"><label>Tamanho do lote (g)</label><input class="form-input" type="number" id="prodQtyInput" value="${q||''}" placeholder="${f.lotSize||'Ex: 3000'}" oninput="S.prodQty=parseFloat(this.value)||0;clearTimeout(window._pqt);window._pqt=setTimeout(()=>{const v=document.getElementById('prodQtyInput');const cv=v?v.value:'';rProdExec();setTimeout(()=>{const v2=document.getElementById('prodQtyInput');if(v2){v2.value=cv;v2.focus();}},10);},800)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();rProdExec();}" style="text-align:center;font-size:20px;font-weight:800;max-width:180px;margin:4px auto 0;border:none;background:transparent"></div><div class="prod-info-card"><label>Ingredientes</label><div class="value">${(f.ingredients||[]).length}</div></div><div class="prod-info-card"><label>Progresso</label><div class="value" style="color:${pct===100?'var(--oliva)':'var(--carvao)'}">${Math.round(pct)}%</div></div></div>
     ${q>0?`<div class="card anim d2" style="margin-bottom:18px"><div class="card-header"><h3>Ingredientes para ${q}g ${ratio!==1?`(fator ${ratio.toFixed(2)}x)`:''}</h3></div><div class="card-body"><div class="calc-row" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1.5px solid var(--border)"><span>Ingrediente</span><span class="pct">Unidade</span><span class="qty">Quantidade</span></div>${(f.ingredients||[]).map(ing=>{const base=parseFloat(ing.qtyLot)||0;const amt=base*ratio;return`<div class="calc-row"><span>${ing.name}</span><span class="pct">${ing.unit||'-'}</span><span class="qty">${amt.toFixed(2)}</span></div>`;}).join('')}</div></div>`:''}
     ${steps.length>0?`<div class="card anim d3" style="margin-bottom:18px"><div class="card-header"><h3>Modo de preparo</h3><span style="font-size:12px;color:var(--text-muted);font-weight:600">${done} de ${steps.length}</span></div><div class="card-body"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>${steps.map((s,i)=>`<div class="production-step"><div class="step-check ${S.prodSteps[i]?'checked':''}" onclick="S.prodSteps[${i}]=!S.prodSteps[${i}];rProdExec()">${I.check}</div><div class="step-content ${S.prodSteps[i]?'done':''}"><div class="step-num">Passo ${i+1}</div><div class="step-text">${s}</div></div></div>`).join('')}</div></div>`:''}
     ${allDone?`<div style="text-align:center;padding:18px" class="anim d4"><button class="btn btn-primary" onclick="finishProd()" style="font-size:13.5px;padding:12px 32px">${I.check} Finalizar produção e gerar lote</button></div>`:''}`;
@@ -2812,7 +2814,7 @@ function rModoDia(){
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();${t.action}" style="font-size:11px;white-space:nowrap">${t.btnLabel}</button>
             ${!isSug?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--oliva)':circleColor};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:var(--transition);color:${isDone?'var(--oliva)':'transparent'};background:${isDone?'var(--oliva-pale)':'transparent'}" onclick="event.stopPropagation();toggleModoDiaTask('${t.id}')" onmouseover="if(!${isDone})this.style.background='${circleColor}',this.style.color='#fff',this.textContent='✓'" onmouseout="if(!${isDone})this.style.background='transparent',this.style.color='transparent',this.textContent='✓'">${isDone?'✓':''}</div>`:''}
-            ${!isSug&&!isDone?`<div style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted);transition:var(--transition)" onclick="event.stopPropagation();dismissModoDiaTask('${t.id}')" onmouseover="this.style.borderColor='var(--rosa-antigo)';this.style.color='var(--rosa-antigo)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'" title="Dispensar por hoje">✕</div>`:''}
+            ${!isDone?`<div style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted);transition:var(--transition)" onclick="event.stopPropagation();dismissModoDiaTask('${t.id}')" onmouseover="this.style.borderColor='var(--rosa-antigo)';this.style.color='var(--rosa-antigo)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'" title="Dispensar por hoje">✕</div>`:''}
           </div>
         </div>
       </div>
@@ -2869,6 +2871,104 @@ function rModoDia(){
       <div style="padding-left:34px">${dismissedTasks.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;opacity:0.4"><span style="font-size:12px;text-decoration:line-through">${t.text}</span><button class="btn btn-sm" onclick="undoDismiss('${t.id}')" style="font-size:10px;padding:2px 8px">Restaurar</button></div>`).join('')}</div>
     </div>`:''}
   `;
+}
+
+// ========== LEADS QUIZ ==========
+async function rLeads(){
+  let leads=[];
+  try{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?select=*&order=criado_em.desc',{
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'}
+    });
+    leads=await res.json();
+    if(!Array.isArray(leads))leads=[];
+  }catch(e){console.warn('Erro ao carregar leads:',e);leads=[];}
+
+  const statusList=['novo','potencial','em_contato','ganho','perdido'];
+  const statusLabel={novo:'Novo',potencial:'Potencial',em_contato:'Em contato',ganho:'Ganho',perdido:'Perdido'};
+  const statusBadge={novo:'badge-lavanda',potencial:'badge-oliva',em_contato:'badge-rose',ganho:'badge-oliva',perdido:'badge-rose'};
+
+  const filtered=S.leadStatus==='all'?leads:leads.filter(l=>(l.status||'novo')===S.leadStatus);
+
+  const totalLeads=leads.length;
+  const novos=leads.filter(l=>!l.status||l.status==='novo').length;
+  const potenciais=leads.filter(l=>l.status==='potencial').length;
+  const emContato=leads.filter(l=>l.status==='em_contato').length;
+  const ganhos=leads.filter(l=>l.status==='ganho').length;
+  const perdidos=leads.filter(l=>l.status==='perdido').length;
+
+  // Agrupar por linha
+  const byLine={};leads.forEach(l=>{const ln=l.linha_resultado||'Sem linha';byLine[ln]=(byLine[ln]||0)+1;});
+  const lineEntries=Object.entries(byLine).sort((a,b)=>b[1]-a[1]);
+
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Leads Quiz</h2><p>${leads.length} lead${leads.length!==1?'s':''} capturado${leads.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." oninput="filterLeads(this.value)" style="width:180px"></div><button class="btn btn-secondary btn-sm" onclick="exportLeadsCSV()">CSV</button><a href="https://quiz.mundana.com.br" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none">${I.link} Abrir Quiz</a></div></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;margin-bottom:22px" class="anim d1">
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.leadStatus==='all'?'border-left:3px solid var(--carvao)':''}" onclick="S.leadStatus='all';rLeads()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Total</div><div style="font-size:18px;font-weight:800">${totalLeads}</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.leadStatus==='novo'?'border-left:3px solid var(--lavanda)':''}" onclick="S.leadStatus=S.leadStatus==='novo'?'all':'novo';rLeads()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--lavanda);font-weight:700;margin-bottom:4px">Novos</div><div style="font-size:18px;font-weight:800;color:var(--lavanda)">${novos}</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.leadStatus==='potencial'?'border-left:3px solid var(--oliva)':''}" onclick="S.leadStatus=S.leadStatus==='potencial'?'all':'potencial';rLeads()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--oliva);font-weight:700;margin-bottom:4px">Potencial</div><div style="font-size:18px;font-weight:800;color:var(--oliva)">${potenciais}</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.leadStatus==='ganho'?'border-left:3px solid var(--musgo)':''}" onclick="S.leadStatus=S.leadStatus==='ganho'?'all':'ganho';rLeads()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--musgo);font-weight:700;margin-bottom:4px">Ganho</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${ganhos}</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.leadStatus==='perdido'?'border-left:3px solid var(--rosa-antigo)':''}" onclick="S.leadStatus=S.leadStatus==='perdido'?'all':'perdido';rLeads()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:4px">Perdido</div><div style="font-size:18px;font-weight:800;color:var(--rosa-antigo)">${perdidos}</div></div>
+    </div>
+
+    ${lineEntries.length>0?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap" class="anim d1">
+      <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Linha:</span>
+      ${lineEntries.map(([ln,ct])=>`<span class="folder-chip" onclick="document.querySelector('#leadsSearch').value='${ln}';filterLeads('${ln}')">${ln} <span class="count">${ct}</span></span>`).join('')}
+    </div>`:''}
+
+    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.users}</div><h3>Nenhum lead</h3><p>${leads.length>0?'Nenhum resultado para o filtro':'Os leads aparecerão aqui quando alguém responder o quiz'}</p></div>`:`
+    <div class="card anim d2"><div class="table-wrapper"><table id="leadsTable"><thead><tr><th>Telefone</th><th>Linha resultado</th><th>Data</th><th>Status</th><th></th></tr></thead><tbody>${filtered.map(l=>{
+      const tel=(l.telefone||'').replace(/\D/g,'');
+      const waLink='https://wa.me/55'+tel;
+      const dataRel=l.criado_em?timeAgo(l.criado_em):'-';
+      const st=l.status||'novo';
+      return`<tr><td><div style="display:flex;align-items:center;gap:8px"><strong>${l.telefone||'-'}</strong><a href="${waLink}" target="_blank" style="color:var(--oliva);display:inline-flex;width:14px;height:14px" title="Abrir no WhatsApp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492l4.634-1.215A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-2.17 0-4.207-.58-5.963-1.584l-.428-.254-2.75.721.735-2.685-.28-.445A9.72 9.72 0 0 1 2.25 12 9.75 9.75 0 0 1 12 2.25 9.75 9.75 0 0 1 21.75 12 9.75 9.75 0 0 1 12 21.75z"/></svg></a></div></td><td><span class="badge badge-oliva">${l.linha_resultado||'-'}</span></td><td style="font-size:12px;color:var(--text-muted)" title="${l.criado_em?new Date(l.criado_em).toLocaleString('pt-BR'):''}">${dataRel}</td><td><span class="badge ${statusBadge[st]}" style="cursor:pointer" onclick="cycleLeadStatus('${l.id}')">${statusLabel[st]||'Novo'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="delLead(${l.id})" style="display:inline-flex">${I.trash}</button></td></tr>`;
+    }).join('')}</tbody></table></div></div>`}`;
+}
+function filterLeads(q){const lq=q.toLowerCase();document.querySelectorAll('#leadsTable tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
+function timeAgo(dt){const now=new Date(),d=new Date(dt),diff=Math.floor((now-d)/1000);if(diff<60)return'agora';if(diff<3600)return Math.floor(diff/60)+'min';if(diff<86400)return Math.floor(diff/3600)+'h';if(diff<604800)return Math.floor(diff/86400)+'d';return fmtD(dt.split('T')[0]);}
+
+async function cycleLeadStatus(id){
+  const cycle=['novo','potencial','em_contato','ganho','perdido'];
+  // Get current status from Supabase
+  try{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id+'&select=status',{
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
+    });
+    const rows=await res.json();
+    const cur=(rows&&rows[0]&&rows[0].status)||'novo';
+    const idx=cycle.indexOf(cur);
+    const next=cycle[(idx+1)%cycle.length];
+    await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({status:next})
+    });
+    rLeads();
+    toast('Status: '+{novo:'Novo',potencial:'Potencial',em_contato:'Em contato',ganho:'Ganho',perdido:'Perdido'}[next]);
+  }catch(e){toast('Erro ao atualizar status');console.error(e);}
+}
+
+async function delLead(id){
+  if(!confirm('Excluir lead?'))return;
+  try{
+    await fetch(SUPABASE_URL+'/rest/v1/leads_quiz?id=eq.'+id,{
+      method:'DELETE',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Prefer':'return=minimal'}
+    });
+    rLeads();toast('Lead excluído');
+  }catch(e){toast('Erro ao excluir');}
+}
+
+function exportLeadsCSV(){
+  const table=document.getElementById('leadsTable');if(!table)return;
+  const rows=[...table.querySelectorAll('tr')];
+  const csv='\uFEFF'+rows.map(r=>[...r.querySelectorAll('th,td')].map(c=>'"'+c.textContent.trim().replace(/"/g,'""')+'"').join(';')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='mundana_leads_'+localDateStr()+'.csv';a.click();URL.revokeObjectURL(url);
+  toast('CSV exportado');
 }
 
 // ========== PEDIDOS / VENDAS ==========
