@@ -2828,6 +2828,27 @@ function getModoDiaTasks(){
     }
   });
 
+  // SUGESTÕES — Sazonalidade (compara vendas do mesmo mês no ano anterior)
+  const curMonth=now.getMonth();const curYear=now.getFullYear();
+  const pedidosAll=DB.get('pedidos').filter(p=>p.status!=='cancelado'&&p.data);
+  // Vendas por produto no mesmo mês do ano passado
+  const lastYearMonth=pedidosAll.filter(p=>{const d=new Date(p.data+'T12:00:00');return d.getMonth()===curMonth&&d.getFullYear()===curYear-1;});
+  const thisMonth=pedidosAll.filter(p=>{const d=new Date(p.data+'T12:00:00');return d.getMonth()===curMonth&&d.getFullYear()===curYear;});
+  if(lastYearMonth.length>0){
+    // Aggregate by product name
+    const lastByProd={};lastYearMonth.forEach(p=>(p.itens||[]).forEach(it=>{lastByProd[it.name]=(lastByProd[it.name]||0)+it.qty;}));
+    const thisByProd={};thisMonth.forEach(p=>(p.itens||[]).forEach(it=>{thisByProd[it.name]=(thisByProd[it.name]||0)+it.qty;}));
+    Object.entries(lastByProd).forEach(([name,lastQty])=>{
+      const thisQty=thisByProd[name]||0;
+      if(lastQty>=3&&thisQty<lastQty*0.5){
+        tasks.push({priority:13,type:'sugestao',cat:'Sazonalidade',catColor:'amber',text:name+' vendeu '+lastQty+'un em '+MO[curMonth]+'/'+String(curYear-1).slice(2),sub:'Este mês: '+thisQty+'un — considere campanha ou promoção para recuperar volume',action:"go('pedidos')",btnLabel:'Ver pedidos',id:'sazonal_baixa_'+name});
+      }
+      if(lastQty>=3&&thisQty>=lastQty*1.5){
+        tasks.push({priority:13,type:'sugestao',cat:'Sazonalidade',catColor:'green',text:name+' em alta: '+thisQty+'un vs '+lastQty+'un em '+MO[curMonth]+'/'+String(curYear-1).slice(2),sub:'Aproveite o momento — garanta estoque e invista em conteúdo',action:"go('production')",btnLabel:'Produzir',id:'sazonal_alta_'+name});
+      }
+    });
+  }
+
   tasks.sort((a,b)=>a.priority-b.priority);
   return tasks;
 }
