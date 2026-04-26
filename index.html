@@ -2356,25 +2356,40 @@ function getIdeaTypes(){const c=DB.get('idea_types');return c.length?c:DEFAULT_I
 
 function rIdeias(){
   const items=DB.get('ideias'),folders=DB.get('ideia_folders');
-  const filtered=S.ideiaFolder==='all'?items:items.filter(i=>i.folder===S.ideiaFolder);
+  if(!S._ideiaBusca)S._ideiaBusca='';
+  const filtered=items.filter(i=>{
+    if(S.ideiaFolder!=='all'&&i.folder!==S.ideiaFolder)return false;
+    if(S._ideiaBusca){const q=S._ideiaBusca.toLowerCase();if(!(i.titulo||'').toLowerCase().includes(q)&&!(i.descricao||'').toLowerCase().includes(q)&&!(i.tipo||'').toLowerCase().includes(q)&&!(i.linha||'').toLowerCase().includes(q))return false;}
+    return true;
+  });
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>Banco de Ideias</h2><p>${items.length} ideia${items.length!==1?'s':''} registrada${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="openIdeiaFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openIdeiaModal()">${I.plus} Nova Ideia</button></div></div>
-    <div class="folder-bar anim d1"><div class="folder-chip ${S.ideiaFolder==='all'?'active':''}" onclick="S.ideiaFolder='all';rIdeias()">Todas <span class="count">${items.length}</span></div>${folders.map(f=>`<div class="folder-chip ${S.ideiaFolder===f.id?'active':''}" onclick="S.ideiaFolder='${f.id}';rIdeias()">${f.name} <span class="count">${items.filter(i=>i.folder===f.id).length}</span></div>`).join('')}</div>
-    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.bulb}</div><h3>Nenhuma ideia registrada</h3><p>Comece criando sua primeira ideia</p><button class="btn btn-primary" onclick="openIdeiaModal()">${I.plus} Nova Ideia</button></div>`:`
-    <div class="grid-cards anim d2">${filtered.map(i=>`
-      <div class="card" style="cursor:pointer;transition:var(--transition)" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.transform='';this.style.boxShadow=''" onclick="openIdeiaModal('${i.id}')">
-        ${i.attachData?(i.attachName&&i.attachName.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)?`<div style="height:120px;overflow:hidden;border-radius:var(--radius-lg) var(--radius-lg) 0 0"><img src="${i.attachData}" style="width:100%;height:100%;object-fit:cover"></div>`:`<div style="height:50px;display:flex;align-items:center;gap:8px;padding:0 18px;border-bottom:1px solid var(--border-light)"><span style="width:20px;height:20px;flex-shrink:0;color:var(--text-muted)">${I.file}</span><span style="font-size:11px;color:var(--text-muted)">${i.attachName||'Arquivo anexado'}</span></div>`):''}
-        <div class="card-body" style="padding:16px 18px">
-          <div style="display:flex;gap:6px;margin-bottom:8px">
-            <span class="badge badge-lavanda">${i.tipo||'Geral'}</span>
-            ${i.linha?`<span class="badge badge-oliva">${i.linha}</span>`:''}
-          </div>
-          <h4 style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--carvao)">${i.titulo}</h4>
-          ${i.descricao?`<p style="font-size:12px;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${i.descricao}</p>`:''}
-          ${i.produtos?`<div style="margin-top:8px;font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:4px"><span style="width:14px;height:14px;flex-shrink:0">${I.products}</span> ${i.produtos}</div>`:''}
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:16px" class="anim d1">
+      <div style="align-self:start">
+        <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._ideiaBusca}" oninput="S._ideiaBusca=this.value;rIdeias()" style="width:100%"></div>
+        <div class="card" style="padding:8px">
+          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.ideiaFolder==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S.ideiaFolder='all';rIdeias()">Todas <span style="float:right;font-size:12px;color:var(--text-muted)">${items.length}</span></div>
+          ${folders.map(f=>`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.ideiaFolder===f.id?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S.ideiaFolder='${f.id}';rIdeias()">${f.name} <span style="float:right;font-size:12px;color:var(--text-muted)">${items.filter(i=>i.folder===f.id).length}</span></div>`).join('')}
         </div>
       </div>
-    `).join('')}</div>`}`;
+      <div>
+        ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.bulb}</div><h3>Nenhuma ideia</h3><p>${items.length>0?'Nenhum resultado para busca/filtro':'Comece criando sua primeira ideia'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openIdeiaModal()">${I.plus} Nova Ideia</button>`:''}</div>`:`
+        <div class="grid-cards">${filtered.map(i=>`
+          <div class="card" style="cursor:pointer;transition:var(--transition)" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.transform='';this.style.boxShadow=''" onclick="openIdeiaModal('${i.id}')">
+            ${i.attachData?(i.attachName&&i.attachName.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)?`<div style="height:120px;overflow:hidden;border-radius:var(--radius-lg) var(--radius-lg) 0 0"><img src="${i.attachData}" style="width:100%;height:100%;object-fit:cover"></div>`:`<div style="height:50px;display:flex;align-items:center;gap:8px;padding:0 18px;border-bottom:1px solid var(--border-light)"><span style="width:20px;height:20px;flex-shrink:0;color:var(--text-muted)">${I.file}</span><span style="font-size:11px;color:var(--text-muted)">${i.attachName||'Arquivo anexado'}</span></div>`):''}
+            <div class="card-body" style="padding:16px 18px">
+              <div style="display:flex;gap:6px;margin-bottom:8px">
+                <span class="badge badge-lavanda">${i.tipo||'Geral'}</span>
+                ${i.linha?`<span class="badge badge-oliva">${i.linha}</span>`:''}
+              </div>
+              <h4 style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--carvao)">${i.titulo}</h4>
+              ${i.descricao?`<p style="font-size:12px;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${i.descricao}</p>`:''}
+              ${i.produtos?`<div style="margin-top:8px;font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:4px"><span style="width:14px;height:14px;flex-shrink:0">${I.products}</span> ${i.produtos}</div>`:''}
+            </div>
+          </div>
+        `).join('')}</div>`}
+      </div>
+    </div>`;
 }
 
 function openIdeiaModal(id){
@@ -2440,27 +2455,40 @@ function delIdeaType(i){if(!confirm('Excluir?'))return;const t=getIdeaTypes();t.
 // ========== CRIAÇÃO — DOCUMENTOS ==========
 function rDocs(){
   const items=DB.get('mydocs'),folders=DB.get('doc_folders');
-  const filtered=S.docFolder==='all'?items:items.filter(i=>i.folder===S.docFolder);
+  if(!S._docBusca)S._docBusca='';
+  const filtered=items.filter(i=>{
+    if(S.docFolder!=='all'&&i.folder!==S.docFolder)return false;
+    if(S._docBusca){const q=S._docBusca.toLowerCase();if(!(i.name||'').toLowerCase().includes(q)&&!(i.fileName||'').toLowerCase().includes(q))return false;}
+    return true;
+  });
   const totalSize=items.reduce((s,i)=>s+(i.size||0),0);
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>Documentos</h2><p>${items.length} arquivo${items.length!==1?'s':''} ${totalSize>0?'· '+formatSize(totalSize):''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="openDocFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="uploadDoc()">${I.plus} Enviar Arquivo</button></div></div>
-    <div class="folder-bar anim d1"><div class="folder-chip ${S.docFolder==='all'?'active':''}" onclick="S.docFolder='all';rDocs()">Todos <span class="count">${items.length}</span></div>${folders.map(f=>`<div class="folder-chip ${S.docFolder===f.id?'active':''}" onclick="S.docFolder='${f.id}';rDocs()">${f.name} <span class="count">${items.filter(i=>i.folder===f.id).length}</span></div>`).join('')}</div>
-    ${filtered.length===0?`<div class="empty-state anim d2"><div class="empty-icon">${I.file}</div><h3>Nenhum documento</h3><p>Envie seus primeiros arquivos</p><button class="btn btn-primary" onclick="uploadDoc()">${I.plus} Enviar Arquivo</button></div>`:`
-    <div class="card anim d2"><div class="table-wrapper"><table><thead><tr><th>Arquivo</th><th>Pasta</th><th>Tamanho</th><th>Data</th><th></th></tr></thead><tbody>${filtered.map(d=>{
-      const fName=folders.find(f=>f.id===d.folder);
-      const isImg=d.fileName&&d.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-      return `<tr>
-        <td><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="previewDoc('${d.id}')">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:`<span style="width:24px;height:24px;flex-shrink:0;color:var(--text-muted)">${I.file}</span>`} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
-        <td>${fName?fName.name:'-'}</td>
-        <td style="font-size:12px;color:var(--text-muted)">${d.size?formatSize(d.size):'-'}</td>
-        <td style="font-size:12px;color:var(--text-muted)">${fmtD(d.date)}</td>
-        <td style="text-align:right">
-          ${d.data?`<button class="btn-icon" onclick="previewDoc('${d.id}')" title="Visualizar" style="display:inline-flex">${I.eye}</button>`:''}
-          <a href="${d.data}" download="${d.fileName}" class="btn-icon" style="display:inline-flex;text-decoration:none;margin-left:4px">${I.download}</a>
-          <button class="btn-icon" onclick="editDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button>
-          <button class="btn-icon" onclick="delDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button>
-        </td>
-      </tr>`;}).join('')}</tbody></table></div></div>`}`;
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:16px" class="anim d1">
+      <div style="align-self:start">
+        <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._docBusca}" oninput="S._docBusca=this.value;rDocs()" style="width:100%"></div>
+        <div class="card" style="padding:8px">
+          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.docFolder==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S.docFolder='all';rDocs()">Todos <span style="float:right;font-size:12px;color:var(--text-muted)">${items.length}</span></div>
+          ${folders.map(f=>`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.docFolder===f.id?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S.docFolder='${f.id}';rDocs()">${f.name} <span style="float:right;font-size:12px;color:var(--text-muted)">${items.filter(i=>i.folder===f.id).length}</span></div>`).join('')}
+        </div>
+      </div>
+      <div>
+        ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.file}</div><h3>Nenhum documento</h3><p>${items.length>0?'Nenhum resultado para busca/filtro':'Envie seus primeiros arquivos'}</p>${items.length===0?`<button class="btn btn-primary" onclick="uploadDoc()">${I.plus} Enviar Arquivo</button>`:''}</div>`:`
+        <div class="card"><div class="table-wrapper"><table><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Data</th><th></th></tr></thead><tbody>${filtered.map(d=>{
+          const isImg=d.fileName&&d.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+          return `<tr>
+            <td><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="previewDoc('${d.id}')">${isImg?`<img src="${d.data}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`:`<span style="width:24px;height:24px;flex-shrink:0;color:var(--text-muted)">${I.file}</span>`} <div><strong>${d.name||d.fileName}</strong><div style="font-size:11px;color:var(--text-muted)">${d.fileName||''}</div></div></div></td>
+            <td style="font-size:12px;color:var(--text-muted)">${d.size?formatSize(d.size):'-'}</td>
+            <td style="font-size:12px;color:var(--text-muted)">${fmtD(d.date)}</td>
+            <td style="text-align:right">
+              ${d.data?`<button class="btn-icon" onclick="previewDoc('${d.id}')" title="Visualizar" style="display:inline-flex">${I.eye}</button>`:''}
+              <a href="${d.data}" download="${d.fileName}" class="btn-icon" style="display:inline-flex;text-decoration:none;margin-left:4px">${I.download}</a>
+              <button class="btn-icon" onclick="editDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button>
+              <button class="btn-icon" onclick="delDoc('${d.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button>
+            </td>
+          </tr>`;}).join('')}</tbody></table></div></div>`}
+      </div>
+    </div>`;
 }
 
 function formatSize(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB';}
