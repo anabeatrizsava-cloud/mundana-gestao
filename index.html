@@ -1162,11 +1162,14 @@ function viewFormula(id){
   const forms=DB.get('formulas'),f=forms.find(x=>x.id===id);if(!f)return;
   const c=calcFormula(f);
   const cfg=getCfg();
+  const linhas=(f.lines||[f.line]).filter(Boolean);
   openModal(f.name,`
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${linhas.length>0?linhas.map(l=>`<span class="badge badge-oliva">${l}</span>`).join(''):'<span style="font-size:12px;color:var(--text-muted)">Nenhuma linha vinculada</span>'} <span class="badge badge-lavanda">${f.productType||'-'}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px">
       <div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Lote</div><div style="font-size:20px;font-weight:800">${f.lotSize||0}g</div></div>
       <div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Unidades/Lote</div><div style="font-size:20px;font-weight:800">${c.unitsLot}</div></div>
       <div style="background:var(--oliva-pale);border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--oliva);font-weight:700;margin-bottom:4px">Preço Sugerido</div><div style="font-size:20px;font-weight:800;color:var(--oliva)">${fmtR(c.priceSuggested)}</div></div>
+      <div style="background:${f.finalPrice?'var(--rose-pale)':'var(--bg-warm)'};border-radius:var(--radius-md);padding:14px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:${f.finalPrice?'var(--rosa-antigo)':'var(--text-muted)'};font-weight:700;margin-bottom:4px">Preço Final</div><div style="font-size:20px;font-weight:800;color:${f.finalPrice?'var(--rosa-antigo)':'var(--text-muted)'}">${f.finalPrice?fmtR(parseFloat(f.finalPrice)):'-'}</div></div>
     </div>
     <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px">Matérias-primas</h4>
     <table style="margin-bottom:16px"><thead><tr><th>Ingrediente</th><th>Unidade</th><th>Qtd/Lote</th><th>Custo Unit.</th><th>Custo Total</th><th>Obs</th></tr></thead><tbody>${(f.ingredients||[]).map(g=>`<tr><td>${g.name}</td><td>${g.unit||'-'}</td><td>${g.qtyLot||'-'}</td><td>${fmtR(g.unitCost)}</td><td>${fmtR(g.totalCost)}</td><td style="font-size:11px;color:var(--text-muted)">${g.obs||''}</td></tr>`).join('')}<tr style="font-weight:700"><td colspan="4" style="text-align:right">Total MP</td><td>${fmtR(c.totalMP)}</td><td></td></tr></tbody></table>
@@ -1188,7 +1191,7 @@ function viewFormula(id){
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Lucro/lote</span><strong style="color:var(--oliva)">${fmtR(c.profitLot)}</strong></div>
     </div>
     ${f.prepSteps?`<h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:18px 0 10px">Modo de Preparo</h4><div style="font-size:13px;line-height:1.8">${f.prepSteps.split('\\n').map((s,i)=>s.trim()?`<div style="padding:4px 0"><span style="color:var(--text-muted);font-weight:600;margin-right:6px">${i+1}.</span>${s}</div>`:'').join('')}</div>`:''}
-  `,'<button class="btn btn-secondary" onclick="closeModal();duplicateForm(\''+id+'\')" style="margin-right:auto">${I.copy} Duplicar</button><button class="btn btn-secondary" onclick="closeModal()">Fechar</button>',true);
+  `,'<button class="btn btn-secondary" onclick="closeModal();duplicateForm(\''+id+'\')" style="margin-right:auto">${I.copy} Duplicar</button><button class="btn btn-secondary" onclick="closeModal()">Fechar</button><button class="btn btn-primary" onclick="closeModal();openFormModal(\''+id+'\')">${I.edit} Editar</button>',true);
 }
 
 function openFormModal(id){
@@ -1204,7 +1207,7 @@ function openFormModal(id){
       <div class="form-group"><label class="form-label">Nome da Fórmula</label><input class="form-input" id="fN" value="${f.name}" placeholder="Ex: Hidratante Copacabana Glow"></div>
       <div class="form-group"><label class="form-label">Tipo de Produto</label><div style="display:flex;gap:6px"><select class="form-select" id="fType" style="flex:1"><option value="">Selecione...</option>${getProductTypes().map(t=>`<option value="${t}" ${f.productType===t?'selected':''}>${t}</option>`).join('')}</select><button class="btn-icon" onclick="promptAddType()" title="Gerenciar tipos" style="flex-shrink:0">${I.edit}</button></div></div>
     </div>
-    <div class="form-group"><label class="form-label">Linhas</label><div id="fLinesArea" style="display:flex;gap:8px;flex-wrap:wrap">${[...new Set(DB.get('products').map(p=>p.line).filter(Boolean))].map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;background:var(--bg-warm);border-radius:var(--radius-md);cursor:pointer"><input type="checkbox" class="fLineChk" value="${l}" ${(f.lines||[f.line]).includes(l)?'checked':''}> ${l}</label>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">Linhas</label><div id="fLinesArea" style="display:flex;gap:8px;flex-wrap:wrap">${[...new Set(DB.get('products').map(p=>(p.line||'').trim()).filter(Boolean))].sort().map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;background:var(--bg-warm);border-radius:var(--radius-md);cursor:pointer"><input type="checkbox" class="fLineChk" value="${l}" ${(f.lines||[f.line]).map(x=>(x||'').trim()).includes(l)?'checked':''}> ${l}</label>`).join('')}</div></div>
     <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
       <div class="form-group"><label class="form-label">Tamanho do lote (g)</label><input class="form-input" id="fLot" type="number" value="${f.lotSize||''}" placeholder="3000"></div>
       <div class="form-group"><label class="form-label">Tam. por unidade (g)</label><input class="form-input" id="fUnit" type="number" value="${f.unitSize||''}" placeholder="300"></div>
@@ -1212,7 +1215,7 @@ function openFormModal(id){
     </div>
     <div class="form-row form-row-2">
       <div class="form-group"><label class="form-label">Outros custos/un. (R$)</label><input class="form-input" id="fOther" type="number" step="0.01" value="${f.otherCosts||''}" placeholder="2.00"></div>
-      <div class="form-group"></div>
+      <div class="form-group"><label class="form-label">Preço Final (R$)</label><input class="form-input" id="fFinalPrice" type="number" step="0.01" value="${f.finalPrice||''}" placeholder="Ex: 72.67"><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Preço praticado. Reflete no módulo Produtos.</p></div>
     </div>
 
     <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);margin:20px 0 14px">Matérias-primas (por lote)</h4>
@@ -1299,7 +1302,7 @@ function saveForm(id){
     productType:document.getElementById('fType').value,
     lines:[...document.querySelectorAll('.fLineChk:checked')].map(c=>c.value),
     line:[...document.querySelectorAll('.fLineChk:checked')].map(c=>c.value).join(', '),
-    finalPrice:document.getElementById('fFinalPrice').value,
+    finalPrice:(document.getElementById('fFinalPrice')||{}).value||'',
     lotSize:document.getElementById('fLot').value,
     unitSize:document.getElementById('fUnit').value,
     packagingCost:document.getElementById('fPack').value,
