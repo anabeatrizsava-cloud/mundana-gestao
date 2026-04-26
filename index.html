@@ -1313,14 +1313,19 @@ function saveForm(id){
   if(!d.name){toast('Preencha o nome da fórmula');return;}
   if(id){const i=forms.findIndex(f=>f.id===id);if(i>=0)forms[i]=d;}else forms.push(d);
   DB.set('formulas',forms);
-  // Sync finalPrice to matching Products
+  // Sync finalPrice to matching Products (same type AND line matches)
   if(d.finalPrice){
     const prods=DB.get('products');
     let changed=false;
+    const fLines=(d.lines||[]).map(l=>(l||'').trim().toLowerCase());
     prods.forEach(p=>{
-      if(p.name===d.name||(d.lines||[]).includes(p.line)){
+      const pLine=(p.line||'').trim().toLowerCase();
+      const pType=(p.type||'').trim().toLowerCase();
+      const fType=(d.productType||'').trim().toLowerCase();
+      const lineMatch=fLines.length>0&&fLines.includes(pLine);
+      const typeMatch=fType&&pType===fType;
+      if(lineMatch&&typeMatch){
         if(p.price!==d.finalPrice){
-          // Track price history
           const ph=DB.get('price_history');
           if(p.price)ph.push({id:uid(),productId:p.id,productName:p.name,oldPrice:parseFloat(p.price)||0,newPrice:parseFloat(d.finalPrice)||0,date:localDateStr()});
           DB.set('price_history',ph);
@@ -1329,7 +1334,7 @@ function saveForm(id){
         }
       }
     });
-    if(changed)DB.set('products',prods);
+    if(changed){DB.set('products',prods);toast('Preço atualizado em '+prods.filter(p=>{const pl=(p.line||'').trim().toLowerCase();const pt=(p.type||'').trim().toLowerCase();return fLines.includes(pl)&&pt===(d.productType||'').trim().toLowerCase();}).length+' produto(s)');}
   }
   closeModal();rForms();toast(id?'Fórmula atualizada':'Fórmula cadastrada');
 }
@@ -1513,33 +1518,51 @@ function renderPricingResumo(){
   const forms=DB.get('formulas');
   if(forms.length===0) return '<div class="empty-state"><div class="empty-icon">'+I.dollar+'</div><h3>Sem dados</h3><p>Cadastre fórmulas para ver o resumo de preços</p></div>';
   const cfg=getCfg();
-  const pricingLines=getPricingLines(); // {formulaId: lineName}
   const products=DB.get('products');
-  // Extract unique lines from products
-  const lines=[...new Set(products.map(p=>p.line).filter(Boolean))];
+  const allLines=[...new Set(products.map(p=>(p.line||'').trim()).filter(Boolean))].sort();
+  if(!S._priceLine)S._priceLine='all';
 
-  const rows=forms.map(f=>{
+  // Filter forms by selected line
+  const filtered=S._priceLine==='all'?forms:forms.filter(f=>{const fl=(f.lines||[f.line]).map(l=>(l||'').trim());return fl.includes(S._priceLine);});
+
+  // Stats for selected line
+  const stats=filtered.map(f=>{const c=calcFormula(f);return{name:f.name,cost:c.costTotalUnit,suggested:c.priceSuggested,final:parseFloat(f.finalPrice)||0,margin:c.marginReal,profit:c.profit};});
+  const avgMargin=stats.length>0?stats.reduce((s,r)=>s+r.margin,0)/stats.length:0;
+  const avgPrice=stats.length>0?stats.reduce((s,r)=>s+(r.final||r.suggested),0)/stats.length:0;
+  const avgProfit=stats.length>0?stats.reduce((s,r)=>s+r.profit,0)/stats.length:0;
+
+  const rows=filtered.map(f=>{
     const c=calcFormula(f);
-    const currentLine=pricingLines[f.id]||'';
     return `<tr>
-      <td><select class="form-select" onchange="setPricingLine('${f.id}',this.value)" style="padding:6px 8px;font-size:12px;min-width:130px;border-radius:6px">
-        <option value="">— Selecionar —</option>
-        ${lines.map(l=>`<option value="${l}" ${currentLine===l?'selected':''}>${l}</option>`).join('')}
-        <option value="_custom" ${currentLine&&!lines.includes(currentLine)?'selected':''}>Outra...</option>
-      </select>${currentLine&&!lines.includes(currentLine)?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${currentLine}</div>`:''}</td>
-      <td><strong>${f.name}</strong></td>
-      <td>${c.unitsLot}</td>
-      <td>${fmtR(c.costVarUnit)}</td>
-      <td>${fmtR(c.fixedPerUnit)}</td>
-      <td>${fmtR(c.costTotalUnit)}</td>
-      <td>${fmtR(c.priceSuggested)}</td>
-      <td><strong style="color:${f.finalPrice?'var(--carvao)':'var(--text-muted)'}">${f.finalPrice?fmtR(parseFloat(f.finalPrice)):'-'}</strong></td>
-      <td>${fmtR(c.taxVal)}</td>
-      <td>${fmtR(c.cardVal)}</td>
-      <td style="color:var(--oliva);font-weight:700">${fmtR(c.profit)}</td>
+      <td><strong>${f.name}</strong><div style="font-size:11px;color:var(--text-muted)">${f.productType||'-'}</div></td>
+      <td style="text-align:center">${c.unitsLot}</td>
+      <td style="text-align:center">${fmtR(c.costTotalUnit)}</td>
+      <td style="text-align:center">${fmtR(c.priceSuggested)}</td>
+      <td style="text-align:center"><strong style="color:${f.finalPrice?'var(--carvao)':'var(--text-muted)'}">${f.finalPrice?fmtR(parseFloat(f.finalPrice)):'-'}</strong></td>
+      <td style="text-align:center"><span style="background:${c.marginReal>=0.3?'var(--oliva-pale)':'var(--rose-pale)'};color:${c.marginReal>=0.3?'var(--oliva)':'var(--rosa-antigo)'};font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600">${(c.marginReal*100).toFixed(1)}%</span></td>
+      <td style="text-align:center;color:var(--oliva);font-weight:700">${fmtR(c.profit)}</td>
     </tr>`;
   }).join('');
-  return `<div class="card"><div class="card-header"><h3>Resumo — Precificação dos Produtos</h3></div><div class="card-body"><p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Impostos: ${(cfg.taxRate*100).toFixed(1)}% | Taxa cartão: ${(cfg.cardRate*100).toFixed(1)}% | Margem alvo: ${(cfg.marginTarget*100).toFixed(0)}% | Custos fixos: ${fmtR(cfg.fixedCosts)}/mês</p><div class="table-wrapper"><table><thead><tr><th>Linha</th><th>Fórmula</th><th>Un/Lote</th><th>C. Variável</th><th>Rateio Fixo</th><th>C. Total</th><th>Preço Sug.</th><th>Preço Final</th><th>Impostos</th><th>Tx Cartão</th><th>Lucro</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+
+  return `<div style="display:grid;grid-template-columns:200px 1fr;gap:16px">
+    <div style="align-self:start">
+      <div class="card" style="padding:8px;margin-bottom:10px">
+        <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._priceLine==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S._priceLine='all';rPricing()">Todas as linhas <span style="float:right;font-size:12px;color:var(--text-muted)">${forms.length}</span></div>
+        ${allLines.map(l=>{const ct=forms.filter(f=>(f.lines||[f.line]).map(x=>(x||'').trim()).includes(l)).length;return`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._priceLine===l?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S._priceLine='${l}';rPricing()">${l} <span style="float:right;font-size:12px;color:var(--text-muted)">${ct}</span></div>`;}).join('')}
+      </div>
+      <div class="card" style="padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:10px">${S._priceLine==='all'?'Resumo geral':S._priceLine}</div>
+        <div style="font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Margem média</span><span style="font-weight:700;color:${avgMargin>=0.3?'var(--oliva)':'var(--rosa-antigo)'}">${(avgMargin*100).toFixed(1)}%</span></div>
+        <div style="font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Preço médio</span><span style="font-weight:700">${fmtR(avgPrice)}</span></div>
+        <div style="font-size:12px;display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Lucro médio</span><span style="font-weight:700;color:var(--oliva)">${fmtR(avgProfit)}</span></div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">Imp. ${(cfg.taxRate*100).toFixed(1)}% · Cartão ${(cfg.cardRate*100).toFixed(1)}% · Margem alvo ${(cfg.marginTarget*100).toFixed(0)}%</div>
+    </div>
+    <div>
+      ${filtered.length===0?'<div class="empty-state"><p>Nenhuma fórmula vinculada a esta linha</p></div>':`
+      <div class="card"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th style="text-align:center">Un/Lote</th><th style="text-align:center">Custo un.</th><th style="text-align:center">Preço sug.</th><th style="text-align:center">Preço final</th><th style="text-align:center">Margem</th><th style="text-align:center">Lucro un.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`}
+    </div>
+  </div>`;
 }
 
 function setPricingLine(formulaId,val){
