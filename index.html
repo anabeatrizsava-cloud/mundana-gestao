@@ -1155,7 +1155,7 @@ function rForms(){
   const forms=DB.get('formulas');
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>Fórmulas</h2><p>${forms.length} fórmula${forms.length!==1?'s':''} cadastrada${forms.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div></div>
-    ${forms.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.formula}</div><h3>Nenhuma fórmula cadastrada</h3><p>Cadastre a primeira fórmula dos seus produtos</p><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div>`:`<div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th>Linha</th><th>Tipo</th><th>Lote</th><th>Un/Lote</th><th>MP Total</th><th>Custo Un.</th><th>Preço Sug.</th><th>Margem</th><th></th></tr></thead><tbody>${forms.map(f=>{const c=calcFormula(f);return`<tr style="cursor:pointer" onclick="viewFormula('${f.id}')"><td><strong>${f.name}</strong></td><td>${f.line||'-'}</td><td><span class="badge badge-oliva">${f.productType||'-'}</span></td><td>${f.lotSize||'-'}g</td><td>${c.unitsLot}</td><td>${fmtR(c.totalMP)}</td><td>${fmtR(c.costTotalUnit)}</td><td><strong>${fmtR(c.priceSuggested)}</strong></td><td><span class="badge ${c.marginReal>=0.3?'badge-oliva':'badge-rose'}">${(c.marginReal*100).toFixed(1)}%</span></td><td style="text-align:right" onclick="event.stopPropagation()"><button class="btn-icon" onclick="duplicateForm('${f.id}')" title="Duplicar" style="display:inline-flex">${I.copy}</button><button class="btn-icon" onclick="openFormModal('${f.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button><button class="btn-icon" onclick="delForm('${f.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div></div>`}`;
+    ${forms.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.formula}</div><h3>Nenhuma fórmula cadastrada</h3><p>Cadastre a primeira fórmula dos seus produtos</p><button class="btn btn-primary" onclick="openFormModal()">${I.plus} Nova Fórmula</button></div>`:`<div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th>Linhas</th><th>Tipo</th><th>Lote</th><th>Un/Lote</th><th>MP Total</th><th>Custo Un.</th><th>Preço Sug.</th><th>Preço Final</th><th>Margem</th><th></th></tr></thead><tbody>${forms.map(f=>{const c=calcFormula(f);return`<tr style="cursor:pointer" onclick="viewFormula('${f.id}')"><td><strong>${f.name}</strong></td><td>${(f.lines||[f.line]).filter(Boolean).join(', ')||'-'}</td><td><span class="badge badge-oliva">${f.productType||'-'}</span></td><td>${f.lotSize||'-'}g</td><td>${c.unitsLot}</td><td>${fmtR(c.totalMP)}</td><td>${fmtR(c.costTotalUnit)}</td><td>${fmtR(c.priceSuggested)}</td><td><strong>${f.finalPrice?fmtR(parseFloat(f.finalPrice)):'-'}</strong></td><td><span class="badge ${c.marginReal>=0.3?'badge-oliva':'badge-rose'}">${(c.marginReal*100).toFixed(1)}%</span></td><td style="text-align:right" onclick="event.stopPropagation()"><button class="btn-icon" onclick="duplicateForm('${f.id}')" title="Duplicar" style="display:inline-flex">${I.copy}</button><button class="btn-icon" onclick="openFormModal('${f.id}')" style="display:inline-flex;margin-left:4px">${I.edit}</button><button class="btn-icon" onclick="delForm('${f.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;}).join('')}</tbody></table></div></div>`}`;
 }
 
 function viewFormula(id){
@@ -1204,7 +1204,7 @@ function openFormModal(id){
       <div class="form-group"><label class="form-label">Nome da Fórmula</label><input class="form-input" id="fN" value="${f.name}" placeholder="Ex: Hidratante Copacabana Glow"></div>
       <div class="form-group"><label class="form-label">Tipo de Produto</label><div style="display:flex;gap:6px"><select class="form-select" id="fType" style="flex:1"><option value="">Selecione...</option>${getProductTypes().map(t=>`<option value="${t}" ${f.productType===t?'selected':''}>${t}</option>`).join('')}</select><button class="btn-icon" onclick="promptAddType()" title="Gerenciar tipos" style="flex-shrink:0">${I.edit}</button></div></div>
     </div>
-    <div class="form-group"><label class="form-label">Linha</label><div style="display:flex;gap:6px"><select class="form-select" id="fLine" style="flex:1"><option value="">Selecione...</option>${[...new Set(DB.get('products').map(p=>p.line).filter(Boolean))].map(l=>`<option value="${l}" ${f.line===l?'selected':''}>${l}</option>`).join('')}<option value="_other">Outra (digitar)</option></select></div></div>
+    <div class="form-group"><label class="form-label">Linhas</label><div id="fLinesArea" style="display:flex;gap:8px;flex-wrap:wrap">${[...new Set(DB.get('products').map(p=>p.line).filter(Boolean))].map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;background:var(--bg-warm);border-radius:var(--radius-md);cursor:pointer"><input type="checkbox" class="fLineChk" value="${l}" ${(f.lines||[f.line]).includes(l)?'checked':''}> ${l}</label>`).join('')}</div></div>
     <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
       <div class="form-group"><label class="form-label">Tamanho do lote (g)</label><input class="form-input" id="fLot" type="number" value="${f.lotSize||''}" placeholder="3000"></div>
       <div class="form-group"><label class="form-label">Tam. por unidade (g)</label><input class="form-input" id="fUnit" type="number" value="${f.unitSize||''}" placeholder="300"></div>
@@ -1297,7 +1297,9 @@ function saveForm(id){
     id:id||uid(),
     name:document.getElementById('fN').value,
     productType:document.getElementById('fType').value,
-    line:(()=>{const v=document.getElementById('fLine').value;return v==='_other'?(prompt('Nome da linha:')||''):v;})(),
+    lines:[...document.querySelectorAll('.fLineChk:checked')].map(c=>c.value),
+    line:[...document.querySelectorAll('.fLineChk:checked')].map(c=>c.value).join(', '),
+    finalPrice:document.getElementById('fFinalPrice').value,
     lotSize:document.getElementById('fLot').value,
     unitSize:document.getElementById('fUnit').value,
     packagingCost:document.getElementById('fPack').value,
@@ -1307,7 +1309,26 @@ function saveForm(id){
   };
   if(!d.name){toast('Preencha o nome da fórmula');return;}
   if(id){const i=forms.findIndex(f=>f.id===id);if(i>=0)forms[i]=d;}else forms.push(d);
-  DB.set('formulas',forms);closeModal();rForms();toast(id?'Fórmula atualizada':'Fórmula cadastrada');
+  DB.set('formulas',forms);
+  // Sync finalPrice to matching Products
+  if(d.finalPrice){
+    const prods=DB.get('products');
+    let changed=false;
+    prods.forEach(p=>{
+      if(p.name===d.name||(d.lines||[]).includes(p.line)){
+        if(p.price!==d.finalPrice){
+          // Track price history
+          const ph=DB.get('price_history');
+          if(p.price)ph.push({id:uid(),productId:p.id,productName:p.name,oldPrice:parseFloat(p.price)||0,newPrice:parseFloat(d.finalPrice)||0,date:localDateStr()});
+          DB.set('price_history',ph);
+          p.price=d.finalPrice;
+          changed=true;
+        }
+      }
+    });
+    if(changed)DB.set('products',prods);
+  }
+  closeModal();rForms();toast(id?'Fórmula atualizada':'Fórmula cadastrada');
 }
 function delForm(id){if(!confirm('Excluir esta fórmula?'))return;DB.set('formulas',DB.get('formulas').filter(f=>f.id!==id));rForms();toast('Fórmula excluída');}
 function duplicateForm(id){const forms=DB.get('formulas');const f=forms.find(x=>x.id===id);if(!f)return;const clone=JSON.parse(JSON.stringify(f));clone.id=uid();clone.name=f.name+' (cópia)';forms.push(clone);DB.set('formulas',forms);rForms();toast('Fórmula duplicada');}
@@ -1508,13 +1529,14 @@ function renderPricingResumo(){
       <td>${fmtR(c.costVarUnit)}</td>
       <td>${fmtR(c.fixedPerUnit)}</td>
       <td>${fmtR(c.costTotalUnit)}</td>
-      <td><strong>${fmtR(c.priceSuggested)}</strong></td>
+      <td>${fmtR(c.priceSuggested)}</td>
+      <td><strong style="color:${f.finalPrice?'var(--carvao)':'var(--text-muted)'}">${f.finalPrice?fmtR(parseFloat(f.finalPrice)):'-'}</strong></td>
       <td>${fmtR(c.taxVal)}</td>
       <td>${fmtR(c.cardVal)}</td>
       <td style="color:var(--oliva);font-weight:700">${fmtR(c.profit)}</td>
     </tr>`;
   }).join('');
-  return `<div class="card"><div class="card-header"><h3>Resumo — Precificação dos Produtos</h3></div><div class="card-body"><p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Impostos: ${(cfg.taxRate*100).toFixed(1)}% | Taxa cartão: ${(cfg.cardRate*100).toFixed(1)}% | Margem alvo: ${(cfg.marginTarget*100).toFixed(0)}% | Custos fixos: ${fmtR(cfg.fixedCosts)}/mês</p><div class="table-wrapper"><table><thead><tr><th>Linha</th><th>Fórmula</th><th>Un/Lote</th><th>C. Variável</th><th>Rateio Fixo</th><th>C. Total</th><th>Preço Sug.</th><th>Impostos</th><th>Tx Cartão</th><th>Lucro</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+  return `<div class="card"><div class="card-header"><h3>Resumo — Precificação dos Produtos</h3></div><div class="card-body"><p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Impostos: ${(cfg.taxRate*100).toFixed(1)}% | Taxa cartão: ${(cfg.cardRate*100).toFixed(1)}% | Margem alvo: ${(cfg.marginTarget*100).toFixed(0)}% | Custos fixos: ${fmtR(cfg.fixedCosts)}/mês</p><div class="table-wrapper"><table><thead><tr><th>Linha</th><th>Fórmula</th><th>Un/Lote</th><th>C. Variável</th><th>Rateio Fixo</th><th>C. Total</th><th>Preço Sug.</th><th>Preço Final</th><th>Impostos</th><th>Tx Cartão</th><th>Lucro</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
 function setPricingLine(formulaId,val){
