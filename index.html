@@ -2263,7 +2263,9 @@ function rPagar(){
       if(S.pagStatus==='emdia'&&(i.status==='pago'||!i.vencimento||i.vencimento<todayStr))return false;
     }
     if(S.pagTipo!=='all'&&i.tipo!==S.pagTipo)return false;
-    if(S._pagMes!=='all'){if(!i.vencimento)return false;const d=new Date(i.vencimento+'T12:00:00');const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');if(ym!==S._pagMes)return false;}
+    if(S._pagMes==='today'){const t=localDateStr();if(i.vencimento!==t)return false;}
+    else if(S._pagMes==='week'){const now2=new Date();const dow=now2.getDay();const wStart=new Date(now2);wStart.setDate(now2.getDate()-dow);const wEnd=new Date(wStart);wEnd.setDate(wStart.getDate()+6);const iv=i.vencimento;if(!iv||iv<wStart.toISOString().slice(0,10)||iv>wEnd.toISOString().slice(0,10))return false;}
+    else if(S._pagMes!=='all'){if(!i.vencimento)return false;const d=new Date(i.vencimento+'T12:00:00');const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');if(ym!==S._pagMes)return false;}
     if(S._pagBusca){const q=S._pagBusca.toLowerCase();if(!(i.descricao||'').toLowerCase().includes(q)&&!(i.fornecedor||'').toLowerCase().includes(q)&&!(i.tipo||'').toLowerCase().includes(q))return false;}
     return true;
   });
@@ -2313,18 +2315,22 @@ function rPagar(){
   const calLabel=()=>{if(S._pagMes==='all')return'Todos os meses';if(S._pagMes==='today')return'Hoje';if(S._pagMes==='week')return'Esta semana';const[yy,mm]=S._pagMes.split('-');return(MO[parseInt(mm)-1]||'').slice(0,3)+'/'+yy;};
   const first=new Date(S._pagCalY,S._pagCalM,1).getDay();
   const daysInMonth=new Date(S._pagCalY,S._pagCalM+1,0).getDate();
-  const calCells=[];let d=1-first;
-  for(let r=0;r<6;r++){for(let c=0;c<7;c++){calCells.push(d);d++;}if(d>daysInMonth+1)break;}
+  // Build cells: nulls for empty prefix, then 1..daysInMonth
+  const calCells=[];
+  for(let i=0;i<first;i++)calCells.push(null);
+  for(let i=1;i<=daysInMonth;i++)calCells.push(i);
+  // Pad to complete last row
+  while(calCells.length%7!==0)calCells.push(null);
   const selYm=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');
   const calHTML=`<div id="pagCalDrop" onclick="event.stopPropagation()" style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);padding:14px;width:240px;box-shadow:0 4px 20px rgba(0,0,0,.15)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <button class="btn-icon" onclick="S._pagCalM=S._pagCalM===0?11:S._pagCalM-1;if(S._pagCalM===11)S._pagCalY--;rPagar()" style="display:inline-flex">‹</button>
+      <button class="btn-icon" onclick="S._pagCalM=S._pagCalM===0?(S._pagCalY--,11):S._pagCalM-1;rPagar()" style="display:inline-flex">‹</button>
       <span style="font-size:13px;font-weight:700">${MO[S._pagCalM]} ${S._pagCalY}</span>
-      <button class="btn-icon" onclick="S._pagCalM=S._pagCalM===11?0:S._pagCalM+1;if(S._pagCalM===0)S._pagCalY++;rPagar()" style="display:inline-flex">›</button>
+      <button class="btn-icon" onclick="S._pagCalM=S._pagCalM===11?(S._pagCalY++,0):S._pagCalM+1;rPagar()" style="display:inline-flex">›</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;gap:1px">
-      ${['D','S','T','Q','Q','S','S'].map(x=>`<div style="font-size:10px;color:var(--text-muted);padding:2px 0">${x}</div>`).join('')}
-      ${calCells.map(d=>{const v=d>=1&&d<=daysInMonth;const ym=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');const sel=S._pagMes===ym&&v;return`<div style="font-size:11px;padding:5px 2px;border-radius:4px;cursor:${v?'pointer':'default'};color:${!v?'transparent':sel?'var(--carvao)':'var(--text-primary)'};background:${sel?'var(--rose-pale)':'transparent'};font-weight:${sel?'700':'400'}" onclick="${v?`S._pagMes='${ym}';S._pagCalOpen=false;rPagar()`:''}">${v?d:''}</div>`;}).join('')}
+      ${['D','S','T','Q','Q','S','S'].map(x=>`<div style="font-size:10px;color:var(--text-muted);padding:2px 0;font-weight:600">${x}</div>`).join('')}
+      ${calCells.map(d=>{if(d===null)return'<div></div>';const ym=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');const sel=S._pagMes===ym;return`<div style="font-size:11px;padding:5px 2px;border-radius:4px;cursor:pointer;color:${sel?'var(--carvao)':'var(--text-primary)'};background:${sel?'var(--rose-pale)':'transparent'};font-weight:${sel?'700':'400'}" onclick="S._pagMes='${ym}';S._pagCalOpen=false;rPagar()">${d}</div>`;}).join('')}
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
       ${[['today','Hoje'],['week','Esta semana'],['all','Todos os meses']].map(([v,l])=>`<button onclick="S._pagMes='${v}';S._pagCalOpen=false;rPagar()" style="font-size:12px;padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:${S._pagMes===v?'var(--carvao)':'var(--bg-warm)'};color:${S._pagMes===v?'#fff':'var(--text-primary)'};cursor:pointer;text-align:left">${l}</button>`).join('')}
@@ -2369,7 +2375,7 @@ function rPagar(){
         </button>
         ${S._pagCalOpen?calHTML:''}
       </div>
-      <select class="form-select" style="font-size:12px;padding:7px 12px" onchange="S.pagTipo=this.value;rPagar()">
+      <select class="form-select" style="font-size:12px;padding:7px 12px;min-width:unset;width:auto" onchange="S.pagTipo=this.value;rPagar()">
         <option value="all" ${S.pagTipo==='all'?'selected':''}>Tipo: todos</option>
         ${types.map(t=>`<option value="${t}" ${S.pagTipo===t?'selected':''}>${t} (${items.filter(i=>i.tipo===t).length})</option>`).join('')}
       </select>
