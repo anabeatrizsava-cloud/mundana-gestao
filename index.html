@@ -1024,27 +1024,46 @@ function rDash(){
 
 // ========== PRODUCTS ==========
 function rProds(){
-  const prods=DB.get('products'),folders=DB.get('product_folders');
+  const prods=DB.get('products');
   if(!S._prodBusca)S._prodBusca='';
+  if(!S._prodLine)S._prodLine='all';
+  const allProdLines=[...new Set(prods.map(p=>(p.line||'').trim()).filter(Boolean))].sort();
   const filtered=prods.filter(p=>{
-    if(S.folder!=='all'&&p.folder!==S.folder)return false;
+    if(S._prodLine!=='all'&&(p.line||'').trim()!==S._prodLine)return false;
     if(S._prodBusca){const q=S._prodBusca.toLowerCase();if(!(p.name||'').toLowerCase().includes(q)&&!(p.line||'').toLowerCase().includes(q)&&!(p.type||'').toLowerCase().includes(q))return false;}
     return true;
   });
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="viewPriceHistory()">${I.history} Histórico</button><button class="btn btn-secondary btn-sm" onclick="openFolderModal()">${I.folder} Pastas</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
+    <div class="page-header anim"><div class="page-header-left"><h2>Produtos</h2><p>${prods.length} produto${prods.length!==1?'s':''} cadastrado${prods.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="view-toggle"><button class="${S.pView==='grid'?'active':''}" onclick="S.pView='grid';rProds()">${I.grid}</button><button class="${S.pView==='list'?'active':''}" onclick="S.pView='list';rProds()">${I.list}</button></div><button class="btn btn-secondary btn-sm" onclick="viewPriceHistory()">${I.history} Histórico</button><button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button></div></div>
     <div style="display:grid;grid-template-columns:200px 1fr;gap:16px" class="anim d1">
       <div style="align-self:start">
-        <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._prodBusca}" oninput="S._prodBusca=this.value;rProds()" style="width:100%"></div>
+        <div class="search-box" style="margin-bottom:10px;width:100%">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._prodBusca}" oninput="S._prodBusca=this.value;renderProdList()" style="width:100%"></div>
         <div class="card" style="padding:8px">
-          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.folder==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S.folder='all';rProds()">Todos <span style="float:right;font-size:12px;color:var(--text-muted)">${prods.length}</span></div>
-          ${folders.map(f=>`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S.folder===f.id?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S.folder='${f.id}';rProds()">${f.name} <span style="float:right;font-size:12px;color:var(--text-muted)">${prods.filter(p=>p.folder===f.id).length}</span></div>`).join('')}
+          <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._prodLine==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S._prodLine='all';renderProdList()">Todas as linhas <span style="float:right;font-size:12px;color:var(--text-muted)">${prods.length}</span></div>
+          ${allProdLines.map(l=>{const ct=prods.filter(p=>(p.line||'').trim()===l).length;const lc=LINE_COLORS[l]||'var(--text-muted)';return`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);display:flex;align-items:center;gap:8px;${S._prodLine===l?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S._prodLine='${l}';renderProdList()"><span style="width:8px;height:8px;border-radius:50%;background:${lc};flex-shrink:0"></span>${l} <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${ct}</span></div>`;}).join('')}
         </div>
       </div>
       <div id="prodList">
-        ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">${I.products}</div><h3>Nenhum produto</h3><p>${prods.length>0?'Nenhum resultado para busca/filtro':'Comece adicionando seu primeiro produto'}</p>${prods.length===0?`<button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button>`:''}</div>`:S.pView==='grid'?`<div class="grid-cards">${filtered.map(p=>`<div class="product-card" onclick="openProdModal('${p.id}')"><div class="product-card-img">${p.photo?`<img src="${p.photo}">`:`${I.camera}`}</div><div class="product-card-body"><div class="product-line">${p.line||''}</div><h4>${p.name}</h4><div class="product-type">${p.type||''} · ${p.ml||''}ml</div><div class="product-price">${fmtR(p.price)}</div></div></div>`).join('')}</div>`:`<div class="card"><div class="table-wrapper"><table><thead><tr><th>Produto</th><th>Linha</th><th>Tipo</th><th>Vol.</th><th>Preço</th><th></th></tr></thead><tbody>${filtered.map(p=>`<tr><td><strong>${p.name}</strong></td><td>${p.line||'-'}</td><td><span class="badge badge-oliva">${p.type||'-'}</span></td><td>${p.ml||'-'}ml</td><td><strong>${fmtR(p.price)}</strong></td><td style="text-align:right"><button class="btn-icon" onclick="event.stopPropagation();openProdModal('${p.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="event.stopPropagation();delProd('${p.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}
+        ${renderProdListHTML(filtered,prods)}
       </div>
     </div>`;
+}
+
+function renderProdListHTML(filtered,prods){
+  if(filtered.length===0)return`<div class="empty-state"><div class="empty-icon">${I.products}</div><h3>Nenhum produto</h3><p>${prods.length>0?'Nenhum resultado para busca/filtro':'Comece adicionando seu primeiro produto'}</p>${prods.length===0?`<button class="btn btn-primary" onclick="openProdModal()">${I.plus} Novo Produto</button>`:''}</div>`;
+  if(S.pView==='grid')return`<div class="grid-cards">${filtered.map(p=>`<div class="product-card" onclick="openProdModal('${p.id}')"><div class="product-card-img">${p.photo?`<img src="${p.photo}">`:`${I.camera}`}</div><div class="product-card-body"><div class="product-line">${p.line||''}</div><h4>${p.name}</h4><div class="product-type">${p.type||''} · ${p.ml||''}ml</div><div class="product-price">${fmtR(p.price)}</div></div></div>`).join('')}</div>`;
+  return`<div class="card"><div class="table-wrapper"><table><thead><tr><th>Produto</th><th>Linha</th><th>Tipo</th><th>Vol.</th><th>Preço</th><th></th></tr></thead><tbody>${filtered.map(p=>`<tr><td><strong>${p.name}</strong></td><td>${p.line||'-'}</td><td><span class="badge badge-oliva">${p.type||'-'}</span></td><td>${p.ml||'-'}ml</td><td><strong>${fmtR(p.price)}</strong></td><td style="text-align:right"><button class="btn-icon" onclick="event.stopPropagation();openProdModal('${p.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="event.stopPropagation();delProd('${p.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+function renderProdList(){
+  const prods=DB.get('products');
+  const filtered=prods.filter(p=>{
+    if(S._prodLine!=='all'&&(p.line||'').trim()!==S._prodLine)return false;
+    if(S._prodBusca){const q=S._prodBusca.toLowerCase();if(!(p.name||'').toLowerCase().includes(q)&&!(p.line||'').toLowerCase().includes(q)&&!(p.type||'').toLowerCase().includes(q))return false;}
+    return true;
+  });
+  const el=document.getElementById('prodList');
+  if(el)el.innerHTML=renderProdListHTML(filtered,prods);
 }
 function filterP(q){const lq=q.toLowerCase();document.querySelectorAll('.product-card,#prodList table tbody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(lq)?'':'none';});}
 
@@ -2227,6 +2246,10 @@ function rPagar(){
   if(!S._pagSort)S._pagSort='vencimento';
   if(!S._pagDir)S._pagDir='asc';
   if(!S._pagBusca)S._pagBusca='';
+  if(!S._pagTab)S._pagTab='lancamentos';
+  if(!S._pagCalOpen)S._pagCalOpen=false;
+  if(!S._pagCalM)S._pagCalM=now.getMonth();
+  if(!S._pagCalY)S._pagCalY=now.getFullYear();
 
   // Period filter
   const allMonths=[...new Set(items.map(i=>{if(!i.vencimento)return null;const d=new Date(i.vencimento+'T12:00:00');return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}).filter(Boolean))].sort().reverse();
@@ -2282,20 +2305,40 @@ function rPagar(){
   const sa=(col)=>S._pagSort===col?(S._pagDir==='asc'?'↑':'↓'):'';
   const sc=(col)=>`onclick="S._pagSort='${col}';S._pagDir=S._pagSort==='${col}'&&S._pagDir==='asc'?'desc':'asc';rPagar()" style="cursor:pointer"`;
 
-  document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''}</p></div><div class="page-header-actions"><div class="search-box">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._pagBusca}" oninput="S._pagBusca=this.value;rPagar()" style="width:180px"></div><button class="btn btn-secondary btn-sm" onclick="exportPagarCSV()">${I.download} CSV</button><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;margin-bottom:22px" class="anim d1">
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='all'?'border-left:3px solid var(--carvao)':''}" onclick="S.pagStatus='all';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Total${S._pagMes!=='all'?' (mês)':''}</div><div style="font-size:18px;font-weight:800">${fmtR(total)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.length} lançamentos</div></div>
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pendente'?'border-left:3px solid var(--sol-ancestral)':''}" onclick="S.pagStatus='pendente';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pendente</div><div style="font-size:18px;font-weight:800;color:var(--sol-ancestral)">${fmtR(emDiaTotal+vencidoTotal)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${emDia.length+vencidos.length} itens</div></div>
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='vencido'?'border-left:3px solid var(--rosa-antigo)':''}" onclick="S.pagStatus='vencido';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:4px">Vencido</div><div style="font-size:18px;font-weight:800;color:var(--rosa-antigo)">${fmtR(vencidoTotal)}</div><div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px">${vencidos.length} itens</div></div>
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='emdia'?'border-left:3px solid var(--oliva)':''}" onclick="S.pagStatus='emdia';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--oliva);font-weight:700;margin-bottom:4px">Em dia</div><div style="font-size:18px;font-weight:800;color:var(--oliva)">${fmtR(emDiaTotal)}</div><div style="font-size:11px;color:var(--oliva);margin-top:2px">${emDia.length} itens</div></div>
-      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pago'?'border-left:3px solid var(--musgo)':''}" onclick="S.pagStatus='pago';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pago</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${fmtR(paid)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.filter(i=>i.status==='pago').length} itens</div></div>
+  // Calendar helpers
+  if(!S._pagTab)S._pagTab='lancamentos';
+  if(S._pagCalOpen===undefined)S._pagCalOpen=false;
+  if(!S._pagCalM&&S._pagCalM!==0)S._pagCalM=now.getMonth();
+  if(!S._pagCalY)S._pagCalY=now.getFullYear();
+  const calLabel=()=>{if(S._pagMes==='all')return'Todos os meses';if(S._pagMes==='today')return'Hoje';if(S._pagMes==='week')return'Esta semana';const[yy,mm]=S._pagMes.split('-');return(MO[parseInt(mm)-1]||'').slice(0,3)+'/'+yy;};
+  const first=new Date(S._pagCalY,S._pagCalM,1).getDay();
+  const daysInMonth=new Date(S._pagCalY,S._pagCalM+1,0).getDate();
+  const calCells=[];let d=1-first;
+  for(let r=0;r<6;r++){for(let c=0;c<7;c++){calCells.push(d);d++;}if(d>daysInMonth+1)break;}
+  const selYm=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');
+  const calHTML=`<div id="pagCalDrop" onclick="event.stopPropagation()" style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);padding:14px;width:240px;box-shadow:0 4px 20px rgba(0,0,0,.15)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <button class="btn-icon" onclick="S._pagCalM=S._pagCalM===0?11:S._pagCalM-1;if(S._pagCalM===11)S._pagCalY--;rPagar()" style="display:inline-flex">‹</button>
+      <span style="font-size:13px;font-weight:700">${MO[S._pagCalM]} ${S._pagCalY}</span>
+      <button class="btn-icon" onclick="S._pagCalM=S._pagCalM===11?0:S._pagCalM+1;if(S._pagCalM===0)S._pagCalY++;rPagar()" style="display:inline-flex">›</button>
     </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;gap:1px">
+      ${['D','S','T','Q','Q','S','S'].map(x=>`<div style="font-size:10px;color:var(--text-muted);padding:2px 0">${x}</div>`).join('')}
+      ${calCells.map(d=>{const v=d>=1&&d<=daysInMonth;const ym=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');const sel=S._pagMes===ym&&v;return`<div style="font-size:11px;padding:5px 2px;border-radius:4px;cursor:${v?'pointer':'default'};color:${!v?'transparent':sel?'var(--carvao)':'var(--text-primary)'};background:${sel?'var(--rose-pale)':'transparent'};font-weight:${sel?'700':'400'}" onclick="${v?`S._pagMes='${ym}';S._pagCalOpen=false;rPagar()`:''}">${v?d:''}</div>`;}).join('')}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
+      ${[['today','Hoje'],['week','Esta semana'],['all','Todos os meses']].map(([v,l])=>`<button onclick="S._pagMes='${v}';S._pagCalOpen=false;rPagar()" style="font-size:12px;padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:${S._pagMes===v?'var(--carvao)':'var(--bg-warm)'};color:${S._pagMes===v?'#fff':'var(--text-primary)'};cursor:pointer;text-align:left">${l}</button>`).join('')}
+    </div>
+  </div>`;
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px" class="anim d2">
-      <div class="card" style="padding:16px 20px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:12px">Comparativo mensal</div>
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="exportPagarCSV()">${I.download} CSV</button><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
+    <div style="display:flex;gap:0;border-bottom:1.5px solid var(--border);margin-bottom:20px" class="anim d1">
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${S._pagTab==='lancamentos'?'700':'500'};color:${S._pagTab==='lancamentos'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${S._pagTab==='lancamentos'?'var(--rosa-antigo)':'transparent'}" onclick="S._pagTab='lancamentos';rPagar()">Lançamentos</div>
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${S._pagTab==='visao'?'700':'500'};color:${S._pagTab==='visao'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${S._pagTab==='visao'?'var(--rosa-antigo)':'transparent'}" onclick="S._pagTab='visao';rPagar()">Visão Geral</div>
+    </div>
+    ${S._pagTab==='visao'?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px" class="anim d2">
+      <div class="card" style="padding:16px 20px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:12px">Comparativo mensal</div>
         <div style="display:flex;gap:16px;align-items:flex-end;margin-bottom:12px">
           <div style="flex:1"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${MO[prevM].slice(0,3)}/${prevY}</div><div style="font-size:18px;font-weight:700">${fmtR(totalMesAnterior)}</div></div>
           <div style="font-size:20px;color:var(--text-muted)">→</div>
@@ -2305,40 +2348,45 @@ function rPagar(){
         <div style="display:flex;gap:4px;height:6px;border-radius:3px;overflow:hidden;background:var(--border-light)"><div style="flex:${totalMesAnterior||1};background:var(--areia);border-radius:3px"></div><div style="flex:${totalMesAtual||1};background:${diffMes>0?'var(--rosa-antigo)':'var(--oliva)'};border-radius:3px"></div></div>
         <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-muted)"><span>${MO[prevM].slice(0,3)}</span><span>${MO[curM].slice(0,3)}</span></div>
       </div>
-      <div class="card" style="padding:16px 20px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:12px">Despesas por categoria</div>
-        ${tipoEntries.length===0?'<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">Nenhuma despesa cadastrada</div>':tipoEntries.slice(0,6).map(([tipo,val])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:600;color:var(--text-primary)">${tipo}</span><span style="font-weight:700">${fmtR(val)}</span></div><div style="height:5px;border-radius:3px;background:var(--border-light);overflow:hidden"><div style="height:100%;width:${Math.round(val/maxTipo*100)}%;background:var(--lavanda);border-radius:3px"></div></div></div>`).join('')}
+      <div class="card" style="padding:16px 20px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:12px">Despesas por categoria</div>
+        ${tipoEntries.length===0?'<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">Nenhuma despesa</div>':tipoEntries.slice(0,6).map(([tipo,val])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:600;color:var(--text-primary)">${tipo}</span><span style="font-weight:700">${fmtR(val)}</span></div><div style="height:5px;border-radius:3px;background:var(--border-light);overflow:hidden"><div style="height:100%;width:${Math.round(val/maxTipo*100)}%;background:var(--lavanda);border-radius:3px"></div></div></div>`).join('')}
       </div>
+    </div>`:''}
+    ${S._pagTab==='lancamentos'?`
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px" class="anim d2">
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='all'?'border-left:3px solid var(--carvao)':''}" onclick="S.pagStatus='all';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Total</div><div style="font-size:18px;font-weight:800">${fmtR(total)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.length} lançamentos</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pendente'?'border-left:3px solid var(--sol-ancestral)':''}" onclick="S.pagStatus='pendente';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pendente</div><div style="font-size:18px;font-weight:800;color:var(--sol-ancestral)">${fmtR(emDiaTotal+vencidoTotal)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${emDia.length+vencidos.length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='vencido'?'border-left:3px solid var(--rosa-antigo)':''}" onclick="S.pagStatus='vencido';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--rosa-antigo);font-weight:700;margin-bottom:4px">Vencido</div><div style="font-size:18px;font-weight:800;color:var(--rosa-antigo)">${fmtR(vencidoTotal)}</div><div style="font-size:11px;color:var(--rosa-antigo);margin-top:2px">${vencidos.length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='emdia'?'border-left:3px solid var(--oliva)':''}" onclick="S.pagStatus='emdia';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--oliva);font-weight:700;margin-bottom:4px">Em dia</div><div style="font-size:18px;font-weight:800;color:var(--oliva)">${fmtR(emDiaTotal)}</div><div style="font-size:11px;color:var(--oliva);margin-top:2px">${emDia.length} itens</div></div>
+      <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pago'?'border-left:3px solid var(--musgo)':''}" onclick="S.pagStatus='pago';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pago</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${fmtR(paid)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.filter(i=>i.status==='pago').length} itens</div></div>
     </div>
-
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap" class="anim d3">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Período:</span>
-        <select class="form-select" style="min-width:150px;font-size:12px" onchange="S._pagMes=this.value;rPagar()">
-          <option value="all" ${S._pagMes==='all'?'selected':''}>Todos os meses</option>
-          ${allMonths.map(ym=>{const[yy,mm]=ym.split('-');return`<option value="${ym}" ${S._pagMes===ym?'selected':''}>${MO[parseInt(mm)-1].slice(0,3)}/${yy}</option>`;}).join('')}
-        </select>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap" class="anim d3">
+      <div style="position:relative">
+        <button onclick="S._pagCalOpen=!S._pagCalOpen;rPagar()" style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-primary)">
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700">Período:</span>
+          <span style="font-weight:600">${calLabel()}</span>
+          <span style="font-size:9px;color:var(--text-muted)">${S._pagCalOpen?'▲':'▼'}</span>
+        </button>
+        ${S._pagCalOpen?calHTML:''}
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700">Tipo:</span>
-        <div class="folder-chip ${S.pagTipo==='all'?'active':''}" onclick="S.pagTipo='all';rPagar()">Todos <span class="count">${items.length}</span></div>
-        ${types.map(t=>`<div class="folder-chip ${S.pagTipo===t?'active':''}" onclick="S.pagTipo='${t}';rPagar()">${t} <span class="count">${items.filter(i=>i.tipo===t).length}</span></div>`).join('')}
-      </div>
+      <select class="form-select" style="font-size:12px;padding:7px 12px" onchange="S.pagTipo=this.value;rPagar()">
+        <option value="all" ${S.pagTipo==='all'?'selected':''}>Tipo: todos</option>
+        ${types.map(t=>`<option value="${t}" ${S.pagTipo===t?'selected':''}>${t} (${items.filter(i=>i.tipo===t).length})</option>`).join('')}
+      </select>
+      <div class="search-box" style="margin-left:auto">${I.search}<input class="form-input" placeholder="Buscar..." value="${S._pagBusca}" oninput="S._pagBusca=this.value;rPagar()" style="width:180px"></div>
     </div>
-
-    ${sorted.length!==items.length||S._pagBusca?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px" class="anim d3">Exibindo <strong>${sorted.length}</strong> de ${items.length} — Subtotal: <strong style="color:var(--carvao)">${fmtR(filtTotal)}</strong></div>`:''}
-
+    ${sorted.length!==items.length||S._pagBusca?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Exibindo <strong>${sorted.length}</strong> de ${items.length} — Subtotal: <strong style="color:var(--carvao)">${fmtR(filtTotal)}</strong></div>`:''}
     ${sorted.length===0?`<div class="empty-state anim d4"><div class="empty-icon">${I.arrowOut}</div><h3>Nenhum lançamento</h3><p>${items.length>0?'Nenhum resultado para os filtros selecionados':'Cadastre seus pagamentos'}</p>${items.length===0?`<button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button>`:''}</div>`:`
     <div class="card anim d4"><div class="table-wrapper"><table><thead><tr><th ${sc('descricao')}>Descrição ${sa('descricao')}</th><th>Fornecedor</th><th>Tipo</th><th ${sc('vencimento')}>Vencimento ${sa('vencimento')}</th><th ${sc('valor')}>Valor ${sa('valor')}</th><th>Detalhes</th><th>Status</th><th></th></tr></thead><tbody>${sorted.map(i=>{
       let detalhes='À vista';
       if(i.parcelado==='sim') detalhes=(i.parcela||'1')+'/'+(i.totalParcelas||'1');
       if(i.recorrente&&i.recorrente!=='nao') detalhes=({mensal:'Mensal',semanal:'Semanal',personalizado:'Recorrente'})[i.recorrente]||detalhes;
       const isVencido=i.status!=='pago'&&i.vencimento&&i.vencimento<todayStr;
-      const isEmDia=i.status!=='pago'&&i.vencimento&&i.vencimento>=todayStr;
       return `<tr style="${isVencido?'background:var(--rose-pale)':''}"><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td style="${isVencido?'color:var(--rosa-antigo);font-weight:600':''}">${fmtD(i.vencimento)}${isVencido?' <span style="font-size:10px">(vencido)</span>':''}</td><td><strong>${fmtR(i.valor)}</strong></td><td><span style="font-size:11px;color:var(--text-muted)">${detalhes}</span></td><td><span class="badge ${i.status==='pago'?'badge-oliva':isVencido?'badge-rose':'badge-oliva'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':isVencido?'Vencido':'Em dia'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;
-    }).join('')}</tbody></table></div></div>`}`;
-}
+    }).join('')}</tbody></table></div></div>`}`:''}`;
 
+  if(S._pagCalOpen){setTimeout(()=>{const close=(e)=>{if(!document.getElementById('pagCalDrop')||!document.getElementById('pagCalDrop').contains(e.target)){S._pagCalOpen=false;rPagar();document.removeEventListener('click',close);}};document.addEventListener('click',close);},50);}
+}
 function exportPagarCSV(){
   const items=DB.get('pagar');
   const todayStr=localDateStr();
