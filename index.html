@@ -1492,7 +1492,7 @@ function rPricing(){
         <button class="btn btn-secondary" onclick="S.pricingTab='config';renderPricingConfigModal()">${I.settings||'⚙'} Configurações</button>
       </div>
     </div>
-    <div class="anim d1">${renderPricingResumo()}</div>`;
+    <div class="anim d1" id="pricing-content">${renderPricingResumo()}</div>`;
 }
 
 function renderPricingCustosModal(){
@@ -1545,14 +1545,16 @@ function renderPricingResumo(){
   if(forms.length===0) return '<div class="empty-state"><div class="empty-icon">'+I.dollar+'</div><h3>Sem dados</h3><p>Cadastre fórmulas para ver o resumo de preços</p></div>';
   const cfg=getCfg();
   const products=DB.get('products');
-  const allLines=[...new Set(products.map(p=>(p.line||'').trim()).filter(Boolean))].sort();
+  // Build lines from both products and formulas
+  const allLines=[...new Set([
+    ...products.map(p=>(p.line||'').trim()),
+    ...forms.flatMap(f=>(f.lines||[f.line]).map(l=>(l||'').trim()))
+  ].filter(Boolean))].sort();
   if(!S._priceLine)S._priceLine='all';
 
-  // Filter forms by selected line
   const filtered=S._priceLine==='all'?forms:forms.filter(f=>{const fl=(f.lines||[f.line]).map(l=>(l||'').trim());return fl.includes(S._priceLine);});
 
-  // Stats for selected line
-  const stats=filtered.map(f=>{const c=calcFormula(f);return{name:f.name,cost:c.costTotalUnit,suggested:c.priceSuggested,final:parseFloat(f.finalPrice)||0,margin:c.marginReal,profit:c.profit};});
+  const stats=filtered.map(f=>{const c=calcFormula(f);return{final:parseFloat(f.finalPrice)||0,margin:c.marginReal,profit:c.profit,suggested:c.priceSuggested};});
   const avgMargin=stats.length>0?stats.reduce((s,r)=>s+r.margin,0)/stats.length:0;
   const avgPrice=stats.length>0?stats.reduce((s,r)=>s+(r.final||r.suggested),0)/stats.length:0;
   const avgProfit=stats.length>0?stats.reduce((s,r)=>s+r.profit,0)/stats.length:0;
@@ -1561,7 +1563,6 @@ function renderPricingResumo(){
     const c=calcFormula(f);
     return `<tr>
       <td><strong>${f.name}</strong><div style="font-size:11px;color:var(--text-muted)">${f.productType||'-'}</div></td>
-      <td style="text-align:center">${(f.lines||[f.line]).filter(Boolean).map(l=>lineTag(l)).join('')||'-'}</td>
       <td style="text-align:center">${c.unitsLot}</td>
       <td style="text-align:center">${fmtR(c.costTotalUnit)}</td>
       <td style="text-align:center">${fmtR(c.priceSuggested)}</td>
@@ -1574,22 +1575,27 @@ function renderPricingResumo(){
   return `<div style="display:grid;grid-template-columns:200px 1fr;gap:16px">
     <div style="align-self:start">
       <div class="card" style="padding:8px;margin-bottom:10px">
-        <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._priceLine==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S._priceLine='all';rPricing()">Todas as linhas <span style="float:right;font-size:12px;color:var(--text-muted)">${forms.length}</span></div>
-        ${allLines.map(l=>{const ct=forms.filter(f=>(f.lines||[f.line]).map(x=>(x||'').trim()).includes(l)).length;const lc=LINE_COLORS[l]||'var(--text-muted)';return`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);display:flex;align-items:center;gap:8px;${S._priceLine===l?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S._priceLine='${l}';rPricing()"><span style="width:8px;height:8px;border-radius:50%;background:${lc};flex-shrink:0"></span>${l} <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${ct}</span></div>`;}).join('')}
+        <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._priceLine==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S._priceLine='all';renderPricingContent()">Todas as linhas <span style="float:right;font-size:12px;color:var(--text-muted)">${forms.length}</span></div>
+        ${allLines.map(l=>{const ct=forms.filter(f=>(f.lines||[f.line]).map(x=>(x||'').trim()).includes(l)).length;const lc=LINE_COLORS[l]||'var(--text-muted)';return`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);display:flex;align-items:center;gap:8px;${S._priceLine===l?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S._priceLine='${l}';renderPricingContent()"><span style="width:8px;height:8px;border-radius:50%;background:${lc};flex-shrink:0"></span>${l} <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${ct}</span></div>`;}).join('')}
       </div>
       <div class="card" style="padding:14px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:10px">${S._priceLine==='all'?'Resumo geral':S._priceLine}</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:10px">${S._priceLine==='all'?'RESUMO GERAL':S._priceLine.toUpperCase()}</div>
         <div style="font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Margem média</span><span style="font-weight:700;color:${avgMargin>=0.3?'var(--oliva)':'var(--rosa-antigo)'}">${(avgMargin*100).toFixed(1)}%</span></div>
         <div style="font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Preço médio</span><span style="font-weight:700">${fmtR(avgPrice)}</span></div>
         <div style="font-size:12px;display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Lucro médio</span><span style="font-weight:700;color:var(--oliva)">${fmtR(avgProfit)}</span></div>
       </div>
-      <div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">Imp. ${(cfg.taxRate*100).toFixed(1)}% · Cartão ${(cfg.cardRate*100).toFixed(1)}% · Margem alvo ${(cfg.marginTarget*100).toFixed(0)}%</div>
     </div>
     <div>
       ${filtered.length===0?'<div class="empty-state"><p>Nenhuma fórmula vinculada a esta linha</p></div>':`
-      <div class="card"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th style="text-align:center">Linhas</th><th style="text-align:center">Un/Lote</th><th style="text-align:center">Custo un.</th><th style="text-align:center">Preço sug.</th><th style="text-align:center">Preço final</th><th style="text-align:center">Margem</th><th style="text-align:center">Lucro un.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`}
+      <div class="card"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th style="text-align:center">Un/Lote</th><th style="text-align:center">Custo un.</th><th style="text-align:center">Preço sug.</th><th style="text-align:center">Preço final</th><th style="text-align:center">Margem</th><th style="text-align:center">Lucro un.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`}
     </div>
   </div>`;
+}
+
+// Updates only the pricing content area without re-rendering the full page
+function renderPricingContent(){
+  const el=document.getElementById('pricing-content');
+  if(el) el.innerHTML=renderPricingResumo();
 }
 
 function setPricingLine(formulaId,val){
