@@ -1480,15 +1480,31 @@ function delStock(id){if(!confirm('Excluir?'))return;DB.set('stockmp',DB.get('st
 
 // ========== PRICING ==========
 function rPricing(){
-  const tab=S.pricingTab;
+  const cfg=getCfg();
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Precificação</h2><p>Resumo de preços, custos fixos e configurações</p></div></div>
-    <div style="display:flex;gap:2px;border-bottom:1.5px solid var(--border);margin-bottom:22px" class="anim d1">
-      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='resumo'?'700':'500'};color:${tab==='resumo'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='resumo'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.pricingTab='resumo';rPricing()">Resumo de Preços</div>
-      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='custos'?'700':'500'};color:${tab==='custos'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='custos'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.pricingTab='custos';rPricing()">Custos Fixos</div>
-      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${tab==='config'?'700':'500'};color:${tab==='config'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${tab==='config'?'var(--rosa-antigo)':'transparent'};transition:var(--transition)" onclick="S.pricingTab='config';rPricing()">Configurações</div>
+    <div class="page-header anim">
+      <div class="page-header-left">
+        <h2>Precificação</h2>
+        <p>Imp. ${(cfg.taxRate*100).toFixed(0)}% · Cartão ${(cfg.cardRate*100).toFixed(1)}% · Margem alvo ${(cfg.marginTarget*100).toFixed(0)}%</p>
+      </div>
+      <div class="page-header-right" style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="S.pricingTab='custos';renderPricingCustosModal()">${I.dollar} Custos fixos</button>
+        <button class="btn btn-secondary" onclick="S.pricingTab='config';renderPricingConfigModal()">${I.settings||'⚙'} Configurações</button>
+      </div>
     </div>
-    <div class="anim d2">${tab==='resumo'?renderPricingResumo():tab==='custos'?renderPricingCustos():renderPricingConfig()}</div>`;
+    <div class="anim d1">${renderPricingResumo()}</div>`;
+}
+
+function renderPricingCustosModal(){
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Custos Fixos</h2></div><div class="page-header-right"><button class="btn btn-secondary" onclick="rPricing()">&larr; Voltar</button></div></div>
+    <div class="anim d1">${renderPricingCustos()}</div>`;
+}
+
+function renderPricingConfigModal(){
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Configurações de Precificação</h2></div><div class="page-header-right"><button class="btn btn-secondary" onclick="rPricing()">&larr; Voltar</button></div></div>
+    <div class="anim d1">${renderPricingConfig()}</div>`;
 }
 
 function renderPricingConfig(){
@@ -1545,6 +1561,7 @@ function renderPricingResumo(){
     const c=calcFormula(f);
     return `<tr>
       <td><strong>${f.name}</strong><div style="font-size:11px;color:var(--text-muted)">${f.productType||'-'}</div></td>
+      <td style="text-align:center">${(f.lines||[f.line]).filter(Boolean).map(l=>lineTag(l)).join('')||'-'}</td>
       <td style="text-align:center">${c.unitsLot}</td>
       <td style="text-align:center">${fmtR(c.costTotalUnit)}</td>
       <td style="text-align:center">${fmtR(c.priceSuggested)}</td>
@@ -1558,7 +1575,7 @@ function renderPricingResumo(){
     <div style="align-self:start">
       <div class="card" style="padding:8px;margin-bottom:10px">
         <div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._priceLine==='all'?'font-weight:700;background:var(--bg-warm)':''}" onclick="S._priceLine='all';rPricing()">Todas as linhas <span style="float:right;font-size:12px;color:var(--text-muted)">${forms.length}</span></div>
-        ${allLines.map(l=>{const ct=forms.filter(f=>(f.lines||[f.line]).map(x=>(x||'').trim()).includes(l)).length;return`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);${S._priceLine===l?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S._priceLine='${l}';rPricing()">${l} <span style="float:right;font-size:12px;color:var(--text-muted)">${ct}</span></div>`;}).join('')}
+        ${allLines.map(l=>{const ct=forms.filter(f=>(f.lines||[f.line]).map(x=>(x||'').trim()).includes(l)).length;const lc=LINE_COLORS[l]||'var(--text-muted)';return`<div style="padding:8px 12px;font-size:13px;cursor:pointer;border-radius:var(--radius-md);display:flex;align-items:center;gap:8px;${S._priceLine===l?'font-weight:700;background:var(--bg-warm)':'color:var(--text-secondary)'}" onclick="S._priceLine='${l}';rPricing()"><span style="width:8px;height:8px;border-radius:50%;background:${lc};flex-shrink:0"></span>${l} <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${ct}</span></div>`;}).join('')}
       </div>
       <div class="card" style="padding:14px">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:10px">${S._priceLine==='all'?'Resumo geral':S._priceLine}</div>
@@ -1570,7 +1587,7 @@ function renderPricingResumo(){
     </div>
     <div>
       ${filtered.length===0?'<div class="empty-state"><p>Nenhuma fórmula vinculada a esta linha</p></div>':`
-      <div class="card"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th style="text-align:center">Un/Lote</th><th style="text-align:center">Custo un.</th><th style="text-align:center">Preço sug.</th><th style="text-align:center">Preço final</th><th style="text-align:center">Margem</th><th style="text-align:center">Lucro un.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`}
+      <div class="card"><div class="table-wrapper"><table><thead><tr><th>Fórmula</th><th style="text-align:center">Linhas</th><th style="text-align:center">Un/Lote</th><th style="text-align:center">Custo un.</th><th style="text-align:center">Preço sug.</th><th style="text-align:center">Preço final</th><th style="text-align:center">Margem</th><th style="text-align:center">Lucro un.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`}
     </div>
   </div>`;
 }
@@ -3208,6 +3225,8 @@ function rModoDia(){
 
 // ========== LEADS QUIZ ==========
 const LINE_COLORS={'Copacabana Glow':'var(--sol-ancestral)','Boreal Mist':'var(--oliva)','Urban Shine':'var(--violeta-suave)','Bora Breeze':'var(--luz)','Coco Blanc':'var(--areia)','Moon Milk':'var(--lavanda)'};
+const LINE_ABBR={'Copacabana Glow':'CG','Boreal Mist':'BM','Urban Shine':'US','Bora Breeze':'BB','Coco Blanc':'CB','Moon Milk':'MM'};
+function lineTag(l){const color=LINE_COLORS[l]||'var(--text-muted)';const abbr=LINE_ABBR[l]||(l.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2));return`<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:20px;border-radius:6px;background:${color};color:#fff;font-size:10px;font-weight:800;letter-spacing:0.5px;margin:1px">${abbr}</span>`;}
 const LEAD_STATUS={novo:{label:'Novo',bg:'#E6F1FB',color:'#185FA5',border:'#B5D4F4'},potencial:{label:'Potencial',bg:'var(--oliva-pale)',color:'var(--oliva)',border:'var(--oliva)'},em_contato:{label:'Em contato',bg:'#faeeda',color:'#854F0B',border:'#FAC775'},ganho:{label:'Ganho',bg:'#e8efe9',color:'#3B6D11',border:'#C0DD97'},perdido:{label:'Perdido',bg:'var(--rose-pale)',color:'var(--rosa-antigo)',border:'var(--rosa-antigo)'}};
 
 function fmtRelative(dt){if(!dt)return'-';const diff=Math.floor((Date.now()-new Date(dt))/1000);if(diff<60)return'agora';if(diff<3600)return Math.floor(diff/60)+'min';if(diff<86400)return Math.floor(diff/3600)+'h';if(diff<604800)return Math.floor(diff/86400)+'d';return new Date(dt).toLocaleDateString('pt-BR');}
