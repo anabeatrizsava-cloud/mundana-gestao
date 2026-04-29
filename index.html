@@ -659,50 +659,45 @@ const DB={
 // ========== INITIAL LOAD FROM SUPABASE ==========
 async function loadFromSupabase(){
   try{
-    // Load mapped tables — only if local is empty for that key
+    // Load ALL app_data from Supabase in one request
+    const appRows=await sbFetch('app_data?select=key,value');
+    if(appRows&&Array.isArray(appRows)){
+      appRows.forEach(r=>{
+        if(!r.key||r.value===null||r.value===undefined)return;
+        const local=DB.get(r.key);
+        const remoteHasData=Array.isArray(r.value)?r.value.length>0:(typeof r.value==='object'?Object.keys(r.value).length>0:!!r.value);
+        const localHasData=Array.isArray(local)?local.length>0:(typeof local==='object'&&local?Object.keys(local).length>0:!!local);
+        // If local is empty but remote has data, use remote
+        if(!localHasData&&remoteHasData){
+          DB._mem[r.key]=r.value;
+          try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));localStorage.setItem('mundana_bkp_'+r.key,JSON.stringify(r.value));}catch(e){}
+        }
+      });
+    }
+    // Also load mapped tables that use their own Supabase tables (not app_data)
     for(const[k,map] of Object.entries(TABLE_MAP)){
+      if(map.isJsonStore)continue; // Already loaded from app_data above
       const local=DB.get(k);
-      if(local&&local.length>0)continue; // Already have local data, don't overwrite
-      if(map.isJsonStore){
-        const rows=await sbFetch('app_data?key=eq.'+k+'&select=value');
-        if(rows&&Array.isArray(rows)&&rows[0]&&rows[0].value&&rows[0].value.length>0){
-          DB._mem[k]=rows[0].value;
-          try{localStorage.setItem('mundana_'+k,JSON.stringify(rows[0].value));}catch(e){}
-        }
-      } else {
-        const rows=await sbFetch(map.table+'?select=*');
-        if(rows&&Array.isArray(rows)&&rows.length>0){
-          const data=map.fromRow?rows.map(map.fromRow):rows;
-          DB._mem[k]=data;
-          try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
-        }
+      if(local&&Array.isArray(local)&&local.length>0)continue;
+      const rows=await sbFetch(map.table+'?select=*');
+      if(rows&&Array.isArray(rows)&&rows.length>0){
+        const data=map.fromRow?rows.map(map.fromRow):rows;
+        DB._mem[k]=data;
+        try{localStorage.setItem('mundana_'+k,JSON.stringify(data));localStorage.setItem('mundana_bkp_'+k,JSON.stringify(data));}catch(e){}
       }
     }
-    // Load simple array tables — only if local is empty
+    // Load simple array tables
     for(const k of SIMPLE_ARRAY_TABLES){
       const local=DB.get(k);
-      if(local&&local.length>0)continue;
+      if(local&&Array.isArray(local)&&local.length>0)continue;
       const rows=await sbFetch(k+'?select=name');
       if(rows&&Array.isArray(rows)&&rows.length>0){
         const data=rows.map(r=>r.name);
         DB._mem[k]=data;
-        try{localStorage.setItem('mundana_'+k,JSON.stringify(data));}catch(e){}
+        try{localStorage.setItem('mundana_'+k,JSON.stringify(data));localStorage.setItem('mundana_bkp_'+k,JSON.stringify(data));}catch(e){}
       }
     }
-    // Load app_data entries — only if local is empty
-    const appRows=await sbFetch('app_data?select=key,value');
-    if(appRows&&Array.isArray(appRows)){
-      appRows.forEach(r=>{
-        if(!TABLE_MAP[r.key]&&r.value){
-          const local=DB.get(r.key);
-          if(local&&((Array.isArray(local)&&local.length>0)||(!Array.isArray(local)&&local)))return;
-          DB._mem[r.key]=r.value;
-          try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));}catch(e){}
-        }
-      });
-    }
   }catch(e){console.warn('Load from Supabase failed, using local cache:',e);}
-  // Re-render after load
   renderNav();render();
 }
 
@@ -1871,13 +1866,128 @@ function setEmpresaData(d){_origSetEmpresaData(d);}
 function rEmpresa(){
   const tab=S.empresaTab;
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Dados Mundana</h2><p>Ficha cadastral, documentos e acessos</p></div></div>
+    <div class="page-header anim"><div class="page-header-left"><h2>Dados Mundana</h2><p>Ficha cadastral, documentos, acessos e backup</p></div></div>
     <div class="tab-bar anim d1">
       <div class="tab-item ${tab==='dados'?'active':''}" onclick="S.empresaTab='dados';rEmpresa()">Ficha Cadastral</div>
       <div class="tab-item ${tab==='docs'?'active':''}" onclick="S.empresaTab='docs';rEmpresa()">Documentos</div>
       <div class="tab-item ${tab==='users'?'active':''}" onclick="S.empresaTab='users';rEmpresa()">Acessos</div>
+      <div class="tab-item ${tab==='backup'?'active':''}" onclick="S.empresaTab='backup';rEmpresa()">Backup</div>
     </div>
-    <div class="anim d2">${tab==='dados'?renderEmpresaDados():tab==='docs'?renderEmpresaDocs():renderEmpresaUsers()}</div>`;
+    <div class="anim d2">${tab==='dados'?renderEmpresaDados():tab==='docs'?renderEmpresaDocs():tab==='backup'?renderEmpresaBackup():renderEmpresaUsers()}</div>`;
+}
+
+function renderEmpresaBackup(){
+  const allKeys=['products','product_folders','formulas','stockmp','stockpa','lots','suppliers','sup_mp_link','mp_price_hist','pagar','receber','pedidos','ideias','ideia_folders','ideia_tipos','mydocs','doc_folders','roteiros','lembretes','empresa','pricing_config','pricing_lines','price_history','empresa_users','empresa_docs'];
+  let totalItems=0;
+  allKeys.forEach(k=>{const d=DB.get(k);if(Array.isArray(d))totalItems+=d.length;});
+  const lastBackup=localStorage.getItem('mundana_last_backup')||'Nunca';
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card" style="border-left:3px solid var(--oliva)">
+        <div class="card-body" style="padding:24px">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--oliva)">${I.download} Exportar Backup</h3>
+          <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">Gera um arquivo JSON com <strong>todos os dados do sistema</strong>: produtos, fórmulas, estoque, pedidos, fornecedores, financeiro, ideias, documentos, roteiros, lembretes, configurações — tudo.</p>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Dados no sistema: <strong>${totalItems} registros</strong> em ${allKeys.length} módulos<br>Último backup: <strong>${lastBackup}</strong></p>
+          <button class="btn btn-primary" onclick="exportFullBackup()" style="width:100%">${I.download} Exportar JSON completo</button>
+        </div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--lavanda)">
+        <div class="card-body" style="padding:24px">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--lavanda)">${I.archive} Importar Backup</h3>
+          <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">Restaura os dados a partir de um arquivo JSON exportado anteriormente. <strong>Sobrescreve todos os dados atuais</strong> — use com cuidado.</p>
+          <p style="font-size:12px;color:var(--rosa-antigo);margin-bottom:16px">Atenção: esta ação substituirá todos os dados do sistema pelos dados do arquivo importado.</p>
+          <div class="photo-upload" onclick="document.getElementById('backupFileIn').click()" style="height:70px;margin-bottom:12px">${I.file}<span>Clique para selecionar o arquivo JSON</span><input type="file" id="backupFileIn" accept=".json" onchange="importFullBackup(event)" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px;border-left:3px solid var(--sol-ancestral)">
+      <div class="card-body" style="padding:20px">
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:8px;color:var(--sol-ancestral)">Forçar restauração do Supabase</h3>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Se os dados sumiram do navegador mas podem estar no Supabase, clique abaixo para tentar recuperar.</p>
+        <button class="btn btn-secondary" onclick="forceLoadFromSupabase()">Tentar recuperar do Supabase</button>
+      </div>
+    </div>`;
+}
+
+function exportFullBackup(){
+  const allKeys=['products','product_folders','formulas','stockmp','stockpa','lots','suppliers','sup_mp_link','mp_price_hist','pagar','receber','pedidos','ideias','ideia_folders','ideia_tipos','mydocs','doc_folders','roteiros','lembretes','empresa','pricing_config','pricing_lines','price_history','empresa_users','empresa_docs','rot_fases','rot_tipos','rot_freqs','alerts_read'];
+  const backup={_meta:{exportedAt:new Date().toISOString(),version:'mundana-gestao-v1',totalKeys:allKeys.length}};
+  allKeys.forEach(k=>{
+    const d=DB.get(k);
+    // For documents, strip base64 data to keep file small
+    if(k==='mydocs'&&Array.isArray(d)){
+      backup[k]=d.map(doc=>({...doc,data:doc.data&&doc.data.length>50000?'[BASE64_STRIPPED]':doc.data}));
+    } else {
+      backup[k]=d;
+    }
+  });
+  const json=JSON.stringify(backup,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='mundana_backup_'+localDateStr()+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  localStorage.setItem('mundana_last_backup',localDateStr());
+  toast('Backup exportado com sucesso');
+  rEmpresa();
+}
+
+function importFullBackup(event){
+  const file=event.target.files[0];if(!file)return;
+  if(!confirm('ATENÇÃO: Isso vai substituir TODOS os dados do sistema pelos dados do arquivo. Tem certeza?'))return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const backup=JSON.parse(e.target.result);
+      if(!backup._meta){toast('Arquivo inválido — não é um backup do Mundana Gestão');return;}
+      let count=0;
+      Object.entries(backup).forEach(([k,v])=>{
+        if(k==='_meta')return;
+        DB.set(k,v);
+        count++;
+      });
+      toast(count+' módulos restaurados com sucesso');
+      renderNav();render();
+    }catch(err){toast('Erro ao importar: '+err.message);console.error(err);}
+  };
+  reader.readAsText(file);
+}
+
+async function forceLoadFromSupabase(){
+  if(!confirm('Isso vai buscar todos os dados do Supabase e sobrescrever o que está no navegador. Continuar?'))return;
+  toast('Buscando dados do Supabase...');
+  try{
+    // Force load all mapped tables regardless of local state
+    for(const[k,map] of Object.entries(TABLE_MAP)){
+      if(map.isJsonStore){
+        const rows=await sbFetch('app_data?key=eq.'+k+'&select=value');
+        if(rows&&Array.isArray(rows)&&rows[0]&&rows[0].value){
+          const v=rows[0].value;
+          if(Array.isArray(v)&&v.length>0){DB._mem[k]=v;try{localStorage.setItem('mundana_'+k,JSON.stringify(v));localStorage.setItem('mundana_bkp_'+k,JSON.stringify(v));}catch(e){}}
+        }
+      } else {
+        const rows=await sbFetch(map.table+'?select=*');
+        if(rows&&Array.isArray(rows)&&rows.length>0){
+          const data=map.fromRow?rows.map(map.fromRow):rows;
+          DB._mem[k]=data;try{localStorage.setItem('mundana_'+k,JSON.stringify(data));localStorage.setItem('mundana_bkp_'+k,JSON.stringify(data));}catch(e){}
+        }
+      }
+    }
+    // Load app_data entries
+    const appRows=await sbFetch('app_data?select=key,value');
+    if(appRows&&Array.isArray(appRows)){
+      appRows.forEach(r=>{
+        if(!TABLE_MAP[r.key]&&r.value){
+          DB._mem[r.key]=r.value;
+          try{localStorage.setItem('mundana_'+r.key,JSON.stringify(r.value));localStorage.setItem('mundana_bkp_'+r.key,JSON.stringify(r.value));}catch(e){}
+        }
+      });
+    }
+    renderNav();render();
+    toast('Restauração concluída — verifique seus dados');
+  }catch(e){toast('Erro ao buscar do Supabase: '+e.message);console.error(e);}
 }
 
 function renderEmpresaDados(){
