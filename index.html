@@ -1885,18 +1885,18 @@ function renderEmpresaBackup(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div class="card" style="border-left:3px solid var(--oliva)">
         <div class="card-body" style="padding:24px">
-          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--oliva)">${I.download} Exportar Backup</h3>
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--oliva);display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;flex-shrink:0">${I.download}</span> Exportar Backup</h3>
           <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">Gera um arquivo JSON com <strong>todos os dados do sistema</strong>: produtos, fórmulas, estoque, pedidos, fornecedores, financeiro, ideias, documentos, roteiros, lembretes, configurações — tudo.</p>
           <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Dados no sistema: <strong>${totalItems} registros</strong> em ${allKeys.length} módulos<br>Último backup: <strong>${lastBackup}</strong></p>
-          <button class="btn btn-primary" onclick="exportFullBackup()" style="width:100%">${I.download} Exportar JSON completo</button>
+          <button class="btn btn-primary" onclick="exportFullBackup()" style="width:100%"><span style="width:16px;height:16px;display:inline-flex">${I.download}</span> Exportar JSON completo</button>
         </div>
       </div>
       <div class="card" style="border-left:3px solid var(--lavanda)">
         <div class="card-body" style="padding:24px">
-          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--lavanda)">${I.archive} Importar Backup</h3>
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--lavanda);display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;flex-shrink:0">${I.archive}</span> Importar Backup</h3>
           <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">Restaura os dados a partir de um arquivo JSON exportado anteriormente. <strong>Sobrescreve todos os dados atuais</strong> — use com cuidado.</p>
           <p style="font-size:12px;color:var(--rosa-antigo);margin-bottom:16px">Atenção: esta ação substituirá todos os dados do sistema pelos dados do arquivo importado.</p>
-          <div class="photo-upload" onclick="document.getElementById('backupFileIn').click()" style="height:70px;margin-bottom:12px">${I.file}<span>Clique para selecionar o arquivo JSON</span><input type="file" id="backupFileIn" accept=".json" onchange="importFullBackup(event)" style="display:none"></div>
+          <div class="photo-upload" onclick="document.getElementById('backupFileIn').click()" style="height:70px;margin-bottom:12px"><span style="width:24px;height:24px;display:inline-flex">${I.file}</span><span>Clique para selecionar o arquivo JSON</span><input type="file" id="backupFileIn" accept=".json" onchange="importFullBackup(event)" style="display:none"></div>
         </div>
       </div>
     </div>
