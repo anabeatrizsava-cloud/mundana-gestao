@@ -2322,20 +2322,7 @@ function rPagar(){
   // Pad to complete last row
   while(calCells.length%7!==0)calCells.push(null);
   const selYm=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');
-  const calHTML=`<div id="pagCalDrop" onclick="event.stopPropagation()" style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);padding:14px;width:240px;box-shadow:0 4px 20px rgba(0,0,0,.15)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <button class="btn-icon" onclick="pagCalPrev();rPagar()" style="display:inline-flex">‹</button>
-      <span style="font-size:13px;font-weight:700">${MO[S._pagCalM]} ${S._pagCalY}</span>
-      <button class="btn-icon" onclick="pagCalNext();rPagar()" style="display:inline-flex">›</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;gap:1px">
-      ${['D','S','T','Q','Q','S','S'].map(x=>`<div style="font-size:10px;color:var(--text-muted);padding:2px 0;font-weight:600">${x}</div>`).join('')}
-      ${calCells.map(d=>{if(d===null)return'<div></div>';const ym=S._pagCalY+'-'+String(S._pagCalM+1).padStart(2,'0');const sel=S._pagMes===ym;return`<div style="font-size:11px;padding:5px 2px;border-radius:4px;cursor:pointer;color:${sel?'var(--carvao)':'var(--text-primary)'};background:${sel?'var(--rose-pale)':'transparent'};font-weight:${sel?'700':'400'}" onclick="S._pagMes='${ym}';S._pagCalOpen=false;rPagar()">${d}</div>`;}).join('')}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
-      ${[['today','Hoje'],['week','Esta semana'],['all','Todos os meses']].map(([v,l])=>`<button onclick="S._pagMes='${v}';S._pagCalOpen=false;rPagar()" style="font-size:12px;padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:${S._pagMes===v?'var(--carvao)':'var(--bg-warm)'};color:${S._pagMes===v?'#fff':'var(--text-primary)'};cursor:pointer;text-align:left">${l}</button>`).join('')}
-    </div>
-  </div>`;
+  // Calendar rendered via JS after innerHTML, not inside template string
 
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>A Pagar</h2><p>${items.length} lançamento${items.length!==1?'s':''}</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="exportPagarCSV()">${I.download} CSV</button><button class="btn btn-secondary btn-sm" onclick="managePagTypes()">${I.edit} Tipos</button><button class="btn btn-primary" onclick="openPagarModal()">${I.plus} Novo Lançamento</button></div></div>
@@ -2367,13 +2354,12 @@ function rPagar(){
       <div class="card" style="padding:14px 16px;cursor:pointer;${S.pagStatus==='pago'?'border-left:3px solid var(--musgo)':''}" onclick="S.pagStatus='pago';rPagar()"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;margin-bottom:4px">Pago</div><div style="font-size:18px;font-weight:800;color:var(--musgo)">${fmtR(paid)}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${baseItems.filter(i=>i.status==='pago').length} itens</div></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap" class="anim d3">
-      <div style="position:relative">
-        <button onclick="S._pagCalOpen=!S._pagCalOpen;rPagar()" style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-primary)">
+      <div style="position:relative" id="pagCalWrap">
+        <button id="pagCalBtn" onclick="togglePagCal()" style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-primary)">
           <span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700">Período:</span>
-          <span style="font-weight:600">${calLabel()}</span>
-          <span style="font-size:9px;color:var(--text-muted)">${S._pagCalOpen?'▲':'▼'}</span>
+          <span id="pagCalLabel" style="font-weight:600">${calLabel()}</span>
+          <span id="pagCalArrow" style="font-size:9px;color:var(--text-muted)">▼</span>
         </button>
-        ${S._pagCalOpen?calHTML:''}
       </div>
       <select class="form-select" style="font-size:12px;padding:7px 12px;min-width:unset;width:auto" onchange="S.pagTipo=this.value;rPagar()">
         <option value="all" ${S.pagTipo==='all'?'selected':''}>Tipo: todos</option>
@@ -2391,10 +2377,72 @@ function rPagar(){
       return `<tr style="${isVencido?'background:var(--rose-pale)':''}"><td><strong>${i.descricao}</strong></td><td>${i.fornecedor||'-'}</td><td><span class="badge badge-lavanda">${i.tipo||'-'}</span></td><td style="${isVencido?'color:var(--rosa-antigo);font-weight:600':''}">${fmtD(i.vencimento)}${isVencido?' <span style="font-size:10px">(vencido)</span>':''}</td><td><strong>${fmtR(i.valor)}</strong></td><td><span style="font-size:11px;color:var(--text-muted)">${detalhes}</span></td><td><span class="badge ${i.status==='pago'?'badge-oliva':isVencido?'badge-rose':'badge-oliva'}" style="cursor:pointer" onclick="togglePagar('${i.id}')">${i.status==='pago'?'Pago':isVencido?'Vencido':'Em dia'}</span></td><td style="text-align:right"><button class="btn-icon" onclick="openPagarModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPagar('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`;
     }).join('')}</tbody></table></div></div>`}`:''}`;
 
-  if(S._pagCalOpen){setTimeout(()=>{const close=(e)=>{if(!document.getElementById('pagCalDrop')||!document.getElementById('pagCalDrop').contains(e.target)){S._pagCalOpen=false;rPagar();document.removeEventListener('click',close);}};document.addEventListener('click',close);},50);}
+  // Render calendar dropdown after DOM is ready
+  setTimeout(()=>renderPagCalIfOpen(),0);
 }
-function pagCalPrev(){if(S._pagCalM===0){S._pagCalM=11;S._pagCalY--;}else{S._pagCalM--;}}
-function pagCalNext(){if(S._pagCalM===11){S._pagCalM=0;S._pagCalY++;}else{S._pagCalM++;}}
+function pagCalPrev(){if(S._pagCalM===0){S._pagCalM=11;S._pagCalY--;}else{S._pagCalM--;}renderPagCalIfOpen();}
+function pagCalNext(){if(S._pagCalM===11){S._pagCalM=0;S._pagCalY++;}else{S._pagCalM++;}renderPagCalIfOpen();}
+
+function togglePagCal(){
+  const existing=document.getElementById('pagCalDrop');
+  if(existing){existing.remove();return;}
+  renderPagCalIfOpen(true);
+}
+
+function renderPagCalIfOpen(forceOpen){
+  const wrap=document.getElementById('pagCalWrap');
+  if(!wrap)return;
+  let drop=document.getElementById('pagCalDrop');
+  if(!forceOpen&&!drop)return;
+  if(!drop){drop=document.createElement('div');drop.id='pagCalDrop';wrap.appendChild(drop);}
+  const m=S._pagCalM,y=S._pagCalY;
+  const first=new Date(y,m,1).getDay();
+  const dim=new Date(y,m+1,0).getDate();
+  const cells=[];
+  for(let i=0;i<first;i++)cells.push(null);
+  for(let i=1;i<=dim;i++)cells.push(i);
+  while(cells.length%7!==0)cells.push(null);
+  const ym=y+'-'+String(m+1).padStart(2,'0');
+  const calLabel=(v)=>{if(v==='all')return'Todos os meses';if(v==='today')return'Hoje';if(v==='week')return'Esta semana';const[yy,mm]=v.split('-');return(MO[parseInt(mm)-1]||'').slice(0,3)+'/'+yy;};
+  drop.style.cssText='position:absolute;top:calc(100% + 6px);left:0;z-index:9999;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);padding:14px;width:240px;box-shadow:0 8px 24px rgba(0,0,0,.18)';
+  drop.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <button class="btn-icon" onclick="event.stopPropagation();pagCalPrev()" style="display:inline-flex;padding:4px 8px">‹</button>
+      <span style="font-size:13px;font-weight:700">${MO[m]} ${y}</span>
+      <button class="btn-icon" onclick="event.stopPropagation();pagCalNext()" style="display:inline-flex;padding:4px 8px">›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;gap:2px;margin-bottom:4px">
+      ${['D','S','T','Q','Q','S','S'].map(x=>`<div style="font-size:10px;color:var(--text-muted);padding:2px 0;font-weight:600">${x}</div>`).join('')}
+      ${cells.map(d=>{
+        if(d===null)return'<div></div>';
+        const sel=S._pagMes===ym;
+        return`<div style="font-size:11px;padding:5px 2px;border-radius:4px;cursor:pointer;color:${sel?'var(--carvao)':'var(--text-primary)'};background:${sel?'var(--rose-pale)':'transparent'};font-weight:${sel?'700':'400'}" onclick="event.stopPropagation();S._pagMes='${ym}';document.getElementById('pagCalDrop').remove();updatePagLabel();rPagListOnly()">${d}</div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">
+      ${[['today','Hoje'],['week','Esta semana'],['all','Todos os meses']].map(([v,l])=>`<button onclick="event.stopPropagation();S._pagMes='${v}';document.getElementById('pagCalDrop').remove();updatePagLabel();rPagListOnly()" style="font-size:12px;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:${S._pagMes===v?'var(--carvao)':'var(--bg-warm)'};color:${S._pagMes===v?'#fff':'var(--text-primary)'};cursor:pointer;text-align:left">${l}</button>`).join('')}
+    </div>`;
+  // Close on outside click
+  setTimeout(()=>{
+    function _close(e){if(!document.getElementById('pagCalDrop')||!document.getElementById('pagCalDrop').contains(e.target)){const d=document.getElementById('pagCalDrop');if(d)d.remove();document.removeEventListener('click',_close);}}
+    document.addEventListener('click',_close);
+  },0);
+}
+
+function updatePagLabel(){
+  const el=document.getElementById('pagCalLabel');
+  if(!el)return;
+  const v=S._pagMes;
+  if(v==='all'){el.textContent='Todos os meses';}
+  else if(v==='today'){el.textContent='Hoje';}
+  else if(v==='week'){el.textContent='Esta semana';}
+  else{const[yy,mm]=v.split('-');el.textContent=(MO[parseInt(mm)-1]||'').slice(0,3)+'/'+yy;}
+}
+
+function rPagListOnly(){
+  // Re-render only the list area without rebuilding the full page
+  rPagar();
+}
 
 function exportPagarCSV(){
   const items=DB.get('pagar');
