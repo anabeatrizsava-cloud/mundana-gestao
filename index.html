@@ -603,11 +603,25 @@ async function sbFetch(path,opts={}){
 // ========== DB (localStorage cache + Supabase sync) ==========
 const DB={
   _mem:{},
-  get(k){try{const v=localStorage.getItem('mundana_'+k);if(v)return JSON.parse(v);return DB._mem[k]||[];}catch{return DB._mem[k]||[];}},
+  get(k){
+    try{
+      const v=localStorage.getItem('mundana_'+k);
+      if(v){const p=JSON.parse(v);if(p&&((Array.isArray(p)&&p.length>0)||!Array.isArray(p))){DB._mem[k]=p;return p;}}
+    }catch(e){}
+    if(DB._mem[k]&&((Array.isArray(DB._mem[k])&&DB._mem[k].length>0)||!Array.isArray(DB._mem[k])))return DB._mem[k];
+    // Fallback: try backup copy
+    try{const b=localStorage.getItem('mundana_bkp_'+k);if(b){const p=JSON.parse(b);if(p&&((Array.isArray(p)&&p.length>0)||!Array.isArray(p))){console.warn('Restored from backup:',k);DB._mem[k]=p;try{localStorage.setItem('mundana_'+k,b);}catch(e){}return p;}}}catch(e){}
+    return [];
+  },
   set(k,d){
     DB._mem[k]=d;
-    try{localStorage.setItem('mundana_'+k,JSON.stringify(d));}
-    catch(e){console.warn('localStorage full for',k,', using memory + Supabase');}
+    try{
+      localStorage.setItem('mundana_'+k,JSON.stringify(d));
+      // Keep backup of non-empty data
+      if(d&&((Array.isArray(d)&&d.length>0)||(!Array.isArray(d)&&typeof d==='object'&&Object.keys(d).length>0))){
+        localStorage.setItem('mundana_bkp_'+k,JSON.stringify(d));
+      }
+    }catch(e){console.warn('localStorage full for',k);}
     DB._syncToSupabase(k,d);
   },
   async _syncToSupabase(k,data){
@@ -615,27 +629,28 @@ const DB={
       const map=TABLE_MAP[k];
       if(map){
         if(map.isJsonStore){
-          // Store entire array as JSON in app_data
-          await sbFetch('app_data?key=eq.'+k,{method:'DELETE'});
-          await sbFetch('app_data',{method:'POST',body:{key:k,value:data}});
-        } else {
-          // Full table sync: delete all, then upsert
-          await sbFetch(map.table+'?id=neq.___never___',{method:'DELETE'});
-          if(data.length>0){
-            const rows=map.toRow?data.map(map.toRow):data;
-            await sbFetch(map.table,{method:'POST',body:rows});
+          // UPSERT: try update first, if no rows affected then insert
+          const res=await sbFetch('app_data?key=eq.'+k,{method:'PATCH',body:{value:data},headers:{'Prefer':'return=representation'}});
+          if(!res||!Array.isArray(res)||res.length===0){
+            await sbFetch('app_data',{method:'POST',body:{key:k,value:data}});
           }
+        } else {
+          // Full table sync: delete all, then insert — with rollback protection
+          if(!data||data.length===0)return; // Never delete if new data is empty
+          await sbFetch(map.table+'?id=neq.___never___',{method:'DELETE'});
+          const rows=map.toRow?data.map(map.toRow):data;
+          await sbFetch(map.table,{method:'POST',body:rows});
         }
       } else if(SIMPLE_ARRAY_TABLES.includes(k)){
-        // Name-only arrays stored in their table
+        if(!data||data.length===0)return; // Never delete if new data is empty
         await sbFetch(k+'?id=gt.0',{method:'DELETE'});
-        if(data.length>0){
-          await sbFetch(k,{method:'POST',body:data.map(n=>({name:n}))});
-        }
+        await sbFetch(k,{method:'POST',body:data.map(n=>({name:n}))});
       } else {
-        // Everything else goes to app_data as JSON
-        await sbFetch('app_data?key=eq.'+k,{method:'DELETE'});
-        await sbFetch('app_data',{method:'POST',body:{key:k,value:data}});
+        // Everything else goes to app_data as JSON — UPSERT
+        const res=await sbFetch('app_data?key=eq.'+k,{method:'PATCH',body:{value:data},headers:{'Prefer':'return=representation'}});
+        if(!res||!Array.isArray(res)||res.length===0){
+          await sbFetch('app_data',{method:'POST',body:{key:k,value:data}});
+        }
       }
     }catch(e){console.warn('Sync error:',k,e);}
   }
