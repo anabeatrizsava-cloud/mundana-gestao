@@ -3112,6 +3112,41 @@ function saveLembrete(id){
 }
 function delLembrete(id){if(!confirm('Excluir lembrete?'))return;DB.set('lembretes',DB.get('lembretes').filter(x=>x.id!==id));rModoDia();toast('Lembrete excluído');}
 
+let _mdWeekOffset=0,_mdSelDate=null;
+const _DOW_SHORT=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const _MO_SHORT=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function mdWeekNav(dir){_mdWeekOffset+=dir;_mdSelDate=null;const p=document.getElementById('mdDayPanel');if(p)p.style.display='none';mdWeekRender();}
+function mdWeekGetStart(){const today=new Date();const dow=(today.getDay()+6)%7;const mon=new Date(today);mon.setDate(today.getDate()-dow+_mdWeekOffset*7);mon.setHours(0,0,0,0);return mon;}
+function mdWeekBuildItems(){const items=[];const ts=localDateStr();DB.get('lembretes').filter(l=>l.text&&l.date>=ts&&(!l.repeat||l.repeat==='none')).forEach(l=>{items.push({date:l.date,text:l.text,tipo:l.priority==='urgente'?'urgente':l.priority==='atencao'?'atencao':'normal',cat:'Lembrete',id:l.id,isLembrete:true});});DB.get('pagar').filter(p=>p.status!=='pago'&&p.vencimento&&p.vencimento>=ts).forEach(p=>{items.push({date:p.vencimento,text:p.descricao,tipo:'pagar',cat:'A Pagar',val:fmtR(p.valor),id:p.id});});return items;}
+function mdWeekRender(){
+  const wrap=document.getElementById('mdWeekWrap');if(!wrap)return;
+  const ws=mdWeekGetStart();const we=new Date(ws);we.setDate(ws.getDate()+6);
+  const lbl=document.getElementById('mdWeekLabel');if(lbl)lbl.textContent=ws.getDate()+' '+_MO_SHORT[ws.getMonth()]+' – '+we.getDate()+' '+_MO_SHORT[we.getMonth()]+' '+we.getFullYear();
+  const grid=document.getElementById('mdWeekGrid');if(!grid)return;
+  const items=mdWeekBuildItems();const ts=localDateStr();
+  grid.innerHTML='';
+  for(let i=0;i<7;i++){
+    const d=new Date(ws);d.setDate(ws.getDate()+i);
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const di=items.filter(it=>it.date===ds);
+    const isT=ds===ts,isSel=ds===_mdSelDate;
+    const col=document.createElement('div');
+    col.style.cssText='flex:1;min-width:0;background:var(--card-bg);border:1px solid '+(isSel?'var(--lavanda)':isT?'var(--violeta-suave)':'var(--border)')+';border-radius:10px;padding:8px 6px;cursor:pointer';
+    const pc={urgente:'background:#FCEBEB;color:#791F1F',atencao:'background:#FAEEDA;color:#633806',pagar:'background:var(--oliva-pale);color:var(--oliva)',normal:'background:var(--bg-warm);color:var(--text-secondary)'};
+    col.innerHTML='<div style="text-align:center;margin-bottom:6px"><div style="font-size:10px;color:var(--text-muted)">'+_DOW_SHORT[d.getDay()]+'</div><div style="font-size:17px;font-weight:'+(isT?'700':'400')+';color:'+(isT?'var(--violeta-suave)':'var(--text-primary)')+'">'+d.getDate()+'</div>'+(isT?'<div style="width:20px;height:2px;background:var(--violeta-suave);border-radius:1px;margin:2px auto 0"></div>':'')+'</div>'+di.slice(0,2).map(it=>'<div style="font-size:10px;padding:3px 5px;border-radius:4px;'+( pc[it.tipo]||pc.normal)+';margin-bottom:3px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+it.text+'</div>').join('')+(di.length>2?'<div style="font-size:10px;color:var(--text-muted);text-align:center">+'+(di.length-2)+'</div>':'');
+    col.onclick=(()=>{const _ds=ds,_d=new Date(d),_di=di.slice();return()=>{_mdSelDate=_ds;mdWeekRender();mdDayPanel(_ds,_d,_di);}})();
+    grid.appendChild(col);
+  }
+}
+function mdDayPanel(ds,d,di){
+  const panel=document.getElementById('mdDayPanel');if(!panel)return;
+  const lbl=_DOW_SHORT[d.getDay()]+', '+d.getDate()+' de '+_MO_SHORT[d.getMonth()];
+  const dc={urgente:'#A32D2D',atencao:'#854F0B',pagar:'var(--oliva)',normal:'var(--text-muted)'};
+  panel.style.display='block';
+  if(!di.length){panel.innerHTML='<p style="font-size:13px;font-weight:600;margin:0 0 8px">'+lbl+'</p><p style="font-size:12px;color:var(--text-muted)">Nenhum item neste dia.</p>';return;}
+  panel.innerHTML='<p style="font-size:13px;font-weight:600;margin:0 0 12px;padding-bottom:10px;border-bottom:0.5px solid var(--border)">'+lbl+'</p>'+di.map(it=>'<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:0.5px solid var(--border)"><div style="width:7px;height:7px;border-radius:50%;background:'+(dc[it.tipo]||dc.normal)+';flex-shrink:0;margin-top:4px"></div><div style="flex:1"><div style="font-size:13px;color:var(--text-primary);line-height:1.3">'+it.text+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+it.cat+(it.val?' · '+it.val:'')+'</div></div>'+(it.isLembrete?'<button class="btn-icon" onclick="openLembreteModal(''+it.id+'')" style="display:inline-flex">'+I.edit+'</button>':'')+'</div>').join('');
+}
+
 function getModoDiaPending(){
   const tasks=getModoDiaTasks();
   const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
@@ -3127,21 +3162,7 @@ function toggleModoDiaTask(id){
   const fs=JSON.parse(localStorage.getItem('mundana_mododia_firstseen')||'{}');
   if(done.includes(id))delete fs[id];
   localStorage.setItem('mundana_mododia_firstseen',JSON.stringify(fs));
-  rModoDia();renderNav();syncModoDiaDoneToSB();
-}
-async function syncModoDiaDoneToSB(){
-  const todayStr=localDateStr();
-  const sbKey='mododia_done_'+todayStr;
-  const localDone=JSON.parse(localStorage.getItem('mundana_mododia_done_'+todayStr)||'[]');
-  try{
-    const res=await sbFetch('app_data?key=eq.'+sbKey,{method:'GET'});
-    let remote=(res&&res[0]&&res[0].value)?res[0].value:[];
-    if(typeof remote==='string')remote=JSON.parse(remote);
-    if(!Array.isArray(remote))remote=[];
-    localDone.forEach(id=>{if(!remote.includes(id))remote.push(id);});
-    const patchRes=await sbFetch('app_data?key=eq.'+sbKey,{method:'PATCH',body:{value:remote}});
-    if(!patchRes||!patchRes.length)await sbFetch('app_data',{method:'POST',body:{key:sbKey,value:remote}});
-  }catch(e){console.error('Sync done to SB:',e);}
+  rModoDia();renderNav();
 }
 function dismissModoDiaTask(id){
   const key='mundana_mododia_dismiss_'+localDateStr();
@@ -3157,21 +3178,11 @@ function undoDismiss(id){
   localStorage.setItem(key,JSON.stringify(dismissed));
   rModoDia();renderNav();toast('Tarefa restaurada');
 }
-async function rModoDia(){
+function rModoDia(){
+  _mdWeekOffset=0;_mdSelDate=null;
   // Mark as seen today
   localStorage.setItem('mundana_mododia_seen',localDateStr());
-// Sync done tasks from Mono
-try{
-  const sbKey='mododia_done_'+localDateStr();
-  const res=await sbFetch('app_data?key=eq.'+sbKey,{method:'GET'});
-  let remote=(res&&res[0]&&res[0].value)?res[0].value:[];
-  if(typeof remote==='string')remote=JSON.parse(remote);
-  if(Array.isArray(remote)){
-    const local=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
-    remote.forEach(id=>{if(!local.includes(id))local.push(id);});
-    localStorage.setItem('mundana_mododia_done_'+localDateStr(),JSON.stringify(local));
-  }
-}catch(e){}
+
   const tasks=getModoDiaTasks();
   const done=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
   const dismissed=JSON.parse(localStorage.getItem('mundana_mododia_dismiss_'+localDateStr())||'[]');
@@ -3266,12 +3277,25 @@ try{
 
     ${tasks.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.check}</div><h3>Dia tranquilo!</h3><p>Nenhuma pendência ou sugestão para hoje. Aproveite para criar conteúdo ou planejar o próximo lote.</p></div>`:''}
 
+    <div style="margin-top:28px;border-top:1px solid var(--border);padding-top:20px" class="anim d4" id="mdWeekWrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <p style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700" id="mdWeekLabel"></p>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-secondary" onclick="mdWeekNav(-1)" style="font-size:12px;padding:4px 10px">‹</button>
+          <button class="btn btn-sm btn-secondary" onclick="mdWeekNav(1)" style="font-size:12px;padding:4px 10px">›</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:12px" id="mdWeekGrid"></div>
+      <div id="mdDayPanel" style="display:none;background:var(--card-bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-top:8px"></div>
+    </div>
+
     ${dismissedTasks.length>0?`
     <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px" class="anim d4">
       <p style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin:0 0 8px;padding-left:34px">Dispensadas hoje (${dismissedTasks.length})</p>
       <div style="padding-left:34px">${dismissedTasks.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;opacity:0.4"><span style="font-size:12px;text-decoration:line-through">${t.text}</span><button class="btn btn-sm" onclick="undoDismiss('${t.id}')" style="font-size:10px;padding:2px 8px">Restaurar</button></div>`).join('')}</div>
     </div>`:''}
   `;
+  setTimeout(()=>mdWeekRender(),0);
 }
 
 // ========== LEADS QUIZ ==========
