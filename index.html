@@ -3162,7 +3162,25 @@ function toggleModoDiaTask(id){
   const fs=JSON.parse(localStorage.getItem('mundana_mododia_firstseen')||'{}');
   if(done.includes(id))delete fs[id];
   localStorage.setItem('mundana_mododia_firstseen',JSON.stringify(fs));
-  rModoDia();renderNav();
+  rModoDia();renderNav();syncModoDiaDoneToSB();
+}
+
+async function syncModoDiaDoneToSB(){
+  const todayStr=localDateStr();
+  const sbKey='mododia_done_'+todayStr;
+  const localDone=JSON.parse(localStorage.getItem('mundana_mododia_done_'+todayStr)||'[]');
+  try{
+    const res=await sbFetch('app_data?key=eq.'+sbKey,{method:'GET'});
+    let remote=(res&&res[0]&&res[0].value)?res[0].value:[];
+    if(typeof remote==='string')remote=JSON.parse(remote);
+    if(!Array.isArray(remote))remote=[];
+    localDone.forEach(id=>{if(!remote.includes(id))remote.push(id);});
+    const patchRes=await sbFetch('app_data?key=eq.'+sbKey,{method:'PATCH',body:{value:remote},headers:{'Prefer':'return=representation'}});
+    if(!patchRes||!patchRes.length){
+      await sbFetch('app_data',{method:'POST',body:{key:sbKey,value:remote}});
+    }
+    console.log('Mundana sync to SB: '+remote.length+' done tasks');
+  }catch(e){console.error('Sync done to SB:',e);}
 }
 function dismissModoDiaTask(id){
   const key='mundana_mododia_dismiss_'+localDateStr();
@@ -3178,7 +3196,20 @@ function undoDismiss(id){
   localStorage.setItem(key,JSON.stringify(dismissed));
   rModoDia();renderNav();toast('Tarefa restaurada');
 }
-function rModoDia(){
+async function rModoDia(){
+
+  // Sync done tasks from Mono (bidirectional)
+  try{
+    const sbKey='mododia_done_'+localDateStr();
+    const res=await sbFetch('app_data?key=eq.'+sbKey,{method:'GET'});
+    let remote=(res&&res[0]&&res[0].value)?res[0].value:[];
+    if(typeof remote==='string')remote=JSON.parse(remote);
+    if(Array.isArray(remote)){
+      const local=JSON.parse(localStorage.getItem('mundana_mododia_done_'+localDateStr())||'[]');
+      remote.forEach(id=>{if(!local.includes(id))local.push(id);});
+      localStorage.setItem('mundana_mododia_done_'+localDateStr(),JSON.stringify(local));
+    }
+  }catch(e){console.error('Mundana read SB done:',e);}
   _mdWeekOffset=0;_mdSelDate=null;
   // Mark as seen today
   localStorage.setItem('mundana_mododia_seen',localDateStr());
