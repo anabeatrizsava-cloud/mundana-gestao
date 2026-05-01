@@ -2951,7 +2951,7 @@ function getModoDiaTasks(){
     if(!l.text)return;
     const lDate=l.date||localDateStr();
     // Show if: date is today or past, OR repeat rule matches
-    let show=lDate<=todayStr;
+    let show=lDate===todayStr;
     if(l.repeat==='daily')show=true;
     if(l.repeat==='weekly'){const d=new Date(lDate+'T12:00:00');show=d.getDay()===now.getDay();}
     if(l.repeat==='monthly'){const d=new Date(lDate+'T12:00:00');show=d.getDate()===now.getDate();}
@@ -3232,15 +3232,21 @@ function rModoDia(){
     </div>`;
   }
 
+  if(!S._mdTab)S._mdTab='hoje';
   let taskIdx=0;
   document.getElementById('content').innerHTML=`
     <div class="page-header anim"><div class="page-header-left"><h2>${greeting}, Ana</h2><p>${dateStr}</p></div><div class="page-header-actions">
       ${pending===0&&total>0?'<span style="background:var(--oliva-pale);color:var(--oliva);font-size:12px;padding:6px 14px;border-radius:20px;font-weight:600">Tudo em dia ✓</span>':''}
       ${urgentes.length>0?'<span style="background:var(--rose-pale);color:var(--rosa-antigo);font-size:11px;padding:4px 12px;border-radius:20px;font-weight:600">'+urgentes.length+' urgente'+(urgentes.length>1?'s':'')+'</span>':''}
-      ${sugestoes.length>0?'<span style="background:var(--lavanda-pale);color:var(--lavanda);font-size:11px;padding:4px 12px;border-radius:20px;font-weight:600">'+sugestoes.length+' sugestão'+(sugestoes.length>1?'ões':'')+'</span>':''}
       <button class="btn btn-primary btn-sm" onclick="openLembreteModal()">${I.plus} Lembrete</button>
     </div></div>
 
+    <div style="display:flex;gap:0;border-bottom:1.5px solid var(--border);margin-bottom:20px" class="anim d1">
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${S._mdTab==='hoje'?'700':'500'};color:${S._mdTab==='hoje'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${S._mdTab==='hoje'?'var(--rosa-antigo)':'transparent'}" onclick="S._mdTab='hoje';rModoDia()">Hoje ${pending>0?'<span style=\"background:var(--rose-pale);color:var(--rosa-antigo);font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700;margin-left:4px\">'+pending+'</span>':''}</div>
+      <div style="padding:9px 18px;font-size:13px;cursor:pointer;font-weight:${S._mdTab==='agenda'?'700':'500'};color:${S._mdTab==='agenda'?'var(--rosa-antigo)':'var(--text-muted)'};border-bottom:2px solid ${S._mdTab==='agenda'?'var(--rosa-antigo)':'transparent'}" onclick="S._mdTab='agenda';rModoDia()">Agenda</div>
+    </div>
+
+    ${S._mdTab==='hoje'?`
     <div style="display:flex;gap:4px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:6px" class="anim d1">
       <div style="flex:${completed||0.01};background:var(--oliva);border-radius:4px;transition:flex 0.5s"></div>
       <div style="flex:${pending||0.01};background:var(--border);border-radius:4px;transition:flex 0.5s"></div>
@@ -3261,6 +3267,13 @@ function rModoDia(){
       ${hoje.map(t=>renderTask(t,++taskIdx)).join('')}
     </div>`:''}
 
+    ${sugestoes.length>0?`
+    <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--lavanda);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d3">Sugestões inteligentes</p>
+    <div style="position:relative;padding-left:34px;margin-bottom:24px" class="anim d4">
+      <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--lavanda);opacity:0.2;border-radius:1px;border-style:dashed"></div>
+      ${sugestoes.map(t=>renderTask(t,++taskIdx)).join('')}
+    </div>`:''}
+
     ${done.length>0&&activeTasks.filter(t=>done.includes(t.id)).length>0?`
     <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--oliva);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d3">Concluídas</p>
     <div style="position:relative;padding-left:34px;margin-bottom:24px" class="anim d3">
@@ -3268,16 +3281,17 @@ function rModoDia(){
       ${activeTasks.filter(t=>done.includes(t.id)).map(t=>renderTask(t,++taskIdx)).join('')}
     </div>`:''}
 
-    ${sugestoes.length>0?`
-    <p style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--lavanda);font-weight:700;margin:0 0 12px;padding-left:34px" class="anim d3">Sugestões inteligentes</p>
-    <div style="position:relative;padding-left:34px" class="anim d4">
-      <div style="position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--lavanda);opacity:0.2;border-radius:1px;border-style:dashed"></div>
-      ${sugestoes.map(t=>renderTask(t,++taskIdx)).join('')}
+    ${tasks.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.check}</div><h3>Dia tranquilo!</h3><p>Nenhuma pendência ou sugestão para hoje.</p></div>`:''}
+
+    ${dismissedTasks.length>0?`
+    <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px" class="anim d4">
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin:0 0 8px;padding-left:34px">Dispensadas hoje (${dismissedTasks.length})</p>
+      <div style="padding-left:34px">${dismissedTasks.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;opacity:0.4"><span style="font-size:12px;text-decoration:line-through">${t.text}</span><button class="btn btn-sm" onclick="undoDismiss('${t.id}')" style="font-size:10px;padding:2px 8px">Restaurar</button></div>`).join('')}</div>
     </div>`:''}
+    `:''}
 
-    ${tasks.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.check}</div><h3>Dia tranquilo!</h3><p>Nenhuma pendência ou sugestão para hoje. Aproveite para criar conteúdo ou planejar o próximo lote.</p></div>`:''}
-
-    <div style="margin-top:28px;border-top:1px solid var(--border);padding-top:20px" class="anim d4" id="mdWeekWrap">
+    ${S._mdTab==='agenda'?`
+    <div id="mdWeekWrap" class="anim d1">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <p style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700" id="mdWeekLabel"></p>
         <div style="display:flex;gap:6px">
@@ -3288,14 +3302,9 @@ function rModoDia(){
       <div style="display:flex;gap:6px;margin-bottom:12px" id="mdWeekGrid"></div>
       <div id="mdDayPanel" style="display:none;background:var(--card-bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-top:8px"></div>
     </div>
-
-    ${dismissedTasks.length>0?`
-    <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px" class="anim d4">
-      <p style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin:0 0 8px;padding-left:34px">Dispensadas hoje (${dismissedTasks.length})</p>
-      <div style="padding-left:34px">${dismissedTasks.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;opacity:0.4"><span style="font-size:12px;text-decoration:line-through">${t.text}</span><button class="btn btn-sm" onclick="undoDismiss('${t.id}')" style="font-size:10px;padding:2px 8px">Restaurar</button></div>`).join('')}</div>
-    </div>`:''}
+    `:''}
   `;
-  setTimeout(()=>mdWeekRender(),0);
+  if(S._mdTab==='agenda')setTimeout(()=>mdWeekRender(),0);
 }
 
 // ========== LEADS QUIZ ==========
