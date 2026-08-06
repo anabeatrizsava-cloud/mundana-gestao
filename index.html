@@ -582,6 +582,7 @@ const TABLE_MAP={
   mp_price_hist:{table:'mp_price_hist',cols:['id','name'],isJsonStore:true},
   price_history:{table:'price_history',cols:['id','name'],isJsonStore:true},
   roteiros:{table:'roteiros',cols:['id','name'],isJsonStore:true},
+  planejamento:{table:'planejamento',cols:['id','name'],isJsonStore:true},
 };
 
 // Simple tables that store as name-only arrays
@@ -789,6 +790,7 @@ const NAV=[
   { module:'Criação', icon:'bulb', items:[
     {id:'ideias',label:'Banco de Ideias',icon:'bulb'},
     {id:'docs',label:'Documentos',icon:'file'},
+    {id:'planejamento',label:'Planejamento',icon:'calCheck'},
   ]},
   { module:'Vendas', icon:'cart', items:[
     {id:'pedidos',label:'Pedidos',icon:'cart'},
@@ -815,7 +817,7 @@ function renderNav(){
 
 function go(p){S.page=p;S.prodFId=null;S.alertOpen=false;renderNav();render();}
 function render(){
-  const fn={mododia:rModoDia,dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,pedidos:rPedidos,leads:rLeads};
+  const fn={mododia:rModoDia,dashboard:rDash,products:rProds,formulas:rForms,production:rProd,stockmp:rStockMP,pricing:rPricing,suppliers:rSuppliers,empresa:rEmpresa,receber:rReceber,pagar:rPagar,calpag:rCalPag,ideias:rIdeias,docs:rDocs,roteiros:rRoteiros,planejamento:rPlanejamento,pedidos:rPedidos,leads:rLeads};
   (fn[S.page]||rDash)();
   renderTopBar();
   // Update tab title with pending count
@@ -2812,7 +2814,49 @@ function openDocFolderModal(){
 function addDocFolder(){const n=document.getElementById('ndfN').value;if(!n)return;const f=DB.get('doc_folders');f.push({id:uid(),name:n});DB.set('doc_folders',f);openDocFolderModal();toast('Pasta criada');}
 function updDocFolder(id,n){const f=DB.get('doc_folders'),x=f.find(v=>v.id===id);if(x)x.name=n;DB.set('doc_folders',f);}
 function delDocFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('doc_folders',DB.get('doc_folders').filter(f=>f.id!==id));const items=DB.get('mydocs');items.forEach(x=>{if(x.folder===id)x.folder='';});DB.set('mydocs',items);openDocFolderModal();toast('Pasta excluída');}
+// ========== PLANEJAMENTO ==========
+function rPlanejamento(){
+  const items=DB.get('planejamento');
+  document.getElementById('content').innerHTML=`
+    <div class="page-header anim"><div class="page-header-left"><h2>Planejamento</h2><p>${items.length} item${items.length!==1?'s':''} no calendário</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="exportPlanCSV()">${I.download} CSV</button><button class="btn btn-primary" onclick="openPlanModal()">${I.plus} Novo Item</button></div></div>
+    ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.calCheck}</div><h3>Nenhum item de planejamento</h3><p>Adicione o primeiro mês do seu calendário</p><button class="btn btn-primary" onclick="openPlanModal()">${I.plus} Novo Item</button></div>`:`
+    <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Mês</th><th>Data-chave</th><th>Ações de site/catálogo</th><th>Conteúdo/tráfego pago</th><th>Lançamento</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.mes}</strong></td><td style="white-space:pre-wrap;font-size:12px">${i.dataChave||'-'}</td><td style="white-space:pre-wrap;font-size:12px;max-width:220px">${i.acoesSite||'-'}</td><td style="white-space:pre-wrap;font-size:12px;max-width:280px">${i.conteudoTrafego||'-'}</td><td style="white-space:pre-wrap;font-size:12px">${i.lancamento||'-'}</td><td style="text-align:right"><button class="btn-icon" onclick="openPlanModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPlan('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+}
 
+function openPlanModal(id){
+  const items=DB.get('planejamento');
+  const p=id?items.find(x=>x.id===id):{id:'',mes:'',dataChave:'',acoesSite:'',conteudoTrafego:'',lancamento:'',ordem:items.length+1};
+  openModal(id?'Editar Item do Planejamento':'Novo Item do Planejamento',`
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Mês</label><input class="form-input" id="planMes" value="${p.mes}" placeholder="Ex: Setembro"></div>
+      <div class="form-group"><label class="form-label">Ordem</label><input class="form-input" id="planOrdem" type="number" value="${p.ordem||items.length+1}" style="max-width:120px"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Data-chave</label><textarea class="form-textarea" id="planData" rows="2" placeholder="Ex: 15/09 — Dia do Cliente">${p.dataChave||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Ações de site/catálogo</label><textarea class="form-textarea" id="planSite" rows="3">${p.acoesSite||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Conteúdo/tráfego pago</label><textarea class="form-textarea" id="planTrafego" rows="3">${p.conteudoTrafego||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Lançamento</label><input class="form-input" id="planLanc" value="${p.lancamento||''}" placeholder="Ex: Caramel Nut (lançamento oficial)"></div>
+  `,`${id?`<button class="btn btn-ghost" style="color:var(--rosa-antigo)" onclick="delPlan('${p.id}');closeModal()">Excluir</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePlan('${p.id||''}')">Salvar</button>`);
+}
+
+function savePlan(id){
+  const items=DB.get('planejamento');
+  const d={id:id||uid(),mes:document.getElementById('planMes').value,dataChave:document.getElementById('planData').value,acoesSite:document.getElementById('planSite').value,conteudoTrafego:document.getElementById('planTrafego').value,lancamento:document.getElementById('planLanc').value,ordem:parseInt(document.getElementById('planOrdem').value)||items.length+1};
+  if(!d.mes){toast('Preencha o mês');return;}
+  if(id){const i=items.findIndex(x=>x.id===id);if(i>=0)items[i]=d;}else items.push(d);
+  items.sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+  DB.set('planejamento',items);closeModal();rPlanejamento();toast(id?'Item atualizado':'Item cadastrado');
+}
+function delPlan(id){if(!confirm('Excluir este item?'))return;DB.set('planejamento',DB.get('planejamento').filter(x=>x.id!==id));rPlanejamento();toast('Item excluído');}
+function exportPlanCSV(){
+  const items=DB.get('planejamento');
+  const header='Mês;Data-chave;Ações de site/catálogo;Conteúdo/tráfego pago;Lançamento';
+  const rows=items.map(i=>`"${i.mes||''}";"${(i.dataChave||'').replace(/\n/g,' / ')}";"${(i.acoesSite||'').replace(/\n/g,' / ')}";"${(i.conteudoTrafego||'').replace(/\n/g,' / ')}";"${i.lancamento||''}"`);
+  const csv='\uFEFF'+header+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='mundana_planejamento_'+localDateStr()+'.csv';a.click();URL.revokeObjectURL(url);
+  toast('CSV exportado');
+}
 // ========== ROTEIROS DE ATENDIMENTO ==========
 function getRotFases(){return DB.get('rot_fases').length?DB.get('rot_fases'):['1º Contato','Follow-up','Fechamento'];}
 function getRotTipos(){return DB.get('rot_tipos').length?DB.get('rot_tipos'):['Follow-up','Venda'];}
