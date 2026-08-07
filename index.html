@@ -2818,7 +2818,7 @@ function delDocFolder(id){if(!confirm('Excluir pasta?'))return;DB.set('doc_folde
 function rPlanejamento(){
   const items=DB.get('planejamento');
   document.getElementById('content').innerHTML=`
-    <div class="page-header anim"><div class="page-header-left"><h2>Planejamento</h2><p>${items.length} item${items.length!==1?'s':''} no calendário</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="exportPlanCSV()">${I.download} CSV</button><button class="btn btn-primary" onclick="openPlanModal()">${I.plus} Novo Item</button></div></div>
+   <div class="page-header anim"><div class="page-header-left"><h2>Planejamento</h2><p>${items.length} item${items.length!==1?'s':''} no calendário</p></div><div class="page-header-actions"><button class="btn btn-secondary btn-sm" onclick="exportPlanCSV()">${I.download} CSV</button><button class="btn btn-secondary btn-sm" onclick="exportPlanPDF()">${I.file} PDF</button><button class="btn btn-primary" onclick="openPlanModal()">${I.plus} Novo Item</button></div></div> 
     ${items.length===0?`<div class="empty-state anim d1"><div class="empty-icon">${I.calCheck}</div><h3>Nenhum item de planejamento</h3><p>Adicione o primeiro mês do seu calendário</p><button class="btn btn-primary" onclick="openPlanModal()">${I.plus} Novo Item</button></div>`:`
     <div class="card anim d1"><div class="table-wrapper"><table><thead><tr><th>Mês</th><th>Data-chave</th><th>Ações de site/catálogo</th><th>Conteúdo/tráfego pago</th><th>Lançamento</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${i.mes}</strong></td><td style="white-space:pre-wrap;font-size:12px">${i.dataChave||'-'}</td><td style="white-space:pre-wrap;font-size:12px;max-width:220px">${i.acoesSite||'-'}</td><td style="white-space:pre-wrap;font-size:12px;max-width:280px">${i.conteudoTrafego||'-'}</td><td style="white-space:pre-wrap;font-size:12px">${i.lancamento||'-'}</td><td style="text-align:right"><button class="btn-icon" onclick="openPlanModal('${i.id}')" style="display:inline-flex">${I.edit}</button><button class="btn-icon" onclick="delPlan('${i.id}')" style="display:inline-flex;margin-left:4px">${I.trash}</button></td></tr>`).join('')}</tbody></table></div></div>`}`;
 }
@@ -2856,6 +2856,32 @@ function exportPlanCSV(){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='mundana_planejamento_'+localDateStr()+'.csv';a.click();URL.revokeObjectURL(url);
   toast('CSV exportado');
+}
+function exportPlanPDF(){
+  const items=DB.get('planejamento');
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Planejamento Mundana</title><style>
+    @page{size:A4 landscape;margin:14mm}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Montserrat',Arial,sans-serif;color:#383A37}
+    .header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #B17A7F;padding-bottom:12px;margin-bottom:20px}
+    .brand{font-family:Georgia,serif;font-size:26px;font-weight:600;color:#B17A7F;letter-spacing:1px}
+    .title{text-align:right}
+    .title h1{font-size:14px;font-weight:700;margin:0 0 2px;text-transform:uppercase;letter-spacing:1px}
+    .title p{font-size:11px;color:#8a8580;margin:0}
+    table{width:100%;border-collapse:collapse;font-size:10.5px}
+    thead th{background:#B17A7F;color:#fff;text-align:left;padding:8px 10px;font-size:9.5px;text-transform:uppercase;letter-spacing:0.5px}
+    tbody td{padding:10px;border-bottom:1px solid #ECE4D9;vertical-align:top;line-height:1.5;white-space:pre-wrap}
+    tbody tr:nth-child(even){background:#FAF6F1}
+    td.mes{font-weight:700;color:#B17A7F;white-space:nowrap}
+    .footer{margin-top:18px;display:flex;justify-content:space-between;font-size:9px;color:#9a9490;border-top:1px solid #ECE4D9;padding-top:8px}
+  </style></head><body>
+  <div class="header"><div class="brand">mundana</div><div class="title"><h1>Planejamento — ${items[0]?items[0].mes:''} a ${items[items.length-1]?items[items.length-1].mes:''}</h1><p>Documento para alinhamento de tráfego pago</p></div></div>
+  <table><thead><tr><th style="width:8%">Mês</th><th style="width:14%">Data-chave</th><th style="width:24%">Ações de site/catálogo</th><th style="width:38%">Conteúdo/tráfego pago</th><th style="width:16%">Lançamento</th></tr></thead>
+  <tbody>${items.map(i=>`<tr><td class="mes">${i.mes||''}</td><td>${i.dataChave||'-'}</td><td>${i.acoesSite||'-'}</td><td>${i.conteudoTrafego||'-'}</td><td>${i.lancamento||'-'}</td></tr>`).join('')}</tbody></table>
+  <div class="footer"><span>Mundana · Sistema de Gestão</span><span>Gerado em ${new Date().toLocaleDateString('pt-BR')}</span></div>
+  <script>setTimeout(()=>window.print(),500)<\/script></body></html>`);
+  w.document.close();
 }
 // ========== ROTEIROS DE ATENDIMENTO ==========
 function getRotFases(){return DB.get('rot_fases').length?DB.get('rot_fases'):['1º Contato','Follow-up','Fechamento'];}
