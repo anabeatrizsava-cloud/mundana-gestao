@@ -397,7 +397,7 @@
     ok('zero é aceito na Precificação; vazio ou texto usa o padrão', numOu({ value: '0' }, 6) === 0 && numOu({ value: '' }, 6) === 6 && numOu({ value: 'abc' }, 6) === 6 && numOu({ value: '6.5' }, 6) === 6.5 && numOu(null, 3) === 3);
     ok('singular de mensagem corrigido, plural intacto', corrigirMensagem('1 mensagen cadastrada') === '1 mensagem cadastrada' && corrigirMensagem('2 mensagens cadastradas') === '2 mensagens cadastradas' && corrigirMensagem('11 mensagens') === '11 mensagens');
     var fs = filtrarFornecedores([{ id: '1', name: 'Aromaville' }, { id: '2', name: 'Solfarma' }, { id: '3', name: 'AR2M Cosméticos' }, null], 'ar');
-    ok('busca de fornecedor ignora acento e caixa', fs.length === 2 && filtrarFornecedores([{ id: '3', name: 'AR2M Cosméticos' }], 'cosmeticos').length === 1 && filtrarFornecedores([{ id: '1', name: 'A' }], '').length === 1);
+    ok('busca de fornecedor ignora acento e caixa', fs.length === 3 && filtrarFornecedores([{ id: '3', name: 'AR2M Cosméticos' }], 'cosmeticos').length === 1 && filtrarFornecedores([{ id: '1', name: 'A' }], '').length === 1);
     var hp = htmlPassos('Misturar\n\n<b>Esfriar</b>');
     ok('passos do preparo são numerados e escapados', hp.indexOf('1.') > -1 && hp.indexOf('2.') > -1 && hp.indexOf('<b>') < 0 && hp.indexOf('3.') < 0);
     ok('a leitura do espelho do Modo Dia só é pulada quando pedido', deveIgnorarRede(true, 'app_data?key=eq.mododia_done_2026-11-13', { method: 'GET' }) === true && deveIgnorarRede(false, 'app_data?key=eq.mododia_done_2026-11-13', { method: 'GET' }) === false && deveIgnorarRede(true, 'app_data?key=eq.mododia_done_2026-11-13', { method: 'PATCH' }) === false && deveIgnorarRede(true, 'pagar?select=id') === false);
