@@ -792,7 +792,7 @@
   /* --- render --- */
   function rQuadros() {
     carregar();
-    if (gerarRotinas(Q, hojeISO()) > 0) salvar();
+    if (gerarRotinas(Q, hojeISO()) + avaliarParados(Q, hojeISO()) > 0) salvar();
     var el = $('content'); if (!el) return;
     el.innerHTML = '<div id="qd-root"><div id="qd-head"></div><div class="qd-boards" id="qd-boards"></div><div class="qd-tools" id="qd-tools"></div><div id="qd-corpo"></div></div>';
     renderTudo();
@@ -3083,6 +3083,623 @@
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
 
+  /* ---------------- Fase 4: automações combinadas (parado há N dias, arquivar, alerta) e datas nos subitens ---------------- */
+  var acoesPend = [];
+
+  function herdarMarcas(novo, antigo) {
+    if (antigo) { Object.keys(antigo).forEach(function (k) { if (k.charAt(0) === '_') novo[k] = antigo[k]; }); }
+    return novo;
+  }
+  function textoDias(n) { return n + (n === 1 ? ' dia' : ' dias'); }
+
+  /* regras antigas (quando/acao) são lidas como o formato novo (gatilho/acoes) */
+  function migrarRegra(r) {
+    if (r && !r.gatilho && r.quando) r.gatilho = { tipo: 'virar', opcaoId: r.quando.opcaoId };
+    if (r && !r.acoes && r.acao) r.acoes = [r.acao];
+    return r;
+  }
+  function condicaoOk(q, it, c) {
+    if (!c || !c.colId) return true;
+    var col = colunaPorId(q, c.colId);
+    if (!col) return true;
+    var v = it.valores[col.id];
+    return v !== undefined && String(v) === String(c.valor);
+  }
+  function arquivarItemAuto(est, it, hoje) {
+    try { if (typeof arquivarItem === 'function') arquivarItem(est, it.id); } catch (e) { /* segue com a marca direta */ }
+    if (!it.arquivado) it.arquivado = true;
+    if (!it.arquivadoEm) it.arquivadoEm = new Date().toISOString();
+    it._arqAuto = hoje;
+    return true;
+  }
+
+  function executarAcao(est, q, g, it, a, hoje) {
+    var dest = null, col = null;
+    if (a.tipo === 'alerta') return false;
+    if (a.tipo === 'arquivar') { if (it.arquivado) return false; return arquivarItemAuto(est, it, hoje); }
+    if (a.tipo === 'mover') {
+      q.grupos.forEach(function (x) { if (x.id === a.grupoId && !x.arquivado) dest = x; });
+      if (!dest || dest.id === g.id) return false;
+      return !!moverItem(est, it.id, dest.id, null);
+    }
+    if (a.tipo === 'definir') {
+      col = colunaPorId(q, a.colId);
+      if (!col || !opcaoPorId(col, a.opcaoId) || it.valores[col.id] === a.opcaoId) return false;
+      it.valores[col.id] = a.opcaoId; return true;
+    }
+    if (a.tipo === 'atribuir') {
+      col = colPessoaDe(q);
+      if (!col || !a.pessoa) return false;
+      it.valores[col.id] = a.pessoa;
+      if (q.pessoas.indexOf(a.pessoa) < 0) q.pessoas.push(a.pessoa);
+      return true;
+    }
+    if (a.tipo === 'data') {
+      col = colunaPorId(q, a.colId);
+      if (!col || col.tipo !== 'data') return false;
+      it.valores[col.id] = hoje; return true;
+    }
+    if (a.tipo === 'criar') {
+      q.grupos.forEach(function (x) { if (x.id === a.grupoId && !x.arquivado) dest = x; });
+      var titulo = String(a.titulo || '').replace(/\{nome\}/g, it.nome).trim();
+      if (!dest || !titulo) return false;
+      var novo = criarItem(est, q, dest, titulo);
+      var cp = colPessoaDe(q);
+      if (a.copiarResp && cp && it.valores[cp.id]) novo.valores[cp.id] = it.valores[cp.id];
+      var cs2 = colStatusDe(q);
+      novo._ult = (cs2 && novo.valores[cs2.id] !== undefined) ? novo.valores[cs2.id] : null;
+      novo._desde = hoje;
+      return true;
+    }
+    return false;
+  }
+
+  /* roda quando o status de um item muda (gatilho "virar") e guarda desde quando o item está no status */
+  function aplicarAutomacoes(est, hoje) {
+    var n = 0;
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado) return;
+      var cs = colStatusDe(q); if (!cs) return;
+      var regras = (q.automacoes || []).map(migrarRegra).filter(function (r) { return r.ativa && r.gatilho && r.acoes && r.acoes.length; });
+      q.grupos.forEach(function (g) {
+        g.itens.slice().forEach(function (it) {
+          if (it.arquivado) return;
+          var atual = it.valores[cs.id];
+          if (it._desde === undefined) it._desde = hoje;
+          if (it._ult === undefined || (it._ult !== null && !opcaoPorId(cs, it._ult))) { it._ult = atual === undefined ? null : atual; it._desde = hoje; return; }
+          var anterior = it._ult === null ? undefined : it._ult;
+          if (atual === anterior) return;
+          it._desde = hoje;
+          regras.forEach(function (r) {
+            if (r.gatilho.tipo !== 'virar' || r.gatilho.opcaoId !== atual) return;
+            if (!condicaoOk(q, it, r.condicao)) return;
+            r.acoes.forEach(function (a) { if (executarAcao(est, q, g, it, a, hoje)) n++; });
+          });
+          var depois = it.valores[cs.id];
+          if (depois !== atual) it._desde = hoje;
+          it._ult = depois === undefined ? null : depois;
+          var op = opcaoPorId(cs, depois);
+          if (op && op.final) { if (!it._conclEm) it._conclEm = hoje; } else { delete it._conclEm; }
+        });
+      });
+    });
+    return n;
+  }
+
+  /* gatilho "parado há N dias": roda ao abrir o sistema, o Modo Dia, o Dashboard e os Quadros */
+  function avaliarParados(est, hoje) {
+    var n = 0;
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado) return;
+      var cs = colStatusDe(q); if (!cs) return;
+      var regras = (q.automacoes || []).map(migrarRegra).filter(function (r) {
+        return r.ativa && r.gatilho && r.gatilho.tipo === 'parado' && (r.acoes || []).some(function (a) { return a.tipo !== 'alerta'; });
+      });
+      q.grupos.forEach(function (g) {
+        g.itens.slice().forEach(function (it) {
+          if (it.arquivado) return;
+          if (!it._desde) { it._desde = hoje; n++; return; }
+          if (!regras.length) return;
+          var atual = it.valores[cs.id];
+          regras.forEach(function (r) {
+            if (it.arquivado || r.gatilho.opcaoId !== atual) return;
+            if (diasEntre(it._desde, hoje) < (r.gatilho.dias || 0)) return;
+            if (!condicaoOk(q, it, r.condicao)) return;
+            if (!it._aut) it._aut = {};
+            if (it._aut[r.id] === it._desde) return;
+            r.acoes.forEach(function (a) { if (executarAcao(est, q, g, it, a, hoje)) n++; });
+            it._aut[r.id] = it._desde;
+            n++;
+          });
+        });
+      });
+    });
+    return n;
+  }
+
+  function gerarNoBanco(forcar) {
+    if (pendente) return;
+    if (!forcar && Date.now() - ultimaGer < 30000) return;
+    ultimaGer = Date.now();
+    var d = null;
+    try { d = DB.get(CHAVE); } catch (e) { d = null; }
+    if (!d || Array.isArray(d) || !Array.isArray(d.quadros)) return;
+    var hoje = hojeISO();
+    var n = gerarRotinas(d, hoje) + avaliarParados(d, hoje);
+    if (n > 0) {
+      try { DB.set(CHAVE, { versao: 1, atual: d.atual || null, quadros: d.quadros }); } catch (e) { console.error('quadros: rotinas', e); }
+    }
+  }
+
+  /* alertas no Modo Dia: aparecem enquanto o item estiver no status (e, no gatilho "parado", depois dos dias combinados) */
+  function tarefasAlertas(est, hoje) {
+    var tasks = [];
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado) return;
+      var cs = colStatusDe(q); if (!cs) return;
+      (q.automacoes || []).map(migrarRegra).forEach(function (r) {
+        if (!r.ativa || !r.gatilho) return;
+        var alertas = (r.acoes || []).filter(function (a) { return a.tipo === 'alerta'; });
+        if (!alertas.length) return;
+        q.grupos.forEach(function (g) {
+          if (g.arquivado) return;
+          g.itens.forEach(function (it) {
+            if (it.arquivado || it.valores[cs.id] !== r.gatilho.opcaoId) return;
+            var dias = it._desde ? diasEntre(it._desde, hoje) : 0;
+            if (r.gatilho.tipo === 'parado' && (!it._desde || dias < (r.gatilho.dias || 0))) return;
+            if (!condicaoOk(q, it, r.condicao)) return;
+            var op = opcaoPorId(cs, r.gatilho.opcaoId);
+            alertas.forEach(function (a, i) {
+              var texto = (a.texto || '{nome} está em \u201C{status}\u201D há {dias}')
+                .replace(/\{nome\}/g, it.nome).replace(/\{status\}/g, op ? op.nome : '').replace(/\{dias\}/g, textoDias(dias));
+              tasks.push({
+                priority: a.urgente ? 1 : 2, type: a.urgente ? 'urgente' : 'hoje', cat: 'Quadros', catColor: 'purple',
+                text: texto, sub: q.nome + ' \u00B7 ' + g.nome,
+                action: "QuadrosAbrirItem('" + q.id + "','" + it.id + "')", btnLabel: 'Abrir item',
+                id: 'qa_' + it.id + '_' + r.id + '_' + i
+              });
+            });
+          });
+        });
+      });
+    });
+    return tasks;
+  }
+
+  /* subitens com data no Modo Dia e na Agenda */
+  function tarefasSubitens(est, hoje) {
+    var tasks = [];
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado) return;
+      q.grupos.forEach(function (g) {
+        if (g.arquivado) return;
+        g.itens.forEach(function (it) {
+          if (it.arquivado) return;
+          var paiFeito = statusFinal(q, it);
+          (it.subitens || []).forEach(function (s) {
+            if (!s.data) return;
+            var base = { cat: 'Quadros', catColor: 'purple', text: s.nome, action: "QuadrosAbrirItem('" + q.id + "','" + it.id + "')", btnLabel: 'Abrir item', id: 'qs_' + it.id + '_' + s.id };
+            var onde = 'Subitem de \u201C' + it.nome + '\u201D \u00B7 ' + q.nome + ' \u00B7 ' + g.nome;
+            if (s.feito) {
+              if (s.feitoEm === hoje) { base.priority = 2; base.type = 'hoje'; base.sub = onde + ' \u00B7 concluído hoje'; tasks.push(base); }
+              return;
+            }
+            if (paiFeito) return;
+            if (s.data < hoje) { base.priority = 1; base.type = 'urgente'; base.sub = onde + ' \u00B7 venceu há ' + textoDias(diasEntre(s.data, hoje)); tasks.push(base); }
+            else if (s.data === hoje) { base.priority = 2; base.type = 'hoje'; base.sub = onde + ' \u00B7 vence hoje'; tasks.push(base); }
+          });
+        });
+      });
+    });
+    return tasks;
+  }
+  function itensAgendaSubitens(est, hoje) {
+    var out = [];
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado) return;
+      q.grupos.forEach(function (g) {
+        if (g.arquivado) return;
+        g.itens.forEach(function (it) {
+          if (it.arquivado || statusFinal(q, it)) return;
+          (it.subitens || []).forEach(function (s) {
+            if (s.data && !s.feito && s.data >= hoje) out.push({ date: s.data, text: s.nome, tipo: 'normal', cat: 'Quadros \u00B7 subitem de ' + it.nome, id: 'qs_' + it.id + '_' + s.id });
+          });
+        });
+      });
+    });
+    return out;
+  }
+  function marcarSubitem(est, itemId, subId, concluindo, hoje) {
+    var a = achar(est, itemId); if (!a) return false;
+    var s = achaSub(a.it, subId); if (!s) return false;
+    if (concluindo) { s.feito = true; s.feitoEm = hoje; } else { s.feito = false; delete s.feitoEm; }
+    return true;
+  }
+
+  window.QuadrosAbrirItem = function (qid, iid) {
+    var d = null;
+    try { d = DB.get(CHAVE); } catch (e) { d = null; }
+    if (d && !Array.isArray(d) && Array.isArray(d.quadros) && d.quadros.some(function (q) { return q.id === qid; })) {
+      DB.set(CHAVE, { versao: 1, atual: qid, quadros: d.quadros });
+    }
+    go('quadros');
+    setTimeout(function () { try { abrirDetalhe(iid); } catch (e) { /* ignorar */ } }, 80);
+  };
+
+  function lerEstadoQuadros() {
+    var d = null;
+    try { d = DB.get(CHAVE); } catch (e) { d = null; }
+    return (d && !Array.isArray(d) && Array.isArray(d.quadros)) ? d : null;
+  }
+  function instalarModoDiaF4() {
+    if (typeof window.getModoDiaTasks === 'function' && !window.getModoDiaTasks._qdF4) {
+      var tAntes = window.getModoDiaTasks;
+      var novoT = function () {
+        var tasks = tAntes.apply(this, arguments);
+        try {
+          var est = lerEstadoQuadros();
+          if (est) {
+            var hoje = hojeISO();
+            var extra = tarefasAlertas(est, hoje).concat(tarefasSubitens(est, hoje));
+            if (extra.length) {
+              var ja = {}; tasks.forEach(function (t) { ja[t.id] = 1; });
+              extra.forEach(function (t) { if (!ja[t.id]) tasks.push(t); });
+              tasks.sort(function (a, b) { return a.priority - b.priority; });
+            }
+          }
+        } catch (e) { console.error('quadros: alertas e subitens', e); }
+        return tasks;
+      };
+      herdarMarcas(novoT, tAntes); novoT._qdF4 = true; window.getModoDiaTasks = novoT;
+    }
+    if (typeof window.toggleModoDiaTask === 'function' && !window.toggleModoDiaTask._qdF4) {
+      var gAntes = window.toggleModoDiaTask;
+      var novoG = function (id) {
+        var tid = String(id);
+        if (tid.indexOf('qs_') === 0) {
+          try {
+            var partes = tid.split('_'); var est = lerEstadoQuadros();
+            if (est && partes.length === 3) {
+              var feitos = JSON.parse(localStorage.getItem('mundana_mododia_done_' + localDateStr()) || '[]');
+              if (marcarSubitem(est, partes[1], partes[2], feitos.indexOf(tid) < 0, hojeISO())) DB.set(CHAVE, { versao: 1, atual: est.atual || null, quadros: est.quadros });
+            }
+          } catch (e) { console.error('quadros: concluir subitem', e); }
+        }
+        return gAntes.apply(this, arguments);
+      };
+      herdarMarcas(novoG, gAntes); novoG._qdF4 = true; window.toggleModoDiaTask = novoG;
+    }
+    if (typeof window.mdWeekBuildItems === 'function' && !window.mdWeekBuildItems._qdF4) {
+      var mAntes = window.mdWeekBuildItems;
+      var novoM = function () {
+        var items = mAntes.apply(this, arguments);
+        try { var est = lerEstadoQuadros(); if (est) itensAgendaSubitens(est, hojeISO()).forEach(function (i) { items.push(i); }); } catch (e) { console.error('quadros: agenda', e); }
+        return items;
+      };
+      herdarMarcas(novoM, mAntes); novoM._qdF4 = true; window.mdWeekBuildItems = novoM;
+    }
+  }
+
+  /* --- interface das automações (versão 2) --- */
+  function descreverAcao(q, a) {
+    function grupo(id) { var g = null; q.grupos.forEach(function (x) { if (x.id === id) g = x; }); return g ? g.nome : '?'; }
+    if (a.tipo === 'mover') return 'mover o item para \u201C' + grupo(a.grupoId) + '\u201D';
+    if (a.tipo === 'definir') { var col = colunaPorId(q, a.colId); var op = col ? opcaoPorId(col, a.opcaoId) : null; return 'definir ' + (col ? col.nome : '?') + ' como \u201C' + (op ? op.nome : '?') + '\u201D'; }
+    if (a.tipo === 'atribuir') return 'atribuir a ' + (a.pessoa || '?');
+    if (a.tipo === 'data') { var cd = colunaPorId(q, a.colId); return 'registrar a data de hoje em ' + (cd ? cd.nome : '?'); }
+    if (a.tipo === 'criar') return 'criar o item \u201C' + (a.titulo || '') + '\u201D em \u201C' + grupo(a.grupoId) + '\u201D' + (a.copiarResp ? ' (mesmo responsável)' : '');
+    if (a.tipo === 'arquivar') return 'arquivar o item';
+    if (a.tipo === 'alerta') return 'criar um alerta no Modo Dia' + (a.urgente ? ' (urgente)' : '');
+    return '?';
+  }
+  function descreverAutomacao(q, r) {
+    migrarRegra(r);
+    var cs = colStatusDe(q); var g = r.gatilho || {};
+    var o = cs ? opcaoPorId(cs, g.opcaoId) : null; var nomeS = o ? o.nome : '?';
+    var quando = g.tipo === 'parado'
+      ? 'Quando o item ficar ' + textoDias(g.dias || 0) + ' em \u201C' + nomeS + '\u201D'
+      : 'Quando o status virar \u201C' + nomeS + '\u201D';
+    if (r.condicao && r.condicao.colId) {
+      var col = colunaPorId(q, r.condicao.colId);
+      var vtxt = r.condicao.valor;
+      if (col && col.opcoes) { var ov = opcaoPorId(col, r.condicao.valor); vtxt = ov ? ov.nome : '?'; }
+      quando += ' e ' + (col ? col.nome : '?') + ' for \u201C' + vtxt + '\u201D';
+    }
+    return quando + ', ' + (r.acoes || []).map(function (a) { return descreverAcao(q, a); }).join(' e ');
+  }
+  function htmlPendentes(q) {
+    if (!acoesPend.length) return '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Nenhuma ação adicionada. A ação escolhida acima entra sozinha ao salvar; use "Adicionar" para combinar várias na mesma regra.</div>';
+    return acoesPend.map(function (a, i) {
+      return '<div class="qdr-row" style="padding:6px 10px;margin-top:6px"><div class="info"><strong>' + esc(descreverAcao(q, a)) + '</strong></div><button class="qdt-x" data-qa="aut-rm" data-i="' + i + '" aria-label="Remover ação">&times;</button></div>';
+    }).join('');
+  }
+  function corpoAutomacoes(q) {
+    var cs = colStatusDe(q);
+    if (!cs) return '<div id="qda-root"><p style="font-size:13px;color:var(--text-muted)">As automações usam a coluna de Status. Crie uma coluna do tipo Status em "Colunas".</p></div>';
+    var lista = q.automacoes || [];
+    var grupos = q.grupos.filter(function (g) { return !g.arquivado; }).map(function (g) { return opcSel(g.id, g.nome, false); }).join('');
+    var h = '<div id="qda-root"><p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Automações agem sozinhas. Uma automação não dispara outra, para evitar ciclos. Itens que já existem contam o tempo "parado" a partir de hoje.</p>';
+    if (!lista.length) h += '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--bg-warm);border-radius:var(--radius-md);margin-bottom:8px">Nenhuma automação ainda.</div>';
+    lista.forEach(function (r) {
+      h += '<div class="qdr-row"><input type="checkbox" class="qda-ativa" data-id="' + esc(r.id) + '"' + (r.ativa ? ' checked' : '') + ' title="Ativa"><div class="info"><strong>' + esc(descreverAutomacao(q, r)) + '</strong></div><button class="btn btn-ghost btn-sm" style="color:var(--rosa-antigo)" data-qa="aut-del" data-id="' + esc(r.id) + '">Excluir</button></div>';
+    });
+    h += '<div class="qdt-sec">Nova automação</div>';
+    h += '<div class="qdr-linha"><div><label class="form-label">Quando</label><select class="form-select" id="qda-gatilho">' + opcSel('virar', 'O status virar...', true) + opcSel('parado', 'O item ficar parado no status...', false) + '</select></div>' +
+      '<div><label class="form-label">Status</label><select class="form-select" id="qda-quando">' + cs.opcoes.map(function (o) { return opcSel(o.id, o.nome, false); }).join('') + '</select></div>' +
+      '<div id="qda-box-dias"><label class="form-label">Por quantos dias</label><input class="form-input" id="qda-dias" type="number" min="0" max="365" value="5"></div></div>';
+    h += '<div class="qdr-linha"><div><label class="form-label">E somente se (opcional)</label><select class="form-select" id="qda-ccol">' + opcSel('', '(sem condição)', true) +
+      q.colunas.filter(function (c) { return !!c.opcoes || c.tipo === 'pessoa'; }).map(function (c) { return opcSel(c.id, c.nome, false); }).join('') + '</select></div>' +
+      '<div id="qda-box-cval"><label class="form-label">For igual a</label><select class="form-select" id="qda-cval"></select></div></div>';
+    h += '<div class="qdr-linha"><div><label class="form-label">Então</label><select class="form-select" id="qda-acao">' + opcSel('mover', 'Mover para um grupo', true) + opcSel('definir', 'Definir uma coluna (lista ou status)', false) +
+      opcSel('atribuir', 'Atribuir a uma pessoa', false) + opcSel('data', 'Registrar a data de hoje', false) + opcSel('criar', 'Criar um novo item', false) +
+      opcSel('arquivar', 'Arquivar o item', false) + opcSel('alerta', 'Criar um alerta no Modo Dia', false) + '</select></div></div>';
+    h += '<div id="qda-box-mover" class="qdr-linha"><div><label class="form-label">Grupo de destino</label><select class="form-select" id="qda-grupo">' + grupos + '</select></div></div>';
+    h += '<div id="qda-box-definir" class="qdr-linha"><div><label class="form-label">Coluna</label><select class="form-select" id="qda-col">' + q.colunas.filter(function (c) { return !!c.opcoes; }).map(function (c) { return opcSel(c.id, c.nome, false); }).join('') + '</select></div><div><label class="form-label">Valor</label><select class="form-select" id="qda-opc"></select></div></div>';
+    h += '<div id="qda-box-atribuir" class="qdr-linha"><div><label class="form-label">Pessoa</label><select class="form-select" id="qda-pessoa">' + (q.pessoas || []).map(function (p) { return opcSel(p, p, false); }).join('') + '</select></div></div>';
+    h += '<div id="qda-box-data" class="qdr-linha"><div><label class="form-label">Coluna de data</label><select class="form-select" id="qda-cdata">' + q.colunas.filter(function (c) { return c.tipo === 'data'; }).map(function (c) { return opcSel(c.id, c.nome, false); }).join('') + '</select></div></div>';
+    h += '<div id="qda-box-criar" class="qdr-linha"><div><label class="form-label">Grupo do novo item</label><select class="form-select" id="qda-grupo2">' + grupos + '</select></div><div style="flex:2"><label class="form-label">Título (use {nome} para o nome do item)</label><input class="form-input" id="qda-titulo" placeholder="Ex.: Publicar: {nome}"></div><label style="display:flex;align-items:center;gap:8px;font-size:12px;flex:0 0 100%"><input type="checkbox" id="qda-copiar" checked> Manter o mesmo responsável</label></div>';
+    h += '<div id="qda-box-alerta" class="qdr-linha"><div style="flex:2"><label class="form-label">Texto do alerta (opcional; use {nome}, {status} e {dias})</label><input class="form-input" id="qda-atxt" placeholder="Ex.: {nome} está em {status} há {dias}"></div><label style="display:flex;align-items:center;gap:8px;font-size:12px;flex:0 0 100%"><input type="checkbox" id="qda-aurg"> Marcar como urgente no Modo Dia</label></div>';
+    h += '<div class="qdr-linha"><button class="btn btn-secondary btn-sm" style="flex:0 0 auto" data-qa="aut-add">+ Adicionar esta ação à combinação</button></div>';
+    h += '<div id="qda-pend">' + htmlPendentes(q) + '</div>';
+    h += '<div class="qdr-linha" style="margin-top:14px"><button class="btn btn-primary" style="flex:0 0 auto" data-qa="aut-salvar">Salvar automação</button></div></div>';
+    return h;
+  }
+  function ajustarFormAutomacao() {
+    var q = quadroAtual(); var acao = $('qda-acao'); if (!q || !acao) return;
+    ['mover', 'definir', 'atribuir', 'data', 'criar', 'alerta'].forEach(function (t) { var b = $('qda-box-' + t); if (b) b.style.display = acao.value === t ? '' : 'none'; });
+    var gat = $('qda-gatilho'), bd = $('qda-box-dias');
+    if (gat && bd) bd.style.display = gat.value === 'parado' ? '' : 'none';
+    var cs = $('qda-col'), os = $('qda-opc');
+    if (cs && os) {
+      var col = colunaPorId(q, cs.value);
+      os.innerHTML = col ? (col.opcoes || []).map(function (o) { return opcSel(o.id, o.nome, false); }).join('') : '';
+    }
+    var cc = $('qda-ccol'), cv = $('qda-cval'), bcv = $('qda-box-cval');
+    if (cc && cv) {
+      var cond = cc.value ? colunaPorId(q, cc.value) : null;
+      if (!cond) { cv.innerHTML = ''; if (bcv) bcv.style.display = 'none'; }
+      else {
+        if (bcv) bcv.style.display = '';
+        cv.innerHTML = cond.opcoes ? cond.opcoes.map(function (o) { return opcSel(o.id, o.nome, false); }).join('') : (q.pessoas || []).map(function (p) { return opcSel(p, p, false); }).join('');
+      }
+    }
+  }
+  function abrirAutomacoes() {
+    var q = quadroAtual(); if (!q) return;
+    acoesPend = [];
+    openModal('Automações \u00B7 ' + q.nome, corpoAutomacoes(q), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', true);
+    ajustarFormAutomacao();
+  }
+  function lerAcaoDoForm() {
+    var tipo = $('qda-acao').value; var a = { tipo: tipo };
+    if (tipo === 'mover') { a.grupoId = $('qda-grupo').value; if (!a.grupoId) return { erro: 'Escolha o grupo de destino' }; }
+    else if (tipo === 'definir') { a.colId = $('qda-col').value; a.opcaoId = $('qda-opc').value; if (!a.colId || !a.opcaoId) return { erro: 'Escolha a coluna e o valor' }; }
+    else if (tipo === 'atribuir') { a.pessoa = $('qda-pessoa').value; if (!a.pessoa) return { erro: 'Escolha a pessoa' }; }
+    else if (tipo === 'data') { a.colId = $('qda-cdata').value; if (!a.colId) return { erro: 'Crie uma coluna de data primeiro' }; }
+    else if (tipo === 'criar') {
+      a.grupoId = $('qda-grupo2').value; a.titulo = $('qda-titulo').value.trim(); a.copiarResp = !!$('qda-copiar').checked;
+      if (!a.grupoId || !a.titulo) return { erro: 'Informe o grupo e o título do novo item' };
+    } else if (tipo === 'alerta') { a.texto = ($('qda-atxt').value || '').trim(); a.urgente = !!$('qda-aurg').checked; }
+    return { acao: a };
+  }
+  function salvarAutomacaoDoModal() {
+    var q = quadroAtual(); if (!q || !$('qda-root')) return;
+    var acoes = acoesPend.slice();
+    if (!acoes.length) { var l = lerAcaoDoForm(); if (l.erro) { aviso(l.erro); return; } acoes.push(l.acao); }
+    var gat = { tipo: $('qda-gatilho').value, opcaoId: $('qda-quando').value };
+    if (gat.tipo === 'parado') gat.dias = Math.max(0, parseInt($('qda-dias').value, 10) || 0);
+    var cc = $('qda-ccol').value, cond = null;
+    if (cc) { var cv = $('qda-cval').value; if (cv) cond = { colId: cc, valor: cv }; }
+    if (!q.automacoes) q.automacoes = [];
+    q.automacoes.push({ id: uid(), ativa: true, gatilho: gat, condicao: cond, acoes: acoes });
+    acoesPend = [];
+    salvar(); abrirAutomacoes(); aviso('Automação salva');
+  }
+  function onAutClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qa]') : null; if (!t || !$('qda-root')) return;
+    var q = quadroAtual(); if (!q) return;
+    var acao = t.dataset.qa;
+    if (acao === 'aut-salvar') salvarAutomacaoDoModal();
+    else if (acao === 'aut-add') {
+      var l = lerAcaoDoForm(); if (l.erro) { aviso(l.erro); return; }
+      acoesPend.push(l.acao);
+      var el = $('qda-pend'); if (el) el.innerHTML = htmlPendentes(q);
+    } else if (acao === 'aut-rm') {
+      acoesPend.splice(parseInt(t.dataset.i, 10), 1);
+      var el2 = $('qda-pend'); if (el2) el2.innerHTML = htmlPendentes(q);
+    } else if (acao === 'aut-del') {
+      if (window.confirm('Excluir esta automação?')) {
+        q.automacoes = (q.automacoes || []).filter(function (r) { return r.id !== t.dataset.id; });
+        salvar(); abrirAutomacoes();
+      }
+    }
+  }
+  function onAutChange(e) {
+    var el = e.target; if (!el || !$('qda-root')) return;
+    if (el.id === 'qda-acao' || el.id === 'qda-col' || el.id === 'qda-gatilho' || el.id === 'qda-ccol') { ajustarFormAutomacao(); return; }
+    if (el.classList && el.classList.contains('qda-ativa')) {
+      var q = quadroAtual(); if (!q) return;
+      (q.automacoes || []).forEach(function (r) { if (r.id === el.dataset.id) r.ativa = el.checked; });
+      salvar(); abrirAutomacoes();
+    }
+  }
+
+  /* --- detalhe do item: data nos subitens --- */
+  function corpoDetalhe(a) {
+    var it = a.it, q = a.q, g = a.g; var hoje = hojeISO();
+    var cs = colPrincipal(q); var op = cs ? opcaoPorId(cs, it.valores[cs.id]) : null;
+    var pr = progressoSub(it);
+    var coms = it.comentarios || []; var links = it.links || [];
+    var h = '<div id="qdt-root" data-item="' + esc(it.id) + '">';
+    h += '<div class="qdt-meta">' + esc(q.nome) + ' \u00B7 ' + esc(g.nome) + (op ? ' \u00B7 <span style="color:' + esc(op.cor) + ';font-weight:700">' + esc(op.nome) + '</span>' : '') + '</div>';
+    h += '<div class="qdt-sec">Descrição</div><textarea class="form-textarea qdt-desc" rows="3" placeholder="Contexto, objetivo, observações...">' + esc(it.descricao || '') + '</textarea>';
+    h += '<div class="qdt-sec">Subitens' + (pr.total ? ' <span class="qdt-cnt">' + pr.feitos + '/' + pr.total + '</span>' : '') + '</div>';
+    if (pr.total) h += '<div class="progress-bar"><div class="progress-fill" style="width:' + pr.pct + '%"></div></div>';
+    (it.subitens || []).forEach(function (s) {
+      var atr = !!(s.data && !s.feito && s.data < hoje);
+      h += '<div class="qdt-sub' + (s.feito ? ' feito' : '') + '"><input type="checkbox" class="qdt-chk" data-id="' + esc(s.id) + '"' + (s.feito ? ' checked' : '') + '><input class="qdt-subnome" data-id="' + esc(s.id) + '" value="' + esc(s.nome) + '">' +
+        '<input type="date" class="qdt-subdata' + (atr ? ' atr' : '') + '" data-id="' + esc(s.id) + '" value="' + esc(s.data || '') + '" title="Prazo do subitem (aparece no Modo Dia)">' +
+        '<button class="qdt-x" data-qdt="sub-del" data-id="' + esc(s.id) + '" aria-label="Excluir subitem">&times;</button></div>';
+    });
+    h += '<input class="form-input" id="qdt-sub-add" placeholder="+ Adicionar subitem (Enter)" style="margin-top:8px">';
+    h += '<div class="qdt-sec">Links e referências' + (links.length ? ' <span class="qdt-cnt">' + links.length + '</span>' : '') + '</div>';
+    links.forEach(function (l) {
+      h += '<div class="qdt-link"><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.titulo) + '</a><span class="url">' + esc(dominio(l.url)) + '</span><button class="qdt-x" data-qdt="lnk-del" data-id="' + esc(l.id) + '" aria-label="Excluir link">&times;</button></div>';
+    });
+    h += '<div class="qdt-linha"><input class="form-input" id="qdt-lnk-tit" placeholder="Título (opcional)" style="flex:1;min-width:120px;width:auto"><input class="form-input" id="qdt-lnk-url" placeholder="Endereço (https://...)" style="flex:2;min-width:160px;width:auto"><button class="btn btn-secondary btn-sm" data-qdt="lnk-add">Adicionar link</button></div>';
+    h += '<div class="qdt-sec">Comentários' + (coms.length ? ' <span class="qdt-cnt">' + coms.length + '</span>' : '') + '</div>';
+    coms.forEach(function (c) {
+      h += '<div class="qdt-com"><div class="qdt-com-h"><strong>' + esc(c.autor) + '</strong><span class="quando">' + esc(fmtDataHora(new Date(c.em))) + '</span><button class="qdt-x" data-qdt="com-del" data-id="' + esc(c.id) + '" aria-label="Excluir comentário">&times;</button></div><div class="qdt-com-t">' + esc(c.texto) + '</div></div>';
+    });
+    var autores = (q.pessoas || []).slice(); if (!autores.length) autores = ['Ana'];
+    var ultimo = ''; try { ultimo = localStorage.getItem('qd_autor') || ''; } catch (e) { ultimo = ''; }
+    if (autores.indexOf(ultimo) < 0) ultimo = autores[0];
+    h += '<textarea class="form-textarea" id="qdt-com-txt" rows="2" placeholder="Escreva um comentário (Cmd+Enter para enviar)" style="margin-top:8px"></textarea>';
+    h += '<div class="qdt-linha"><select class="form-select" id="qdt-com-aut" style="width:auto">' + autores.map(function (p) { return '<option value="' + esc(p) + '"' + (p === ultimo ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select><button class="btn btn-primary btn-sm" data-qdt="com-add">Comentar</button></div>';
+    return h + '</div>';
+  }
+  function onDetChange(e) {
+    var el = e.target; if (!el.classList) return;
+    var ctx = ctxDetalhe(); if (!ctx) return;
+    if (el.classList.contains('qdt-desc')) { ctx.it.descricao = el.value; salvar(); return; }
+    if (el.classList.contains('qdt-chk')) { toggleSub(ctx.it, el.dataset.id); depoisDet(ctx.id); return; }
+    if (el.classList.contains('qdt-subdata')) {
+      var sd = achaSub(ctx.it, el.dataset.id);
+      if (sd) { if (el.value) sd.data = el.value; else delete sd.data; depoisDet(ctx.id); }
+      return;
+    }
+    if (el.classList.contains('qdt-subnome')) {
+      if (!renameSub(ctx.it, el.dataset.id, el.value)) { var s = achaSub(ctx.it, el.dataset.id); el.value = s ? s.nome : ''; }
+      else salvar();
+      return;
+    }
+    if (el.id === 'qdt-com-aut') { try { localStorage.setItem('qd_autor', el.value); } catch (err) { /* ignorar */ } }
+  }
+
+  function injetarCSSF4() {
+    if ($('qdf4-css')) return;
+    var css = [
+      '.qdt-sub input.qdt-subdata{flex:0 0 auto;width:132px;border:1.5px solid var(--border-light);border-radius:8px;padding:4px 6px;font-family:inherit;font-size:11px;color:var(--text-secondary);background:var(--surface)}',
+      '.qdt-sub input.qdt-subdata.atr{color:var(--rosa-antigo);border-color:var(--rosa-antigo)}',
+      '.qdt-sub.feito input.qdt-subdata{opacity:.5}'
+    ].join('\n');
+    var st = document.createElement('style'); st.id = 'qdf4-css'; st.textContent = css; document.head.appendChild(st);
+  }
+  function ligarFase4() { injetarCSSF4(); instalarModoDiaF4(); }
+
+  function testeFase4() {
+    var r = [];
+    function ok(nome, cond) { r.push({ teste: nome, ok: !!cond }); }
+    var hoje = '2026-11-12';
+    function est() {
+      var e = novoEstado(); var q = criarQuadro(e, 'F4', ['Ana', 'Bia']);
+      var A = { e: e, q: q, cs: q.colunas[0], cpr: q.colunas[1], cpe: q.colunas[2], g1: q.grupos[0] };
+      A.g2 = criarGrupo(e, q, 'Feitos');
+      A.it = criarItem(e, q, A.g1, 'Reel');
+      return A;
+    }
+    var m = { id: 'r', ativa: true, quando: { opcaoId: 'x' }, acao: { tipo: 'mover', grupoId: 'g' } };
+    migrarRegra(m);
+    ok('regra antiga é lida no formato novo', m.gatilho.tipo === 'virar' && m.gatilho.opcaoId === 'x' && m.acoes.length === 1 && m.acoes[0].tipo === 'mover');
+
+    var A = est();
+    A.q.automacoes = [{ id: 'a1', ativa: true, gatilho: { tipo: 'virar', opcaoId: A.cs.opcoes[4].id }, acoes: [{ tipo: 'arquivar' }] }];
+    aplicarAutomacoes(A.e, hoje); setValor(A.e, A.it, A.cs.id, A.cs.opcoes[4].id);
+    ok('virar Concluído arquiva o item', aplicarAutomacoes(A.e, hoje) === 1 && A.it.arquivado === true);
+    ok('o item já arquivado não dispara de novo', aplicarAutomacoes(A.e, hoje) === 0);
+
+    var B = est();
+    B.q.automacoes = [{ id: 'b1', ativa: true, gatilho: { tipo: 'virar', opcaoId: B.cs.opcoes[1].id }, acoes: [{ tipo: 'definir', colId: B.cpr.id, opcaoId: B.cpr.opcoes[0].id }, { tipo: 'atribuir', pessoa: 'Ana' }] }];
+    aplicarAutomacoes(B.e, hoje); setValor(B.e, B.it, B.cs.id, B.cs.opcoes[1].id);
+    ok('uma regra pode combinar várias ações', aplicarAutomacoes(B.e, hoje) === 2 && B.it.valores[B.cpr.id] === B.cpr.opcoes[0].id && B.it.valores[B.cpe.id] === 'Ana');
+
+    var C = est(); setValor(C.e, C.it, C.cpe.id, 'Bia');
+    C.q.automacoes = [{ id: 'c1', ativa: true, gatilho: { tipo: 'virar', opcaoId: C.cs.opcoes[1].id }, condicao: { colId: C.cpe.id, valor: 'Ana' }, acoes: [{ tipo: 'arquivar' }] }];
+    aplicarAutomacoes(C.e, hoje); setValor(C.e, C.it, C.cs.id, C.cs.opcoes[1].id);
+    ok('a condição extra impede quando o responsável é outro', aplicarAutomacoes(C.e, hoje) === 0 && !C.it.arquivado);
+    var C2 = est(); setValor(C2.e, C2.it, C2.cpe.id, 'Ana');
+    C2.q.automacoes = [{ id: 'c2', ativa: true, gatilho: { tipo: 'virar', opcaoId: C2.cs.opcoes[1].id }, condicao: { colId: C2.cpe.id, valor: 'Ana' }, acoes: [{ tipo: 'arquivar' }] }];
+    aplicarAutomacoes(C2.e, hoje); setValor(C2.e, C2.it, C2.cs.id, C2.cs.opcoes[1].id);
+    ok('a condição extra deixa passar quando é o responsável certo', aplicarAutomacoes(C2.e, hoje) === 1 && C2.it.arquivado === true);
+
+    var D = est();
+    D.q.automacoes = [{ id: 'd1', ativa: true, gatilho: { tipo: 'parado', opcaoId: D.cs.opcoes[4].id, dias: 3 }, acoes: [{ tipo: 'arquivar' }] }];
+    setValor(D.e, D.it, D.cs.id, D.cs.opcoes[4].id); aplicarAutomacoes(D.e, '2026-11-01');
+    ok('parado: a data de entrada no status é guardada', D.it._desde === '2026-11-01');
+    ok('parado: antes dos dias combinados não faz nada', avaliarParados(D.e, '2026-11-03') === 0 && !D.it.arquivado);
+    ok('parado: depois dos dias combinados executa a ação (arquivar)', avaliarParados(D.e, '2026-11-04') >= 1 && D.it.arquivado === true);
+
+    var E = est();
+    E.q.automacoes = [{ id: 'e1', ativa: true, gatilho: { tipo: 'parado', opcaoId: E.cs.opcoes[1].id, dias: 2 }, acoes: [{ tipo: 'criar', grupoId: E.g2.id, titulo: 'Cobrar {nome}', copiarResp: false }] }];
+    setValor(E.e, E.it, E.cs.id, E.cs.opcoes[1].id); aplicarAutomacoes(E.e, '2026-11-01');
+    avaliarParados(E.e, '2026-11-04');
+    ok('parado: a ação roda uma vez por permanência no status', E.g2.itens.length === 1 && E.g2.itens[0].nome === 'Cobrar Reel');
+    avaliarParados(E.e, '2026-11-05');
+    ok('parado: não repete enquanto o item continua no mesmo status', E.g2.itens.length === 1);
+    setValor(E.e, E.it, E.cs.id, E.cs.opcoes[0].id); aplicarAutomacoes(E.e, '2026-11-06');
+    setValor(E.e, E.it, E.cs.id, E.cs.opcoes[1].id); aplicarAutomacoes(E.e, '2026-11-07');
+    avaliarParados(E.e, '2026-11-09');
+    ok('parado: ao voltar para o status, a regra vale de novo', E.g2.itens.length === 2);
+
+    var F = est();
+    F.q.automacoes = [{ id: 'f1', ativa: true, gatilho: { tipo: 'parado', opcaoId: F.cs.opcoes[1].id, dias: 5 }, acoes: [{ tipo: 'alerta' }] }];
+    setValor(F.e, F.it, F.cs.id, F.cs.opcoes[1].id); aplicarAutomacoes(F.e, '2026-11-01');
+    ok('alerta: antes dos dias combinados não aparece', tarefasAlertas(F.e, '2026-11-05').length === 0);
+    var tf = tarefasAlertas(F.e, '2026-11-06');
+    ok('alerta: com 5 dias no status vira tarefa no Modo Dia', tf.length === 1 && tf[0].id.indexOf('qa_' + F.it.id + '_f1') === 0 && tf[0].text.indexOf('Reel') === 0 && tf[0].text.indexOf('5 dias') > -1 && tf[0].type === 'hoje');
+    ok('alerta: uma regra só de alerta não grava nada nos dados', avaliarParados(F.e, '2026-11-06') === 0);
+    F.q.automacoes[0].gatilho.dias = 1;
+    var t1 = tarefasAlertas(F.e, '2026-11-02');
+    ok('alerta: singular "1 dia"', t1.length === 1 && t1[0].text.indexOf('1 dia') > -1 && t1[0].text.indexOf('1 dias') < 0);
+    F.q.automacoes[0].acoes = [{ tipo: 'alerta', urgente: true, texto: 'Atenção: {nome}' }];
+    var tu = tarefasAlertas(F.e, '2026-11-06');
+    ok('alerta: urgente e com texto próprio', tu.length === 1 && tu[0].type === 'urgente' && tu[0].priority === 1 && tu[0].text === 'Atenção: Reel');
+    F.q.automacoes[0].gatilho = { tipo: 'virar', opcaoId: F.cs.opcoes[1].id };
+    ok('alerta com "virar" aparece enquanto o item estiver no status', tarefasAlertas(F.e, '2026-11-20').length === 1);
+    F.it.arquivado = true;
+    ok('item arquivado não gera alerta', tarefasAlertas(F.e, '2026-11-20').length === 0);
+
+    function estSub() {
+      var S = est(); addSub(S.it, 'Gravar'); addSub(S.it, 'Editar'); addSub(S.it, 'Postar'); addSub(S.it, 'Sem data');
+      S.it.subitens[0].data = '2026-11-10'; S.it.subitens[1].data = '2026-11-12'; S.it.subitens[2].data = '2026-11-20';
+      return S;
+    }
+    var S1 = estSub(); var ts = tarefasSubitens(S1.e, hoje);
+    var tGravar = ts.filter(function (x) { return x.text === 'Gravar'; })[0], tEditar = ts.filter(function (x) { return x.text === 'Editar'; })[0];
+    ok('subitem vencido vira tarefa urgente e o de hoje vira pendência do dia', ts.length === 2 && tGravar.type === 'urgente' && tGravar.priority === 1 && tGravar.sub.indexOf('venceu há 2 dias') > -1 && tEditar.type === 'hoje' && tEditar.sub.indexOf('vence hoje') > -1);
+    ok('subitem futuro ou sem data não vira tarefa', ts.every(function (x) { return x.text !== 'Postar' && x.text !== 'Sem data'; }));
+    ok('a tarefa do subitem mostra o item, o quadro e o grupo e abre o item', tGravar.sub.indexOf('Subitem de \u201CReel\u201D \u00B7 F4 \u00B7') === 0 && tGravar.action.indexOf('QuadrosAbrirItem(') === 0 && tGravar.id === 'qs_' + S1.it.id + '_' + S1.it.subitens[0].id);
+    ok('marcar e desmarcar o subitem grava o feito e a data', marcarSubitem(S1.e, S1.it.id, S1.it.subitens[0].id, true, hoje) === true && S1.it.subitens[0].feito === true && S1.it.subitens[0].feitoEm === hoje && marcarSubitem(S1.e, S1.it.id, S1.it.subitens[0].id, false, hoje) === true && S1.it.subitens[0].feito === false && S1.it.subitens[0].feitoEm === undefined && marcarSubitem(S1.e, 'zzz', 'y', true, hoje) === false);
+    marcarSubitem(S1.e, S1.it.id, S1.it.subitens[0].id, true, hoje);
+    var ts2 = tarefasSubitens(S1.e, hoje);
+    ok('subitem concluído hoje continua na lista como concluído', ts2.some(function (x) { return x.text === 'Gravar' && x.sub.indexOf('concluído hoje') > -1; }) && ts2.length === 2);
+    var S2 = estSub(); setValor(S2.e, S2.it, S2.cs.id, S2.cs.opcoes[4].id);
+    ok('item concluído esconde os subitens pendentes', tarefasSubitens(S2.e, hoje).length === 0);
+    var S3 = estSub(); var ag = itensAgendaSubitens(S3.e, hoje);
+    ok('agenda leva os subitens de hoje em diante, sem os concluídos', ag.length === 2 && ag.map(function (x) { return x.date; }).sort().join() === '2026-11-12,2026-11-20' && ag[0].cat.indexOf('subitem de Reel') > -1);
+
+    var X = est(); X.q.automacoes = [
+      { id: 'x1', ativa: true, gatilho: { tipo: 'virar', opcaoId: X.cs.opcoes[4].id }, acoes: [{ tipo: 'arquivar' }] },
+      { id: 'x2', ativa: true, gatilho: { tipo: 'parado', opcaoId: X.cs.opcoes[1].id, dias: 5 }, condicao: { colId: X.cpe.id, valor: 'Ana' }, acoes: [{ tipo: 'alerta', urgente: true }, { tipo: 'atribuir', pessoa: 'Bia' }] },
+      { id: 'x3', ativa: true, quando: { opcaoId: X.cs.opcoes[4].id }, acao: { tipo: 'mover', grupoId: X.g2.id } }
+    ];
+    var dx = X.q.automacoes.map(function (rx) { return descreverAutomacao(X.q, rx); });
+    ok('descrições: virar, parado com condição e várias ações, regra antiga', dx[0] === 'Quando o status virar \u201C' + X.cs.opcoes[4].nome + '\u201D, arquivar o item' && dx[1] === 'Quando o item ficar 5 dias em \u201C' + X.cs.opcoes[1].nome + '\u201D e Responsável for \u201CAna\u201D, criar um alerta no Modo Dia (urgente) e atribuir a Bia' && dx[2] === 'Quando o status virar \u201C' + X.cs.opcoes[4].nome + '\u201D, mover o item para \u201CFeitos\u201D');
+
+    var Y = est(); delete Y.it._desde;
+    ok('itens sem a data de entrada no status recebem a de hoje', avaliarParados(Y.e, hoje) >= 1 && Y.it._desde === hoje);
+    var Z = est(); var itz = Z.it; itz.subitens = [{ id: 's1', nome: '<b>x</b>', feito: false, data: '2026-11-01' }];
+    var hz = corpoDetalhe({ q: Z.q, g: Z.g1, it: itz });
+    ok('o painel do item mostra a data do subitem (atrasada em destaque) e escapa o texto', hz.indexOf('class="qdt-subdata atr"') > -1 && hz.indexOf('value="2026-11-01"') > -1 && hz.indexOf('<b>x</b>') < 0);
+    ok('SISTEMA: automações combinadas e abrir item disponíveis', typeof window.QuadrosAbrirItem === 'function' && typeof avaliarParados === 'function' && typeof tarefasAlertas === 'function');
+    var falhas = r.filter(function (x) { return !x.ok; });
+    if (console.table) console.table(r);
+    console.log(falhas.length === 0 ? 'QUADROS-FASE4: ' + r.length + ' testes, 0 falhas' : 'QUADROS-FASE4: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
+    return { total: r.length, falhas: falhas.length, resultados: r };
+  }
+
+  window.QuadrosFase4Teste = testeFase4;
+  ligarFase4();
   window.QuadrosFase3Teste = testeFase3;
   ligarFase3();
   window.QuadrosDetalheTeste = testeDetalhe;
