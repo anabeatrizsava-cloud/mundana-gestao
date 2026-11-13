@@ -651,7 +651,7 @@
     return '<div class="page-header anim"><div class="page-header-left"><h2>Quadros</h2><p id="qd-resumo">' + sub + '</p></div><div class="page-header-actions">' +
       (q ? '<button class="btn btn-secondary btn-sm" data-qd="rotinas">Rotinas</button>' + '<button class="btn btn-secondary btn-sm" data-qd="colunas">Colunas</button>' +
         '<button class="btn btn-secondary btn-sm" data-qd="arquivados">Arquivados</button>' +
-        '<button class="btn btn-secondary btn-sm" data-qd="csv">' + (IC.download || '') + ' CSV</button>' +
+        '<button class="btn btn-secondary btn-sm" data-qd="csv">' + (IC.download || '') + ' CSV</button>' + '<button class="btn btn-secondary btn-sm" data-qd="importar">' + (IC.arrowIn || '') + ' Importar</button>' +
         '<button class="btn btn-secondary btn-sm" data-qd="pdf">' + (IC.file || '') + ' PDF</button>' +
         '<button class="btn btn-primary" data-qd="g-novo">' + (IC.plus || '') + ' Novo grupo</button>' : '') +
       '</div></div>';
@@ -1835,7 +1835,7 @@
     if (modelo.colunas) {
       q.colunas = modelo.colunas.map(function (c) {
         var col = { id: uid(), nome: c.nome, tipo: c.tipo };
-        if (c.tipo === 'status') col.opcoes = opcoesStatusPadrao();
+        if (c.tipo === 'status') col.opcoes = c.opcoes ? opcoesDeModelo(c.opcoes) : opcoesStatusPadrao();
         else if (c.tipo === 'lista') col.opcoes = (c.opcoes || ['Opção 1', 'Opção 2']).map(function (n, i) { return { id: uid(), nome: n, cor: CORES[(i + 1) % CORES.length] }; });
         return col;
       });
@@ -1873,7 +1873,7 @@
     MODELOS.forEach(function (m, i) {
       h += '<label class="qdn-mod"><input type="radio" name="qdn-mod" value="' + esc(m.id) + '"' + (i === 0 ? ' checked' : '') + '><div><strong>' + esc(m.nome) + '</strong><div class="sub">' + esc(m.desc) + '</div></div></label>';
     });
-    return h + '<button class="btn btn-primary" data-qr="nq-criar" style="margin-top:8px">Criar quadro</button></div>';
+    return h + '<button class="btn btn-primary" data-qr="nq-criar" style="margin-top:8px">Criar quadro</button>' + htmlSecaoModelos() + '</div>';
   }
   function abrirNovoQuadro() {
     openModal('Novo quadro', corpoNovoQuadro(), '<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>', false);
@@ -2083,6 +2083,418 @@
   window.QuadrosRotinasTeste = testeRotinas;
   ligarRotinas();
   envolverGeracao();
+  /* ---------------- importar CSV e modelos do usuário (Fase 2C, parte 2) ---------------- */
+  var CHAVE_MOD = 'quadros_modelos';
+  var QTD_PRONTOS = MODELOS.length;
+  var impDados = null;
+
+  function normalizar(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+
+  /* --- modelos do usuário --- */
+  function opcoesDeModelo(lista) {
+    return lista.map(function (o, i) {
+      if (typeof o === 'string') return { id: uid(), nome: o, cor: CORES[(i + 1) % CORES.length] };
+      var x = { id: uid(), nome: o.nome, cor: o.cor || CORES[(i + 1) % CORES.length] };
+      if (o.final) x.final = true;
+      return x;
+    });
+  }
+  function lerModelosUsuario() {
+    var d = null;
+    try { d = DB.get(CHAVE_MOD); } catch (e) { d = null; }
+    return (d && !Array.isArray(d) && Array.isArray(d.modelos)) ? d.modelos : [];
+  }
+  function gravarModelosUsuario(lista) { DB.set(CHAVE_MOD, { versao: 1, modelos: lista }); }
+  function sincronizarModelos() {
+    MODELOS.length = QTD_PRONTOS;
+    lerModelosUsuario().forEach(function (m) { MODELOS.push(m); });
+  }
+  function modeloDeQuadro(q, nome, incluirItens) {
+    var grupos = q.grupos.filter(function (g) { return !g.arquivado; }).map(function (g) {
+      return { nome: g.nome, itens: incluirItens ? g.itens.filter(function (i) { return !i.arquivado; }).map(function (i) { return i.nome; }) : [] };
+    });
+    if (!grupos.length) grupos = [{ nome: 'Grupo 1', itens: [] }];
+    return {
+      id: 'u' + uid(), nome: nome, usuario: true,
+      desc: 'Seu modelo, criado a partir de "' + q.nome + '"' + (incluirItens ? ' (com itens)' : ''),
+      colunas: q.colunas.map(function (c) {
+        var r = { nome: c.nome, tipo: c.tipo };
+        if (c.tipo === 'status') r.opcoes = (c.opcoes || []).map(function (o) { var x = { nome: o.nome, cor: o.cor }; if (o.final) x.final = true; return x; });
+        else if (c.tipo === 'lista') r.opcoes = (c.opcoes || []).map(function (o) { return o.nome; });
+        return r;
+      }),
+      grupos: grupos
+    };
+  }
+  function htmlSecaoModelos() {
+    sincronizarModelos();
+    var q = quadroAtual();
+    var meus = MODELOS.filter(function (m) { return m.usuario; });
+    var h = '<div class="qdt-sec">Meus modelos</div>';
+    if (!meus.length) h += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Você ainda não salvou modelos.</div>';
+    meus.forEach(function (m) {
+      h += '<div class="qdr-row"><div class="info"><strong>' + esc(m.nome) + '</strong><div class="sub">' + esc(m.desc) + '</div></div><button class="btn btn-ghost btn-sm" style="color:var(--rosa-antigo)" data-qr="mod-del" data-id="' + esc(m.id) + '">Excluir</button></div>';
+    });
+    if (q) {
+      h += '<div class="qdt-sec">Salvar o quadro atual como modelo</div>' +
+        '<input class="form-input" id="qdm-nome" placeholder="Nome do modelo" value="' + esc(q.nome) + '" style="margin-bottom:8px">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="qdm-itens"> Incluir os itens atuais no modelo</label>' +
+        '<button class="btn btn-secondary btn-sm" data-qr="mod-salvar">Salvar modelo</button>';
+    }
+    return h;
+  }
+  function salvarModeloDoModal() {
+    var q = quadroAtual(); if (!q || !$('qdn-root')) return;
+    var nome = ($('qdm-nome').value || '').trim();
+    if (!nome) { aviso('Dê um nome ao modelo'); return; }
+    var lista = lerModelosUsuario();
+    lista.push(modeloDeQuadro(q, nome, !!$('qdm-itens').checked));
+    gravarModelosUsuario(lista); sincronizarModelos();
+    aviso('Modelo salvo'); abrirNovoQuadro();
+  }
+  function onModClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qr]') : null; if (!t) return;
+    var acao = t.dataset.qr;
+    if (acao === 'mod-salvar') salvarModeloDoModal();
+    else if (acao === 'mod-del') {
+      if (!$('qdn-root')) return;
+      if (window.confirm('Excluir este modelo? Os quadros já criados com ele não mudam.')) {
+        gravarModelosUsuario(lerModelosUsuario().filter(function (m) { return m.id !== t.dataset.id; }));
+        sincronizarModelos(); abrirNovoQuadro();
+      }
+    }
+  }
+
+  /* --- leitura do CSV --- */
+  function contarFora(s, d) {
+    var n = 0, dentro = false;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if (ch === '"') dentro = !dentro; else if (!dentro && ch === d) n++;
+    }
+    return n;
+  }
+  function parseCSV(texto) {
+    texto = String(texto || '').replace(/^\uFEFF/, '');
+    var primeira = texto.split(/\r?\n/)[0] || '';
+    var delim = ';', melhor = -1;
+    [';', ',', '\t'].forEach(function (d) { var n = contarFora(primeira, d); if (n > melhor) { melhor = n; delim = d; } });
+    var linhas = [], linha = [], campo = '', dentro = false;
+    for (var i = 0; i < texto.length; i++) {
+      var c = texto.charAt(i);
+      if (dentro) {
+        if (c === '"') { if (texto.charAt(i + 1) === '"') { campo += '"'; i++; } else dentro = false; }
+        else campo += c;
+      } else if (c === '"') { dentro = true; }
+      else if (c === delim) { linha.push(campo); campo = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && texto.charAt(i + 1) === '\n') i++;
+        linha.push(campo); campo = ''; linhas.push(linha); linha = [];
+      } else { campo += c; }
+    }
+    if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+    linhas = linhas.filter(function (l) { return l.some(function (x) { return String(x).trim() !== ''; }); });
+    return { delim: delim, linhas: linhas };
+  }
+  function dataValida(a, m, d) {
+    a = +a; m = +m; d = +d;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return '';
+    var x = new Date(a, m - 1, d, 12, 0, 0);
+    if (x.getFullYear() !== a || x.getMonth() !== m - 1 || x.getDate() !== d) return '';
+    return isoDe(x);
+  }
+  function parseData(v) {
+    v = String(v || '').trim(); if (!v) return '';
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(v);
+    if (m) return dataValida(m[1], m[2], m[3]);
+    m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(v);
+    if (m) { var a = +m[3]; if (a < 100) a += 2000; return dataValida(a, m[2], m[1]); }
+    m = /^(\d{1,2})[\/\-.](\d{1,2})$/.exec(v);
+    if (m) return dataValida(new Date().getFullYear(), m[2], m[1]);
+    return '';
+  }
+  function opcaoPorNome(col, nome) {
+    var n = normalizar(nome), r = null;
+    (col.opcoes || []).forEach(function (o) { if (!r && normalizar(o.nome) === n) r = o; });
+    return r;
+  }
+  function mapaAutomatico(q, cab) {
+    var usados = {}; var nomeFeito = false, grupoFeito = false, descFeita = false;
+    var sin = {
+      status: ['status', 'situacao', 'andamento'],
+      pessoa: ['responsavel', 'responsaveis', 'dono', 'pessoa', 'owner'],
+      data: ['prazo', 'data', 'vencimento', 'entrega', 'data limite'],
+      link: ['link', 'url', 'site']
+    };
+    var mapa = cab.map(function (h) {
+      var n = normalizar(h);
+      if (!n || n === 'quadro') return 'ignorar';
+      if (!grupoFeito && (n === 'grupo' || n === 'fase')) { grupoFeito = true; return 'grupo'; }
+      if (!nomeFeito && ['item', 'nome', 'titulo', 'tarefa', 'atividade'].indexOf(n) > -1) { nomeFeito = true; return 'nome'; }
+      if (!descFeita && ['descricao', 'observacao', 'observacoes', 'notas', 'detalhes'].indexOf(n) > -1) { descFeita = true; return 'descricao'; }
+      var alvo = null;
+      q.colunas.forEach(function (c) { if (!alvo && !usados[c.id] && normalizar(c.nome) === n) alvo = c; });
+      if (!alvo) q.colunas.forEach(function (c) { if (!alvo && !usados[c.id] && sin[c.tipo] && sin[c.tipo].indexOf(n) > -1) alvo = c; });
+      if (alvo) { usados[alvo.id] = true; return 'c:' + alvo.id; }
+      return 'novo';
+    });
+    if (mapa.indexOf('nome') < 0) {
+      for (var i = 0; i < mapa.length; i++) {
+        if ((mapa[i] === 'novo' || mapa[i] === 'ignorar') && normalizar(cab[i]) !== 'quadro') { mapa[i] = 'nome'; break; }
+      }
+    }
+    return mapa;
+  }
+  function achaGrupoPorNome(s, q, nome) {
+    var n = normalizar(nome), r = null;
+    q.grupos.forEach(function (g) { if (!r && !g.arquivado && normalizar(g.nome) === n) r = g; });
+    return r || criarGrupo(s, q, nome);
+  }
+  function aplicarValor(s, q, col, it, bruto, opts, res) {
+    var v = String(bruto == null ? '' : bruto).trim();
+    if (v === '') return;
+    var n, o, u, d;
+    switch (col.tipo) {
+      case 'texto': it.valores[col.id] = v; break;
+      case 'link': u = normalizarUrl(v); if (u) it.valores[col.id] = u; break;
+      case 'numero': case 'moeda': n = parseNum(v); if (n !== null) it.valores[col.id] = n; break;
+      case 'data': d = parseData(v); if (d) it.valores[col.id] = d; else res.datasInvalidas++; break;
+      case 'check': it.valores[col.id] = /^(sim|s|true|1|x|ok|feito|yes)$/.test(normalizar(v)); break;
+      case 'pessoa': if (opts.criarNovos) adicionarPessoa(s, q, v); it.valores[col.id] = v; break;
+      case 'status': case 'lista':
+        o = opcaoPorNome(col, v);
+        if (!o && opts.criarNovos) {
+          o = adicionarOpcao(s, q, col, v);
+          if (col.tipo === 'status' && /^(conclu|feito|finaliz|entreg|pago|publicad)/.test(normalizar(v))) o.final = true;
+          res.etiquetasNovas++;
+        }
+        if (o) it.valores[col.id] = o.id;
+        break;
+      default: break;
+    }
+  }
+  function executarImportacao(s, q, linhas, mapaOrig, opts) {
+    var res = { criados: 0, semNome: 0, datasInvalidas: 0, etiquetasNovas: 0, colunasNovas: 0, cortadas: 0 };
+    var mapa = mapaOrig.slice();
+    if (mapa.indexOf('nome') < 0) { res.erro = 'Escolha qual coluna da planilha é o nome do item.'; return res; }
+    var cab = linhas[0];
+    mapa = mapa.map(function (m, j) {
+      if (m !== 'novo') return m;
+      var col = adicionarColuna(s, q, String(cab[j] || '').trim() || 'Coluna ' + (j + 1), 'texto');
+      res.colunasNovas++;
+      return 'c:' + col.id;
+    });
+    var idxNome = mapa.indexOf('nome'), idxGrupo = mapa.indexOf('grupo');
+    var gPadrao = null;
+    function grupoPadrao() {
+      if (gPadrao) return gPadrao;
+      if (opts.grupoId) q.grupos.forEach(function (g) { if (g.id === opts.grupoId && !g.arquivado) gPadrao = g; });
+      if (!gPadrao) gPadrao = achaGrupoPorNome(s, q, 'Importados');
+      return gPadrao;
+    }
+    var dados = linhas.slice(1);
+    if (dados.length > 1000) { res.cortadas = dados.length - 1000; dados = dados.slice(0, 1000); }
+    dados.forEach(function (row) {
+      var nome = String(row[idxNome] == null ? '' : row[idxNome]).trim();
+      if (!nome) { res.semNome++; return; }
+      var g = (idxGrupo >= 0 && String(row[idxGrupo] || '').trim()) ? achaGrupoPorNome(s, q, String(row[idxGrupo]).trim()) : grupoPadrao();
+      var it = criarItem(s, q, g, nome);
+      mapa.forEach(function (m, j) {
+        if (m === 'descricao') { var t = String(row[j] == null ? '' : row[j]).trim(); if (t) it.descricao = t; return; }
+        if (m.indexOf('c:') !== 0) return;
+        var col = colunaPorId(q, m.slice(2));
+        if (col) aplicarValor(s, q, col, it, row[j], opts, res);
+      });
+      res.criados++;
+    });
+    return res;
+  }
+
+  /* --- interface: importar --- */
+  function corpoImportar1() {
+    return '<div id="qdi-root"><p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Traga itens de uma planilha para este quadro. A primeira linha deve ter os nomes das colunas. Colunas com o mesmo nome das do quadro são reconhecidas sozinhas, e o CSV exportado pelo próprio sistema volta sem ajuste.</p>' +
+      '<label class="form-label">Arquivo CSV</label><input class="form-input" type="file" id="qdi-arq" accept=".csv,.txt,text/csv" style="margin-bottom:12px">' +
+      '<div class="qdt-sec" style="margin-top:6px">ou cole o conteúdo da planilha</div>' +
+      '<textarea class="form-textarea" id="qdi-txt" rows="5" placeholder="Item;Status;Prazo&#10;Gravar reel;Em andamento;15/11/2026"></textarea>' +
+      '<div class="qdr-linha" style="margin-top:10px"><button class="btn btn-primary" data-qi="ler">Ler dados</button></div></div>';
+  }
+  function opcoesMapa(q, atual) {
+    return opcSel('ignorar', 'Ignorar', atual === 'ignorar') + opcSel('nome', 'Nome do item', atual === 'nome') +
+      opcSel('descricao', 'Descrição do item', atual === 'descricao') + opcSel('grupo', 'Grupo', atual === 'grupo') +
+      opcSel('novo', 'Nova coluna (texto)', atual === 'novo') +
+      q.colunas.map(function (c) { return opcSel('c:' + c.id, c.nome + ' (' + (TIPOS[c.tipo] || TIPOS.texto).nome + ')', atual === 'c:' + c.id); }).join('');
+  }
+  function corpoImportar2(q) {
+    var d = impDados; var cab = d.linhas[0]; var resto = d.linhas.slice(1);
+    var nomeDelim = { ';': 'ponto e vírgula', ',': 'vírgula', '\t': 'tabulação' }[d.delim] || d.delim;
+    var h = '<div id="qdi-root"><p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">' + resto.length + (resto.length === 1 ? ' linha encontrada' : ' linhas encontradas') + ' (separador: ' + nomeDelim + '). Confira o que cada coluna da planilha vira no quadro.</p>';
+    h += '<table style="width:100%;font-size:12px"><thead><tr><th>Coluna da planilha</th><th>Exemplo</th><th>Vira</th></tr></thead><tbody>';
+    cab.forEach(function (c, j) {
+      var ex = '';
+      for (var k = 0; k < resto.length; k++) { if (resto[k][j] && String(resto[k][j]).trim()) { ex = String(resto[k][j]).trim(); break; } }
+      h += '<tr><td><strong>' + esc(c) + '</strong></td><td style="color:var(--text-muted)">' + esc(ex.slice(0, 40)) + '</td><td><select class="form-select qdi-map" data-j="' + j + '" style="width:auto;font-size:12px">' + opcoesMapa(q, d.mapa[j]) + '</select></td></tr>';
+    });
+    h += '</tbody></table>';
+    h += '<div class="qdr-linha" style="margin-top:14px"><div><label class="form-label">Itens sem grupo na planilha vão para</label><select class="form-select" id="qdi-grupo"><option value="__novo__">Novo grupo "Importados"</option>' +
+      q.grupos.filter(function (g) { return !g.arquivado; }).map(function (g) { return opcSel(g.id, g.nome, false); }).join('') + '</select></div></div>';
+    h += '<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:6px 0 14px"><input type="checkbox" id="qdi-auto" checked> Criar etiquetas e pessoas que ainda não existem no quadro</label>';
+    h += '<div class="qdr-linha"><button class="btn btn-primary" data-qi="importar">Importar ' + resto.length + (resto.length === 1 ? ' item' : ' itens') + '</button><button class="btn btn-secondary" data-qi="voltar">Voltar</button></div></div>';
+    return h;
+  }
+  function abrirImportar() {
+    var q = quadroAtual(); if (!q) return;
+    impDados = null;
+    openModal('Importar CSV \u00B7 ' + q.nome, corpoImportar1(), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', true);
+  }
+  function prepararImport(texto) {
+    var q = quadroAtual(); if (!q) return;
+    var p = parseCSV(texto);
+    if (p.linhas.length < 2) { aviso('Não encontrei linhas de dados. A primeira linha deve ter os nomes das colunas.'); return; }
+    impDados = { delim: p.delim, linhas: p.linhas, mapa: mapaAutomatico(q, p.linhas[0]) };
+    openModal('Importar CSV \u00B7 ' + q.nome, corpoImportar2(q), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', true);
+  }
+  function lerArquivoImport(arq) {
+    var r = new FileReader();
+    r.onload = function () {
+      var t = String(r.result || '');
+      if (t.indexOf('\uFFFD') > -1) {
+        var r2 = new FileReader();
+        r2.onload = function () { prepararImport(String(r2.result || '')); };
+        r2.readAsText(arq, 'windows-1252');
+      } else { prepararImport(t); }
+    };
+    r.readAsText(arq);
+  }
+  function confirmarImportacao() {
+    var q = quadroAtual(); if (!q || !impDados) return;
+    var sel = $('qdi-grupo'), auto = $('qdi-auto');
+    var opts = { grupoId: sel && sel.value !== '__novo__' ? sel.value : '', criarNovos: !!(auto && auto.checked) };
+    var res = executarImportacao(Q, q, impDados.linhas, impDados.mapa, opts);
+    if (res.erro) { aviso(res.erro); return; }
+    impDados = null; salvar(); renderTudo(); closeModal();
+    var msg = res.criados + (res.criados === 1 ? ' item importado' : ' itens importados');
+    if (res.semNome) msg += ' \u00B7 ' + res.semNome + ' sem nome ignorada' + (res.semNome > 1 ? 's' : '');
+    if (res.datasInvalidas) msg += ' \u00B7 ' + res.datasInvalidas + ' data' + (res.datasInvalidas > 1 ? 's' : '') + ' não reconhecida' + (res.datasInvalidas > 1 ? 's' : '');
+    if (res.cortadas) msg += ' \u00B7 ' + res.cortadas + ' linhas além do limite de 1000 ficaram de fora';
+    aviso(msg);
+  }
+  function onImpClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qi]') : null; if (!t || !$('qdi-root')) return;
+    var acao = t.dataset.qi;
+    if (acao === 'ler') { var tx = $('qdi-txt'); prepararImport(tx ? tx.value : ''); }
+    else if (acao === 'voltar') abrirImportar();
+    else if (acao === 'importar') confirmarImportacao();
+  }
+  function onImpChange(e) {
+    var el = e.target; if (!el) return;
+    if (el.id === 'qdi-arq') { if (el.files && el.files[0]) lerArquivoImport(el.files[0]); return; }
+    if (el.classList && el.classList.contains('qdi-map') && impDados) impDados.mapa[parseInt(el.dataset.j, 10)] = el.value;
+  }
+  function ligarImportModelos() {
+    sincronizarModelos();
+    var c = $('content');
+    c.addEventListener('click', function (e) {
+      if (!ativo()) return;
+      var t = e.target.closest ? e.target.closest('[data-qd="importar"]') : null;
+      if (t) abrirImportar();
+    });
+    var mb = $('modalBody');
+    if (mb) { mb.addEventListener('click', onImpClick); mb.addEventListener('change', onImpChange); mb.addEventListener('click', onModClick); }
+    var rn = window.renderNav;
+    if (typeof rn === 'function' && !rn._qdMod) {
+      var novo = function () { try { sincronizarModelos(); } catch (e) { /* ignorar */ } return rn.apply(this, arguments); };
+      novo._qdMod = true; window.renderNav = novo;
+    }
+  }
+
+  function testeImport() {
+    var r = [];
+    function ok(nome, cond) { r.push({ teste: nome, ok: !!cond }); }
+    var p = parseCSV('\uFEFFItem;Status;Prazo\r\nGravar reel;Em andamento;15/11/2026\n\nPostar;"Em; revisão";\n');
+    ok('detecta o ponto e vírgula, ignora o BOM e as linhas vazias', p.delim === ';' && p.linhas.length === 3 && p.linhas[0][0] === 'Item');
+    ok('respeita aspas com o separador dentro', p.linhas[2][1] === 'Em; revisão');
+    ok('mantém o campo vazio no fim da linha', p.linhas[2].length === 3 && p.linhas[2][2] === '');
+    var p2 = parseCSV('a,b\n1,"linha 1\nlinha 2"\n2,"diz ""oi"""');
+    ok('detecta vírgula, quebra de linha entre aspas e aspas duplas', p2.delim === ',' && p2.linhas[1][1] === 'linha 1\nlinha 2' && p2.linhas[2][1] === 'diz "oi"');
+    ok('detecta tabulação', parseCSV('a\tb\n1\t2').delim === '\t');
+    ok('data dd/mm/aaaa', parseData('12/11/2026') === '2026-11-12');
+    ok('data dd/mm/aa', parseData('12/11/26') === '2026-11-12');
+    ok('data aaaa-mm-dd e com hora', parseData('2026-11-12') === '2026-11-12' && parseData('2026-11-12T10:00:00') === '2026-11-12');
+    ok('data com hífen e ponto', parseData('12-11-2026') === '2026-11-12' && parseData('12.11.2026') === '2026-11-12');
+    ok('data dd/mm usa o ano atual', parseData('12/11') === new Date().getFullYear() + '-11-12');
+    ok('data inválida é recusada', parseData('31/02/2026') === '' && parseData('abc') === '' && parseData('') === '');
+    ok('normalizar tira acento e caixa', normalizar('  Responsável ') === 'responsavel');
+    var s = novoEstado(); var q = criarQuadro(s, 'Origem', ['Ana', 'Bia']); var g = q.grupos[0]; g.nome = 'Semana 1';
+    var g2 = criarGrupo(s, q, 'Semana 2');
+    var cSt = q.colunas[0], cPe = q.colunas[2], cDt = q.colunas[3];
+    var chk = adicionarColuna(s, q, 'Pago', 'check'); var mo = adicionarColuna(s, q, 'Valor', 'moeda');
+    var a = criarItem(s, q, g, 'Gravar reel');
+    setValor(s, a, cSt.id, cSt.opcoes[1].id); setValor(s, a, cDt.id, '2026-11-15'); setValor(s, a, cPe.id, 'Bia'); setValor(s, a, chk.id, true); setValor(s, a, mo.id, 1240.5);
+    var b = criarItem(s, q, g2, 'Postar'); setValor(s, b, cSt.id, cSt.opcoes[4].id);
+    var parsed = parseCSV(gerarCSV(q));
+    var q2 = criarQuadro(s, 'Destino', ['Ana']);
+    adicionarColuna(s, q2, 'Pago', 'check'); adicionarColuna(s, q2, 'Valor', 'moeda');
+    var mapa = mapaAutomatico(q2, parsed.linhas[0]);
+    ok('o CSV exportado pelo sistema é reconhecido sem ajuste', mapa[0] === 'ignorar' && mapa[1] === 'grupo' && mapa[2] === 'nome' && mapa.slice(3).every(function (m) { return m.indexOf('c:') === 0; }));
+    var res = executarImportacao(s, q2, parsed.linhas, mapa, { grupoId: '', criarNovos: true });
+    ok('importa os 2 itens e cria os grupos da planilha', res.criados === 2 && q2.grupos.some(function (x) { return x.nome === 'Semana 1'; }) && q2.grupos.some(function (x) { return x.nome === 'Semana 2'; }));
+    var ia = null, ib = null;
+    q2.grupos.forEach(function (x) { x.itens.forEach(function (i) { if (i.nome === 'Gravar reel') ia = i; if (i.nome === 'Postar') ib = i; }); });
+    var cSt2 = q2.colunas[0], cPe2 = q2.colunas[2], cDt2 = q2.colunas[3], chk2 = q2.colunas[4], mo2 = q2.colunas[5];
+    ok('status, data, pessoa, check e moeda voltam iguais', ia.valores[cSt2.id] === cSt2.opcoes[1].id && ia.valores[cDt2.id] === '2026-11-15' && ia.valores[cPe2.id] === 'Bia' && ia.valores[chk2.id] === true && ia.valores[mo2.id] === 1240.5);
+    ok('o status concluído também volta', ib.valores[cSt2.id] === cSt2.opcoes[4].id);
+    ok('pessoa nova é adicionada ao quadro', q2.pessoas.indexOf('Bia') > -1);
+    var s3 = novoEstado(); var q3 = criarQuadro(s3, 'Etiq', ['Ana']); var cs3 = q3.colunas[0];
+    var r3 = executarImportacao(s3, q3, [['Item', 'Status'], ['X', 'Publicado']], ['nome', 'c:' + cs3.id], { grupoId: '', criarNovos: true });
+    var nova = null; cs3.opcoes.forEach(function (o) { if (o.nome === 'Publicado') nova = o; });
+    ok('status desconhecido vira etiqueta nova marcada como concluído', r3.etiquetasNovas === 1 && !!nova && nova.final === true);
+    var s4 = novoEstado(); var q4 = criarQuadro(s4, 'SemAuto', ['Ana']); var cs4 = q4.colunas[0]; var antes = cs4.opcoes.length;
+    executarImportacao(s4, q4, [['Item', 'Status'], ['X', 'Publicado']], ['nome', 'c:' + cs4.id], { grupoId: '', criarNovos: false });
+    ok('sem criar novos, o status fica no inicial e nenhuma etiqueta nasce', cs4.opcoes.length === antes && q4.grupos[0].itens.length === 0 && q4.grupos.some(function (x) { return x.nome === 'Importados' && x.itens[0].valores[cs4.id] === cs4.opcoes[0].id; }));
+    var s5 = novoEstado(); var q5 = criarQuadro(s5, 'Dest', ['Ana']); var gid = q5.grupos[0].id;
+    executarImportacao(s5, q5, [['Item'], ['A'], ['B']], ['nome'], { grupoId: gid, criarNovos: true });
+    ok('usa o grupo escolhido quando a planilha não tem grupo', q5.grupos.length === 1 && q5.grupos[0].itens.length === 2);
+    var s6 = novoEstado(); var q6 = criarQuadro(s6, 'Novo', ['Ana']); var n0 = q6.colunas.length;
+    var r6 = executarImportacao(s6, q6, [['Item', 'Observação'], ['A', 'texto livre']], ['nome', 'novo'], { grupoId: '', criarNovos: true });
+    var cob = q6.colunas[q6.colunas.length - 1];
+    ok('coluna nova de texto é criada com o nome da planilha', r6.colunasNovas === 1 && q6.colunas.length === n0 + 1 && cob.nome === 'Observação' && cob.tipo === 'texto');
+    var s7 = novoEstado(); var q7 = criarQuadro(s7, 'Mix', ['Ana']); var cd7 = q7.colunas[3];
+    var r7 = executarImportacao(s7, q7, [['Item', 'Prazo'], ['', '12/11/2026'], ['B', '31/02/2026'], ['C', '12/11/2026']], ['nome', 'c:' + cd7.id], { grupoId: '', criarNovos: true });
+    ok('linhas sem nome são ignoradas e datas inválidas contadas', r7.criados === 2 && r7.semNome === 1 && r7.datasInvalidas === 1);
+    ok('sem coluna de nome, avisa em vez de importar', !!executarImportacao(s7, q7, [['X'], ['1']], ['ignorar'], { grupoId: '', criarNovos: true }).erro);
+    ok('se nenhuma coluna parece nome, a primeira vira o nome', mapaAutomatico(q7, ['Ação', 'Prazo'])[0] === 'nome' && mapaAutomatico(q7, ['Ação', 'Prazo'])[1] === 'c:' + cd7.id);
+    ok('Descrição vira a descrição do item', (function () {
+      var sd = novoEstado(); var qd = criarQuadro(sd, 'D', ['Ana']);
+      executarImportacao(sd, qd, [['Item', 'Descrição'], ['A', 'Contexto longo']], ['nome', 'descricao'], { grupoId: '', criarNovos: true });
+      return qd.grupos.some(function (x) { return x.itens.some(function (i) { return i.descricao === 'Contexto longo'; }); });
+    })());
+    ok('limite de 1000 linhas', (function () {
+      var sl = novoEstado(); var ql = criarQuadro(sl, 'L', ['Ana']); var linhas = [['Item']];
+      for (var i = 0; i < 1005; i++) linhas.push(['I' + i]);
+      var rl = executarImportacao(sl, ql, linhas, ['nome'], { grupoId: '', criarNovos: true });
+      return rl.criados === 1000 && rl.cortadas === 5;
+    })());
+    var sm = novoEstado(); var qm = criarDeModelo(sm, MODELOS[1], 'Base', ['Ana']);
+    qm.colunas[0].opcoes.push({ id: 'x', nome: 'Aprovado', cor: '#112233', final: true });
+    var mod = modeloDeQuadro(qm, 'Meu', true);
+    ok('modelo do usuário guarda colunas, grupos e itens', mod.usuario === true && mod.colunas.length === qm.colunas.length && mod.grupos.length === qm.grupos.length && mod.grupos[0].itens.length === qm.grupos[0].itens.length);
+    var qn = criarDeModelo(novoEstado(), mod, 'Novo', ['Ana']);
+    var apr = null; qn.colunas[0].opcoes.forEach(function (o) { if (o.nome === 'Aprovado') apr = o; });
+    ok('o quadro criado do modelo mantém a etiqueta personalizada e a marca de concluído', !!apr && apr.final === true && apr.cor === '#112233');
+    ok('modelo sem itens não leva itens', modeloDeQuadro(qm, 'Meu', false).grupos.every(function (x) { return x.itens.length === 0; }));
+    ok('o quadro novo não reaproveita ids do original', qn.id !== qm.id && qn.colunas[0].id !== qm.colunas[0].id);
+    ok('modelo de quadro sem grupos ativos ganha um grupo', (function () { var sq = novoEstado(); var qq = criarQuadro(sq, 'V', ['Ana']); qq.grupos[0].arquivado = true; return modeloDeQuadro(qq, 'M', false).grupos.length === 1; })());
+    ok('modelo guarda listas só com os nomes', (function () { var lc = modeloDeQuadro(criarDeModelo(novoEstado(), MODELOS[2], 'C', ['Ana']), 'M', false).colunas.filter(function (c) { return c.tipo === 'lista'; })[0]; return typeof lc.opcoes[0] === 'string'; })());
+    ok('os modelos prontos continuam no início da lista', MODELOS.length >= QTD_PRONTOS && MODELOS[0].id === 'branco');
+    ok('SISTEMA: importar disponível', typeof abrirImportar === 'function');
+    var falhas = r.filter(function (x) { return !x.ok; });
+    if (console.table) console.table(r);
+    console.log(falhas.length === 0 ? 'QUADROS-IMPORT: ' + r.length + ' testes, 0 falhas' : 'QUADROS-IMPORT: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
+    return { total: r.length, falhas: falhas.length, resultados: r };
+  }
+
+  window.QuadrosImportTeste = testeImport;
+  ligarImportModelos();
   window.QuadrosDetalheTeste = testeDetalhe;
   window.QuadrosTeste = teste;
   window.Quadros = { estado: Q, abrir: function () { go('quadros'); } };
