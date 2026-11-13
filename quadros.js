@@ -686,7 +686,7 @@
       h += '<div class="folder-chip active" data-qd="limpar-ordem">Ordem: ' + esc(cn) + (s.ordem.dir === 'desc' ? ' (z-a)' : ' (a-z)') + ' &#10005;</div>';
     }
     if (f.busca || f.pessoa || f.status || f.atrasados) h += '<div class="folder-chip" data-qd="limpar-filtros">Limpar filtros</div>';
-    h += '<div class="view-toggle" style="margin-left:auto"><button class="' + (s.visao === 'tabela' ? 'active' : '') + '" data-qd="visao" data-v="tabela" title="Tabela">' + (IC.list || 'Tabela') + '</button><button class="' + (s.visao === 'kanban' ? 'active' : '') + '" data-qd="visao" data-v="kanban" title="Kanban">' + (IC.grid || 'Kanban') + '</button></div>';
+    h += '<button class="btn btn-secondary btn-sm" data-qd="automacoes" style="margin-left:auto">Automações</button><div class="view-toggle" style="margin-left:8px"><button class="' + (s.visao === 'tabela' ? 'active' : '') + '" data-qd="visao" data-v="tabela" title="Tabela">' + (IC.list || 'Tabela') + '</button><button class="' + (s.visao === 'kanban' ? 'active' : '') + '" data-qd="visao" data-v="kanban" title="Kanban">' + (IC.grid || 'Kanban') + '</button><button class="' + (s.visao === 'linha' ? 'active' : '') + '" data-qd="visao" data-v="linha" title="Linha do tempo">' + (IC.calCheck || 'Linha do tempo') + '</button><button class="' + (s.visao === 'painel' ? 'active' : '') + '" data-qd="visao" data-v="painel" title="Painel">' + (IC.dashboard || 'Painel') + '</button></div>';
     return h;
   }
   function gridCols(q) {
@@ -722,7 +722,7 @@
       case 'link':
         return '<input class="qd-val" type="url" data-tipo="link" ' + base + ' value="' + esc(v || '') + '" placeholder="https://">' + (v ? '<a href="' + esc(v) + '" target="_blank" rel="noopener" style="font-size:13px;color:var(--rosa-antigo);text-decoration:none" aria-label="Abrir link">&#8599;</a>' : '');
       default:
-        return '<input class="qd-val" type="text" data-tipo="texto" ' + base + ' value="' + esc(v || '') + '">';
+        return c.tipo === 'vinculo' ? htmlVinculo(it, c, v) : '<input class="qd-val" type="text" data-tipo="texto" ' + base + ' value="' + esc(v || '') + '">';
     }
   }
   function htmlLinha(s, q, g, it, hoje) {
@@ -800,7 +800,7 @@
   function renderCorpo() {
     var el = $('qd-corpo'); if (!el) return;
     var q = quadroAtual();
-    el.innerHTML = !q ? htmlVazio() : (Q.visao === 'kanban' ? htmlKanban(Q, q) : htmlTabela(Q, q));
+    el.innerHTML = !q ? htmlVazio() : (Q.visao === 'kanban' ? htmlKanban(Q, q) : (Q.visao === 'linha' ? htmlLinhaTempo(Q, q) : (Q.visao === 'painel' ? htmlPainel(Q, q) : htmlTabela(Q, q))));
     if (foco) {
       var inp = el.querySelector('input.qd-add[data-g="' + foco + '"]');
       if (inp) inp.focus();
@@ -2495,6 +2495,596 @@
 
   window.QuadrosImportTeste = testeImport;
   ligarImportModelos();
+  /* ---------------- vínculos, automações, linha do tempo e painel (Fases 2D e 3) ---------------- */
+  var vinTab = 'fornecedor';
+  var tlOff = 0;
+  var MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  TIPOS.vinculo = { nome: 'Vínculo com o sistema', w: '180px' };
+
+  function diasEntre(a, b) { return Math.round((dataDe(b) - dataDe(a)) / 86400000); }
+  function inicioDaSemana(iso) { var d = dataDe(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoDe(d); }
+  function colStatusDe(q) { var c = null; q.colunas.forEach(function (x) { if (!c && x.tipo === 'status') c = x; }); return c; }
+  function colPessoaDe(q) { var c = null; q.colunas.forEach(function (x) { if (!c && x.tipo === 'pessoa') c = x; }); return c; }
+
+  /* --- 2D: vínculos --- */
+  var FONTES_VIN = {
+    fornecedor: { nome: 'Fornecedor', plural: 'Fornecedores', chave: 'suppliers' },
+    pedido: { nome: 'Pedido', plural: 'Pedidos', chave: 'pedidos' },
+    produto: { nome: 'Produto', plural: 'Produtos', chave: 'products' },
+    formula: { nome: 'Fórmula', plural: 'Fórmulas', chave: 'formulas' }
+  };
+  var ORDEM_VIN = ['fornecedor', 'pedido', 'produto', 'formula'];
+  var cacheFonte = { t: 0, d: {} };
+  function lerFonte(tipo) {
+    var f = FONTES_VIN[tipo]; if (!f) return [];
+    var agora = Date.now();
+    if (agora - cacheFonte.t > 1500) cacheFonte = { t: agora, d: {} };
+    if (!cacheFonte.d[tipo]) {
+      var l = null;
+      try { l = DB.get(f.chave); } catch (e) { l = null; }
+      cacheFonte.d[tipo] = Array.isArray(l) ? l : [];
+    }
+    return cacheFonte.d[tipo];
+  }
+  function rotuloVinculo(tipo, r) {
+    if (tipo === 'pedido') return '#' + (r.numero || '?') + (r.cliente ? ' ' + r.cliente : '');
+    return r.name || r.nome || '(sem nome)';
+  }
+  function subVinculo(tipo, r) {
+    if (tipo === 'fornecedor') return r.phone || r.email || '';
+    if (tipo === 'pedido') return (r.total != null ? fmtMoeda(r.total) : '') + (r.status ? ' \u00B7 ' + r.status : '');
+    if (tipo === 'produto') return [r.line, r.type].filter(Boolean).join(' \u00B7 ');
+    return r.productType || '';
+  }
+  function resolverVinculo(ref, leitor) {
+    var lista = (leitor || lerFonte)(ref.tipo); var r = null;
+    lista.forEach(function (x) { if (x && x.id === ref.id) r = x; });
+    if (!r) return { removido: true, rotulo: '(removido)' };
+    return { removido: false, rotulo: rotuloVinculo(ref.tipo, r), registro: r };
+  }
+  function definirVinculo(it, colId, tipo, reg) {
+    it.valores[colId] = rotuloVinculo(tipo, reg);
+    if (!it.vinculos) it.vinculos = {};
+    it.vinculos[colId] = { tipo: tipo, id: reg.id };
+  }
+  function limparVinculo(it, colId) {
+    delete it.valores[colId];
+    if (it.vinculos) delete it.vinculos[colId];
+  }
+  function htmlVinculo(it, c, v, leitor) {
+    var ref = it.vinculos ? it.vinculos[c.id] : null;
+    var base = 'data-i="' + esc(it.id) + '" data-col="' + esc(c.id) + '"';
+    if (!v) return '<div class="qd-pill vazio" data-qd="vin-sel" ' + base + '>+ vincular</div>';
+    var r = (ref && FONTES_VIN[ref.tipo]) ? resolverVinculo(ref, leitor) : null;
+    var rot = (r && !r.removido) ? r.rotulo : v;
+    var abre = !!(r && !r.removido);
+    return '<span class="qd-vin' + (r && r.removido ? ' removido' : '') + '"' + (abre ? ' data-qd="vin-ir" ' + base + ' title="Abrir ' + esc(FONTES_VIN[ref.tipo].nome) + '"' : '') + '>' +
+      (ref && FONTES_VIN[ref.tipo] ? '<small>' + esc(FONTES_VIN[ref.tipo].nome) + '</small>' : '') + esc(rot) + '</span>' +
+      '<button class="qd-ic" data-qd="vin-sel" ' + base + ' aria-label="Alterar vínculo">&#8943;</button>';
+  }
+  function listaVinculos(busca) {
+    var n = normalizar(busca); var lista = lerFonte(vinTab);
+    var itens = lista.filter(function (r) { return !n || normalizar(rotuloVinculo(vinTab, r) + ' ' + subVinculo(vinTab, r)).indexOf(n) > -1; }).slice(0, 40);
+    if (!itens.length) return '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">' + (lista.length ? 'Nada encontrado.' : 'Nenhum registro em ' + FONTES_VIN[vinTab].plural + ' ainda.') + '</div>';
+    return itens.map(function (r) {
+      return '<div class="qdr-row" style="cursor:pointer" data-qv="pick" data-id="' + esc(r.id) + '"><div class="info"><strong>' + esc(rotuloVinculo(vinTab, r)) + '</strong><div class="sub">' + esc(subVinculo(vinTab, r)) + '</div></div></div>';
+    }).join('');
+  }
+  function corpoVinculo(itemId, colId) {
+    var a = achar(Q, itemId); var ref = a && a.it.vinculos ? a.it.vinculos[colId] : null;
+    var h = '<div id="qdv-root" data-item="' + esc(itemId) + '" data-col="' + esc(colId) + '"><div class="qdr-linha" style="gap:6px">';
+    ORDEM_VIN.forEach(function (t) {
+      h += '<button class="btn ' + (t === vinTab ? 'btn-primary' : 'btn-secondary') + ' btn-sm" style="flex:0 0 auto" data-qv="tab" data-tipo="' + t + '">' + FONTES_VIN[t].plural + '</button>';
+    });
+    h += '</div><input class="form-input" id="qdv-busca" placeholder="Buscar..." style="margin-bottom:10px"><div id="qdv-lista">' + listaVinculos('') + '</div>';
+    if (ref) h += '<div class="qdr-linha" style="margin-top:12px"><button class="btn btn-ghost" style="color:var(--rosa-antigo);flex:0 0 auto" data-qv="limpar">Remover vínculo</button></div>';
+    return h + '</div>';
+  }
+  function abrirVinculo(itemId, colId) {
+    var a = achar(Q, itemId); if (!a || !colunaPorId(a.q, colId)) return;
+    openModal('Vincular \u00B7 ' + a.it.nome, corpoVinculo(itemId, colId), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', false);
+    setTimeout(function () { var b = $('qdv-busca'); if (b) b.focus(); }, 50);
+  }
+  function abrirRegistro(ref) {
+    try {
+      if (ref.tipo === 'fornecedor' && typeof openSupModal === 'function') { go('suppliers'); openSupModal(ref.id); }
+      else if (ref.tipo === 'pedido' && typeof viewPedido === 'function') { go('pedidos'); viewPedido(ref.id); }
+      else if (ref.tipo === 'produto' && typeof openProdModal === 'function') { go('products'); openProdModal(ref.id); }
+      else if (ref.tipo === 'formula' && typeof viewFormula === 'function') { go('formulas'); viewFormula(ref.id); }
+    } catch (e) { console.error('quadros: abrir registro', e); aviso('Não foi possível abrir o registro'); }
+  }
+  function onVinClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qv]') : null; if (!t) return;
+    var raiz = $('qdv-root'); if (!raiz) return;
+    var a = achar(Q, raiz.dataset.item); if (!a) return;
+    var colId = raiz.dataset.col;
+    if (t.dataset.qv === 'tab') { vinTab = t.dataset.tipo; abrirVinculo(raiz.dataset.item, colId); }
+    else if (t.dataset.qv === 'pick') {
+      var reg = null; lerFonte(vinTab).forEach(function (r) { if (r.id === t.dataset.id) reg = r; });
+      if (reg) { definirVinculo(a.it, colId, vinTab, reg); salvar(); renderTudo(); closeModal(); }
+    } else if (t.dataset.qv === 'limpar') { limparVinculo(a.it, colId); salvar(); renderTudo(); closeModal(); }
+  }
+  function onVinInput(e) {
+    var el = e.target;
+    if (el && el.id === 'qdv-busca' && $('qdv-root')) { var l = $('qdv-lista'); if (l) l.innerHTML = listaVinculos(el.value); }
+  }
+
+  /* --- 3: automações (disparam quando o status de um item muda) --- */
+  function executarAcao(est, q, g, it, a, hoje) {
+    var dest = null, col = null;
+    if (a.tipo === 'mover') {
+      q.grupos.forEach(function (x) { if (x.id === a.grupoId && !x.arquivado) dest = x; });
+      if (!dest || dest.id === g.id) return false;
+      return !!moverItem(est, it.id, dest.id, null);
+    }
+    if (a.tipo === 'definir') {
+      col = colunaPorId(q, a.colId);
+      if (!col || !opcaoPorId(col, a.opcaoId) || it.valores[col.id] === a.opcaoId) return false;
+      it.valores[col.id] = a.opcaoId; return true;
+    }
+    if (a.tipo === 'atribuir') {
+      col = colPessoaDe(q);
+      if (!col || !a.pessoa) return false;
+      it.valores[col.id] = a.pessoa;
+      if (q.pessoas.indexOf(a.pessoa) < 0) q.pessoas.push(a.pessoa);
+      return true;
+    }
+    if (a.tipo === 'data') {
+      col = colunaPorId(q, a.colId);
+      if (!col || col.tipo !== 'data') return false;
+      it.valores[col.id] = hoje; return true;
+    }
+    if (a.tipo === 'criar') {
+      q.grupos.forEach(function (x) { if (x.id === a.grupoId && !x.arquivado) dest = x; });
+      var titulo = String(a.titulo || '').replace(/\{nome\}/g, it.nome).trim();
+      if (!dest || !titulo) return false;
+      var novo = criarItem(est, q, dest, titulo);
+      var cp = colPessoaDe(q);
+      if (a.copiarResp && cp && it.valores[cp.id]) novo.valores[cp.id] = it.valores[cp.id];
+      var cs2 = colStatusDe(q);
+      novo._ult = (cs2 && novo.valores[cs2.id] !== undefined) ? novo.valores[cs2.id] : null;
+      return true;
+    }
+    return false;
+  }
+  function aplicarAutomacoes(est, hoje) {
+    var n = 0;
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado) return;
+      var cs = colStatusDe(q); if (!cs) return;
+      var regras = (q.automacoes || []).filter(function (r) { return r.ativa && r.quando && r.acao; });
+      q.grupos.forEach(function (g) {
+        g.itens.slice().forEach(function (it) {
+          if (it.arquivado) return;
+          var atual = it.valores[cs.id];
+          if (it._ult === undefined || (it._ult !== null && !opcaoPorId(cs, it._ult))) { it._ult = atual === undefined ? null : atual; return; }
+          var anterior = it._ult === null ? undefined : it._ult;
+          if (atual === anterior) return;
+          regras.forEach(function (r) {
+            if (r.quando.opcaoId === atual && executarAcao(est, q, g, it, r.acao, hoje)) n++;
+          });
+          var depois = it.valores[cs.id];
+          it._ult = depois === undefined ? null : depois;
+          var op = opcaoPorId(cs, depois);
+          if (op && op.final) { if (!it._conclEm) it._conclEm = hoje; } else { delete it._conclEm; }
+        });
+      });
+    });
+    return n;
+  }
+  function instalarAutomacoes() {
+    if (DB.set._qdAut) return;
+    var orig = DB.set;
+    var novo = function (k, d) {
+      var n = 0;
+      if (k === CHAVE && d && !Array.isArray(d) && Array.isArray(d.quadros)) {
+        try { n = aplicarAutomacoes(d, hojeISO()); } catch (e) { console.error('quadros: automações', e); }
+      }
+      var r = orig.apply(DB, arguments);
+      if (n > 0) setTimeout(function () { aviso(n + (n === 1 ? ' automação aplicada' : ' automações aplicadas')); if (ativo()) renderTudo(); }, 0);
+      return r;
+    };
+    novo._qdAut = true; DB.set = novo;
+  }
+  function descreverAutomacao(q, r) {
+    var cs = colStatusDe(q); var o = cs ? opcaoPorId(cs, r.quando.opcaoId) : null;
+    var a = r.acao; var txt = '';
+    function grupo(id) { var g = null; q.grupos.forEach(function (x) { if (x.id === id) g = x; }); return g ? g.nome : '?'; }
+    if (a.tipo === 'mover') txt = 'mover o item para \u201C' + grupo(a.grupoId) + '\u201D';
+    else if (a.tipo === 'definir') { var col = colunaPorId(q, a.colId); var op = col ? opcaoPorId(col, a.opcaoId) : null; txt = 'definir ' + (col ? col.nome : '?') + ' como \u201C' + (op ? op.nome : '?') + '\u201D'; }
+    else if (a.tipo === 'atribuir') txt = 'atribuir a ' + (a.pessoa || '?');
+    else if (a.tipo === 'data') { var cd = colunaPorId(q, a.colId); txt = 'registrar a data de hoje em ' + (cd ? cd.nome : '?'); }
+    else if (a.tipo === 'criar') txt = 'criar o item \u201C' + (a.titulo || '') + '\u201D em \u201C' + grupo(a.grupoId) + '\u201D' + (a.copiarResp ? ' (mesmo responsável)' : '');
+    return 'Quando o status virar \u201C' + (o ? o.nome : '?') + '\u201D, ' + txt;
+  }
+  function corpoAutomacoes(q) {
+    var cs = colStatusDe(q);
+    if (!cs) return '<div id="qda-root"><p style="font-size:13px;color:var(--text-muted)">As automações usam a coluna de Status. Crie uma coluna do tipo Status em "Colunas".</p></div>';
+    var lista = q.automacoes || [];
+    var grupos = q.grupos.filter(function (g) { return !g.arquivado; }).map(function (g) { return opcSel(g.id, g.nome, false); }).join('');
+    var h = '<div id="qda-root"><p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Automações agem sozinhas quando o status de um item muda. Uma automação não dispara outra, para evitar ciclos.</p>';
+    if (!lista.length) h += '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--bg-warm);border-radius:var(--radius-md);margin-bottom:8px">Nenhuma automação ainda.</div>';
+    lista.forEach(function (r) {
+      h += '<div class="qdr-row"><input type="checkbox" class="qda-ativa" data-id="' + esc(r.id) + '"' + (r.ativa ? ' checked' : '') + ' title="Ativa"><div class="info"><strong>' + esc(descreverAutomacao(q, r)) + '</strong></div><button class="btn btn-ghost btn-sm" style="color:var(--rosa-antigo)" data-qa="aut-del" data-id="' + esc(r.id) + '">Excluir</button></div>';
+    });
+    h += '<div class="qdt-sec">Nova automação</div>';
+    h += '<div class="qdr-linha"><div><label class="form-label">Quando o status virar</label><select class="form-select" id="qda-quando">' + cs.opcoes.map(function (o) { return opcSel(o.id, o.nome, false); }).join('') + '</select></div>' +
+      '<div><label class="form-label">Então</label><select class="form-select" id="qda-acao">' + opcSel('mover', 'Mover para um grupo', true) + opcSel('definir', 'Definir uma coluna (lista ou status)', false) + opcSel('atribuir', 'Atribuir a uma pessoa', false) + opcSel('data', 'Registrar a data de hoje', false) + opcSel('criar', 'Criar um novo item', false) + '</select></div></div>';
+    h += '<div id="qda-box-mover" class="qdr-linha"><div><label class="form-label">Grupo de destino</label><select class="form-select" id="qda-grupo">' + grupos + '</select></div></div>';
+    h += '<div id="qda-box-definir" class="qdr-linha"><div><label class="form-label">Coluna</label><select class="form-select" id="qda-col">' + q.colunas.filter(function (c) { return !!c.opcoes; }).map(function (c) { return opcSel(c.id, c.nome, false); }).join('') + '</select></div><div><label class="form-label">Valor</label><select class="form-select" id="qda-opc"></select></div></div>';
+    h += '<div id="qda-box-atribuir" class="qdr-linha"><div><label class="form-label">Pessoa</label><select class="form-select" id="qda-pessoa">' + (q.pessoas || []).map(function (p) { return opcSel(p, p, false); }).join('') + '</select></div></div>';
+    h += '<div id="qda-box-data" class="qdr-linha"><div><label class="form-label">Coluna de data</label><select class="form-select" id="qda-cdata">' + q.colunas.filter(function (c) { return c.tipo === 'data'; }).map(function (c) { return opcSel(c.id, c.nome, false); }).join('') + '</select></div></div>';
+    h += '<div id="qda-box-criar" class="qdr-linha"><div><label class="form-label">Grupo do novo item</label><select class="form-select" id="qda-grupo2">' + grupos + '</select></div><div style="flex:2"><label class="form-label">Título (use {nome} para o nome do item)</label><input class="form-input" id="qda-titulo" placeholder="Ex.: Publicar: {nome}"></div><label style="display:flex;align-items:center;gap:8px;font-size:12px;flex:0 0 100%"><input type="checkbox" id="qda-copiar" checked> Manter o mesmo responsável</label></div>';
+    h += '<div class="qdr-linha"><button class="btn btn-primary" style="flex:0 0 auto" data-qa="aut-salvar">Salvar automação</button></div></div>';
+    return h;
+  }
+  function ajustarFormAutomacao() {
+    var q = quadroAtual(); var acao = $('qda-acao'); if (!q || !acao) return;
+    ['mover', 'definir', 'atribuir', 'data', 'criar'].forEach(function (t) { var b = $('qda-box-' + t); if (b) b.style.display = acao.value === t ? '' : 'none'; });
+    var cs = $('qda-col'), os = $('qda-opc');
+    if (cs && os) {
+      var col = colunaPorId(q, cs.value);
+      os.innerHTML = col ? (col.opcoes || []).map(function (o) { return opcSel(o.id, o.nome, false); }).join('') : '';
+    }
+  }
+  function abrirAutomacoes() {
+    var q = quadroAtual(); if (!q) return;
+    openModal('Automações \u00B7 ' + q.nome, corpoAutomacoes(q), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', true);
+    ajustarFormAutomacao();
+  }
+  function salvarAutomacaoDoModal() {
+    var q = quadroAtual(); if (!q || !$('qda-root')) return;
+    var tipo = $('qda-acao').value; var quando = $('qda-quando').value;
+    var a = { tipo: tipo };
+    if (tipo === 'mover') { a.grupoId = $('qda-grupo').value; if (!a.grupoId) { aviso('Escolha o grupo de destino'); return; } }
+    else if (tipo === 'definir') { a.colId = $('qda-col').value; a.opcaoId = $('qda-opc').value; if (!a.colId || !a.opcaoId) { aviso('Escolha a coluna e o valor'); return; } }
+    else if (tipo === 'atribuir') { a.pessoa = $('qda-pessoa').value; if (!a.pessoa) { aviso('Escolha a pessoa'); return; } }
+    else if (tipo === 'data') { a.colId = $('qda-cdata').value; if (!a.colId) { aviso('Crie uma coluna de data primeiro'); return; } }
+    else if (tipo === 'criar') {
+      a.grupoId = $('qda-grupo2').value; a.titulo = $('qda-titulo').value.trim(); a.copiarResp = !!$('qda-copiar').checked;
+      if (!a.grupoId || !a.titulo) { aviso('Informe o grupo e o título do novo item'); return; }
+    }
+    if (!q.automacoes) q.automacoes = [];
+    q.automacoes.push({ id: uid(), ativa: true, quando: { opcaoId: quando }, acao: a });
+    salvar(); abrirAutomacoes(); aviso('Automação salva');
+  }
+  function onAutClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qa]') : null; if (!t || !$('qda-root')) return;
+    var q = quadroAtual(); if (!q) return;
+    if (t.dataset.qa === 'aut-salvar') salvarAutomacaoDoModal();
+    else if (t.dataset.qa === 'aut-del') {
+      if (window.confirm('Excluir esta automação?')) {
+        q.automacoes = (q.automacoes || []).filter(function (r) { return r.id !== t.dataset.id; });
+        salvar(); abrirAutomacoes();
+      }
+    }
+  }
+  function onAutChange(e) {
+    var el = e.target; if (!el || !$('qda-root')) return;
+    if (el.id === 'qda-acao' || el.id === 'qda-col') { ajustarFormAutomacao(); return; }
+    if (el.classList && el.classList.contains('qda-ativa')) {
+      var q = quadroAtual(); if (!q) return;
+      (q.automacoes || []).forEach(function (r) { if (r.id === el.dataset.id) r.ativa = el.checked; });
+      salvar(); abrirAutomacoes();
+    }
+  }
+
+  /* --- 3: linha do tempo --- */
+  function htmlLinhaTempo(s, q, hojeParam) {
+    var hoje = hojeParam || hojeISO();
+    var cols = q.colunas.filter(function (c) { return c.tipo === 'data'; });
+    if (!cols.length) return '<div class="empty-state"><h3>Linha do tempo indisponível</h3><p>Crie uma coluna do tipo Data em "Colunas" para posicionar os itens no calendário.</p></div>';
+    var DIAS = 56, LARG = 22, LABEL = 230;
+    var ini = somarDias(inicioDaSemana(hoje), -14 + tlOff), fim = somarDias(ini, DIAS - 1);
+    var cs = colStatusDe(q); var larguraArea = DIAS * LARG;
+    var cab = '<div class="qdl-row qdl-head"><div class="qdl-lab"></div><div class="qdl-area" style="width:' + larguraArea + 'px">';
+    for (var i = 0; i < DIAS; i++) {
+      var di = somarDias(ini, i); var dd = dataDe(di); var dow = dd.getDay();
+      var mostraMes = dd.getDate() === 1 || i === 0;
+      cab += '<div class="qdl-dia' + ((dow === 0 || dow === 6) ? ' fim' : '') + (di === hoje ? ' hoje' : '') + '" style="left:' + (i * LARG) + 'px;width:' + LARG + 'px">' + (mostraMes ? '<b>' + MESES_CURTOS[dd.getMonth()] + '</b>' : '<b>&nbsp;</b>') + '<span>' + dd.getDate() + '</span></div>';
+    }
+    cab += '</div></div>';
+    var corpo = ''; var fora = 0, semData = 0, total = 0;
+    q.grupos.forEach(function (g) {
+      if (g.arquivado) return;
+      var itens = itensVisiveis(s, q, g, hoje); if (!itens.length) return;
+      corpo += '<div class="qdl-row qdl-grp"><div class="qdl-lab" style="color:' + esc(g.cor) + '">' + esc(g.nome) + ' <span class="qd-cnt">' + itens.length + '</span></div><div class="qdl-area" style="width:' + larguraArea + 'px"></div></div>';
+      itens.forEach(function (it) {
+        total++;
+        var ds = cols.map(function (c) { return it.valores[c.id]; }).filter(Boolean).sort();
+        var op = cs ? opcaoPorId(cs, it.valores[cs.id]) : null;
+        var cor = op ? op.cor : g.cor;
+        var barra = '';
+        if (!ds.length) { semData++; barra = '<span class="qdl-hint">sem data</span>'; }
+        else {
+          var i0 = ds[0], i1 = ds[ds.length - 1];
+          if (i1 < ini || i0 > fim) {
+            fora++;
+            barra = '<span class="qdl-hint">' + esc(fmtData(i0)) + (i1 !== i0 ? ' a ' + esc(fmtData(i1)) : '') + ' (fora desta janela)</span>';
+          } else {
+            var x0 = i0 < ini ? ini : i0, x1 = i1 > fim ? fim : i1;
+            barra = '<div class="qdl-barra' + (statusFinal(q, it) ? ' feito' : '') + (atrasado(q, it, hoje) ? ' atr' : '') + '" data-qd="det" data-i="' + esc(it.id) + '" style="left:' + (diasEntre(ini, x0) * LARG) + 'px;width:' + ((diasEntre(x0, x1) + 1) * LARG) + 'px;background:' + esc(cor) + '" title="' + esc(it.nome) + '">' + esc(it.nome) + '</div>';
+          }
+        }
+        corpo += '<div class="qdl-row"><div class="qdl-lab">' + esc(it.nome) + '</div><div class="qdl-area" style="width:' + larguraArea + 'px">' + barra + '</div></div>';
+      });
+    });
+    var h = '<div class="card" style="padding:12px 14px"><div class="qdr-linha" style="margin-bottom:10px;align-items:center"><button class="btn btn-secondary btn-sm" style="flex:0 0 auto" data-qd="tl-ant">&#8249; Antes</button><button class="btn btn-secondary btn-sm" style="flex:0 0 auto" data-qd="tl-hoje">Hoje</button><button class="btn btn-secondary btn-sm" style="flex:0 0 auto" data-qd="tl-prox">Depois &#8250;</button><span class="qd-cnt" style="margin-left:6px;flex:0 0 auto">' + esc(fmtData(ini)) + ' a ' + esc(fmtData(fim)) + '</span></div>';
+    if (!total) return h + '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">Nenhum item para mostrar.</div></div>';
+    var linhaHoje = (hoje >= ini && hoje <= fim) ? '<div class="qdl-hojelinha" style="left:' + (LABEL + diasEntre(ini, hoje) * LARG + LARG / 2) + 'px"></div>' : '';
+    h += '<div class="qdl-wrap"><div class="qdl" style="min-width:' + (LABEL + larguraArea) + 'px">' + cab + '<div style="position:relative">' + corpo + linhaHoje + '</div></div></div>';
+    h += '<div style="font-size:11px;color:var(--text-muted);margin-top:10px">' + total + (total === 1 ? ' item' : ' itens') + (fora ? ' \u00B7 ' + fora + ' fora desta janela' : '') + (semData ? ' \u00B7 ' + semData + ' sem data' : '') + '. Com duas colunas de data, a barra vai da primeira à segunda. Clique em uma barra para abrir o item.</div></div>';
+    return h;
+  }
+
+  /* --- 3: painel --- */
+  function metricasPainel(s, q, hoje) {
+    var cs = colStatusDe(q), cp = colPessoaDe(q);
+    var datasCols = q.colunas.filter(function (c) { return c.tipo === 'data'; });
+    var ws = inicioDaSemana(hoje);
+    var m = { total: 0, concluidos: 0, atrasados: 0, proximos: 0, semPrazo: 0, porStatus: [], porPessoa: [], porGrupo: [], prazos: [0, 0, 0, 0, 0, 0], semanas: [] };
+    var mapaSt = {}, mapaPe = {}, todos = [];
+    q.grupos.forEach(function (g) {
+      if (g.arquivado) return;
+      var gc = { nome: g.nome, cor: g.cor, abertos: 0, concluidos: 0 };
+      itensVisiveis(s, q, g, hoje).forEach(function (it) {
+        todos.push(it); m.total++;
+        var fin = statusFinal(q, it);
+        if (fin) { m.concluidos++; gc.concluidos++; } else { gc.abertos++; }
+        var sid = cs ? (it.valores[cs.id] || '') : ''; mapaSt[sid] = (mapaSt[sid] || 0) + 1;
+        if (cp) { var p = it.valores[cp.id] || ''; mapaPe[p] = (mapaPe[p] || 0) + 1; }
+        if (fin) return;
+        var datas = datasCols.map(function (c) { return it.valores[c.id]; }).filter(Boolean).sort();
+        if (atrasado(q, it, hoje)) { m.atrasados++; m.prazos[0]++; return; }
+        var fut = datas.filter(function (d) { return d >= hoje; })[0];
+        if (!fut) { m.semPrazo++; m.prazos[5]++; return; }
+        var dif = diasEntre(ws, fut);
+        if (dif < 7) m.prazos[1]++; else if (dif < 14) m.prazos[2]++; else if (dif < 21) m.prazos[3]++; else m.prazos[4]++;
+        if (diasEntre(hoje, fut) <= 7) m.proximos++;
+      });
+      m.porGrupo.push(gc);
+    });
+    if (cs) cs.opcoes.forEach(function (o) { m.porStatus.push({ rotulo: o.nome, n: mapaSt[o.id] || 0, cor: o.cor }); });
+    if (mapaSt['']) m.porStatus.push({ rotulo: 'Sem status', n: mapaSt[''], cor: '#c7baae' });
+    Object.keys(mapaPe).sort(function (a, b) { return mapaPe[b] - mapaPe[a]; }).forEach(function (k) { m.porPessoa.push({ rotulo: k || 'Sem responsável', n: mapaPe[k], cor: 'var(--lavanda)' }); });
+    for (var k = 7; k >= 0; k--) {
+      var ini = somarDias(ws, -7 * k), fim = somarDias(ini, 7);
+      var n = todos.filter(function (it) { return it._conclEm && it._conclEm >= ini && it._conclEm < fim; }).length;
+      m.semanas.push({ rotulo: fmtData(ini).slice(0, 5), n: n, cor: 'var(--oliva)' });
+    }
+    return m;
+  }
+  function barrasHtml(lista) {
+    var max = 0; lista.forEach(function (x) { if (x.n > max) max = x.n; });
+    if (!lista.length || !max) return '<div style="font-size:12px;color:var(--text-muted)">Sem dados.</div>';
+    return lista.map(function (x) {
+      return '<div class="qdp-lin"><span class="r">' + esc(x.rotulo) + '</span><span class="b"><i style="width:' + Math.round(x.n / max * 100) + '%;background:' + esc(x.cor || 'var(--rosa-antigo)') + '"></i></span><span class="n">' + x.n + '</span></div>';
+    }).join('');
+  }
+  function htmlPainel(s, q, hojeParam) {
+    var hoje = hojeParam || hojeISO();
+    var m = metricasPainel(s, q, hoje);
+    if (!m.total) return '<div class="empty-state"><h3>Sem itens para o painel</h3><p>Adicione itens ao quadro ou limpe os filtros.</p></div>';
+    function kpi(rot, v, cor) { return '<div class="qdp-kpi"><div class="l">' + rot + '</div><div class="v" style="color:' + cor + '">' + v + '</div></div>'; }
+    var pct = Math.round(m.concluidos / m.total * 100);
+    var h = '<div class="qdp-kpis">' + kpi('Itens', m.total, 'var(--text-primary)') + kpi('Concluídos', m.concluidos + ' (' + pct + '%)', 'var(--oliva)') + kpi('Atrasados', m.atrasados, 'var(--rosa-antigo)') + kpi('Vencem em 7 dias', m.proximos, 'var(--sol-ancestral)') + kpi('Sem prazo', m.semPrazo, 'var(--text-muted)') + '</div>';
+    var grupos = m.porGrupo.filter(function (g) { return g.abertos + g.concluidos > 0; }).map(function (g) {
+      var t = g.abertos + g.concluidos;
+      return '<div class="qdp-lin"><span class="r" style="color:' + esc(g.cor) + ';font-weight:600">' + esc(g.nome) + '</span><span class="b"><i style="width:' + Math.round(g.concluidos / t * 100) + '%;background:var(--oliva)"></i></span><span class="n">' + g.concluidos + '/' + t + '</span></div>';
+    }).join('');
+    var prazos = barrasHtml([
+      { rotulo: 'Atrasados', n: m.prazos[0], cor: 'var(--rosa-antigo)' },
+      { rotulo: 'Esta semana', n: m.prazos[1], cor: 'var(--sol-ancestral)' },
+      { rotulo: 'Próxima semana', n: m.prazos[2], cor: 'var(--lavanda)' },
+      { rotulo: 'Em 2 semanas', n: m.prazos[3], cor: 'var(--lavanda)' },
+      { rotulo: 'Depois', n: m.prazos[4], cor: 'var(--lavanda)' },
+      { rotulo: 'Sem prazo', n: m.prazos[5], cor: '#c7baae' }
+    ]);
+    function cartao(t, c) { return '<div class="card"><div class="card-header"><h3>' + t + '</h3></div><div class="card-body">' + c + '</div></div>'; }
+    h += '<div class="qdp-grid">' + cartao('Por status', barrasHtml(m.porStatus)) + cartao('Por responsável', barrasHtml(m.porPessoa)) + cartao('Progresso por grupo', grupos || '<div style="font-size:12px;color:var(--text-muted)">Sem dados.</div>') + cartao('Prazos dos itens em aberto', prazos) +
+      cartao('Conclusões por semana', barrasHtml(m.semanas) + '<div style="font-size:11px;color:var(--text-muted);margin-top:8px">Conta os itens concluídos a partir da instalação desta versão.</div>') + '</div>';
+    return h;
+  }
+
+  /* --- estilos e ligações --- */
+  function injetarCSSF3() {
+    if ($('qdf3-css')) return;
+    var css = [
+      '#qd-root .qd-vin{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--rosa-antigo);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '#qd-root .qd-vin[data-qd]{cursor:pointer;text-decoration:underline}',
+      '#qd-root .qd-vin small{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);font-weight:700;text-decoration:none}',
+      '#qd-root .qd-vin.removido{text-decoration:line-through;color:var(--text-muted)}',
+      '.qdl-wrap{overflow-x:auto;border:1.5px solid var(--border-light);border-radius:var(--radius-md)}',
+      '.qdl{position:relative}',
+      '.qdl-row{display:flex;height:30px;border-bottom:1px solid var(--border-light)}',
+      '.qdl-head{height:42px;background:var(--bg-warm)}',
+      '.qdl-grp{background:var(--bg-warm);font-weight:700}',
+      '.qdl-lab{flex:0 0 230px;position:sticky;left:0;z-index:3;background:inherit;background-color:var(--surface);padding:0 12px;font-size:12px;line-height:30px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-right:1px solid var(--border-light)}',
+      '.qdl-head .qdl-lab,.qdl-grp .qdl-lab{background-color:var(--bg-warm)}',
+      '.qdl-area{position:relative;flex:0 0 auto;background-image:linear-gradient(to right,var(--border-light) 1px,transparent 1px);background-size:154px 100%}',
+      '.qdl-dia{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:9px;color:var(--text-muted)}',
+      '.qdl-dia b{font-size:9px;text-transform:uppercase;color:var(--text-primary)}',
+      '.qdl-dia.fim{background:rgba(0,0,0,.04)}',
+      '.qdl-dia.hoje span{background:var(--rosa-antigo);color:#fff;border-radius:50%;width:16px;height:16px;line-height:16px;text-align:center}',
+      '.qdl-barra{position:absolute;top:4px;height:22px;border-radius:6px;color:#fff;font-size:11px;font-weight:600;padding:0 8px;line-height:22px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;box-sizing:border-box}',
+      '.qdl-barra.feito{opacity:.45}',
+      '.qdl-barra.atr{box-shadow:0 0 0 2px var(--rosa-antigo)}',
+      '.qdl-hint{position:absolute;left:8px;top:7px;font-size:11px;color:var(--text-muted);white-space:nowrap}',
+      '.qdl-hojelinha{position:absolute;top:0;bottom:0;width:2px;background:var(--rosa-antigo);opacity:.55;z-index:2;pointer-events:none}',
+      '.qdp-kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}',
+      '.qdp-kpi{flex:1;min-width:130px;background:var(--surface);border:1.5px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px}',
+      '.qdp-kpi .l{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700}',
+      '.qdp-kpi .v{font-size:24px;font-weight:800;margin-top:2px}',
+      '.qdp-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}',
+      '.qdp-lin{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px}',
+      '.qdp-lin .r{flex:0 0 130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.qdp-lin .b{flex:1;background:var(--border-light);height:10px;border-radius:5px;overflow:hidden}',
+      '.qdp-lin .b i{display:block;height:100%;border-radius:5px}',
+      '.qdp-lin .n{flex:0 0 44px;text-align:right;font-weight:700}',
+      '@media (max-width:760px){.qdp-grid{grid-template-columns:1fr}.qdl-lab{flex-basis:150px}}'
+    ].join('\n');
+    var st = document.createElement('style'); st.id = 'qdf3-css'; st.textContent = css; document.head.appendChild(st);
+  }
+  function onContentF3(e) {
+    if (!ativo() || !e.target.closest) return;
+    var t = e.target.closest('[data-qd]'); if (!t) return;
+    switch (t.dataset.qd) {
+      case 'vin-sel': abrirVinculo(t.dataset.i, t.dataset.col); break;
+      case 'vin-ir': {
+        var a = achar(Q, t.dataset.i); var ref = a && a.it.vinculos ? a.it.vinculos[t.dataset.col] : null;
+        if (ref) abrirRegistro(ref);
+        break;
+      }
+      case 'automacoes': abrirAutomacoes(); break;
+      case 'tl-ant': tlOff -= 14; renderTudo(); break;
+      case 'tl-prox': tlOff += 14; renderTudo(); break;
+      case 'tl-hoje': tlOff = 0; renderTudo(); break;
+      default: break;
+    }
+  }
+  function ligarFase3() {
+    injetarCSSF3();
+    instalarAutomacoes();
+    var c = $('content'); c.addEventListener('click', onContentF3);
+    var mb = $('modalBody');
+    if (mb) { mb.addEventListener('click', onVinClick); mb.addEventListener('input', onVinInput); mb.addEventListener('click', onAutClick); mb.addEventListener('change', onAutChange); }
+  }
+
+  function testeFase3() {
+    var r = [];
+    function ok(nome, cond) { r.push({ teste: nome, ok: !!cond }); }
+    var hoje = '2026-11-12';
+    var fontes = {
+      fornecedor: [{ id: 'f1', name: 'Aromaville', phone: '11 99999-0000' }],
+      pedido: [{ id: 'p1', numero: '0042', cliente: 'Maria', total: 120, status: 'novo' }],
+      produto: [{ id: 'pr1', name: 'Body Mist', line: 'Boreal', type: 'Body Splash' }],
+      formula: [{ id: 'fo1', name: 'Hidratante', productType: 'Hidratante Corporal' }]
+    };
+    var leitor = function (t) { return fontes[t] || []; };
+    ok('rótulo do pedido', rotuloVinculo('pedido', fontes.pedido[0]) === '#0042 Maria');
+    ok('rótulo do fornecedor', rotuloVinculo('fornecedor', fontes.fornecedor[0]) === 'Aromaville');
+    ok('detalhe do produto', subVinculo('produto', fontes.produto[0]) === 'Boreal \u00B7 Body Splash');
+    var it = { id: 'i1', nome: 'Repor karité', valores: {} };
+    definirVinculo(it, 'c1', 'fornecedor', fontes.fornecedor[0]);
+    ok('vínculo guarda rótulo e referência', it.valores.c1 === 'Aromaville' && it.vinculos.c1.tipo === 'fornecedor' && it.vinculos.c1.id === 'f1');
+    ok('resolve o registro atual', resolverVinculo(it.vinculos.c1, leitor).rotulo === 'Aromaville' && resolverVinculo(it.vinculos.c1, leitor).removido === false);
+    fontes.fornecedor[0].name = 'Aromaville Ltda';
+    ok('o rótulo acompanha o nome atual do registro', resolverVinculo(it.vinculos.c1, leitor).rotulo === 'Aromaville Ltda');
+    ok('registro apagado vira "removido"', resolverVinculo({ tipo: 'fornecedor', id: 'zzz' }, leitor).removido === true);
+    var col = { id: 'c1', nome: 'Fornecedor', tipo: 'vinculo' };
+    var hv = htmlVinculo(it, col, it.valores.c1, leitor);
+    ok('célula vinculada tem link para abrir e botão de alterar', hv.indexOf('data-qd="vin-ir"') > -1 && hv.indexOf('data-qd="vin-sel"') > -1 && hv.indexOf('Aromaville Ltda') > -1);
+    ok('célula vazia convida a vincular', htmlVinculo({ id: 'x', valores: {} }, col, undefined, leitor).indexOf('+ vincular') > -1);
+    ok('registro removido não abre', htmlVinculo({ id: 'x', valores: { c1: 'Antigo' }, vinculos: { c1: { tipo: 'fornecedor', id: 'zzz' } } }, col, 'Antigo', leitor).indexOf('data-qd="vin-ir"') < 0);
+    ok('texto digitado é escapado', htmlVinculo({ id: 'x', valores: { c1: '<b>x</b>' } }, col, '<b>x</b>', leitor).indexOf('<b>x</b>') < 0);
+    limparVinculo(it, 'c1');
+    ok('limpar vínculo apaga valor e referência', it.valores.c1 === undefined && it.vinculos.c1 === undefined);
+    var sv = novoEstado(); var qv = criarQuadro(sv, 'V', ['Ana']);
+    ok('a coluna Vínculo pode ser criada', !!TIPOS.vinculo && adicionarColuna(sv, qv, 'Fornecedor', 'vinculo').tipo === 'vinculo');
+
+    function estAut() {
+      var e = novoEstado(); var q = criarQuadro(e, 'Aut', ['Ana', 'Bia']);
+      var A = { e: e, q: q, cs: q.colunas[0], cpr: q.colunas[1], cpe: q.colunas[2], cdt: q.colunas[3], g1: q.grupos[0] };
+      A.g2 = criarGrupo(e, q, 'Publicado');
+      A.it = criarItem(e, q, A.g1, 'Reel Boreal'); setValor(e, A.it, A.cpe.id, 'Bia');
+      return A;
+    }
+    var A = estAut(); var concl = A.cs.opcoes[4];
+    A.q.automacoes = [{ id: 'a1', ativa: true, quando: { opcaoId: concl.id }, acao: { tipo: 'mover', grupoId: A.g2.id } }];
+    ok('a primeira passada só registra o estado e não dispara', aplicarAutomacoes(A.e, hoje) === 0 && A.it._ult === A.cs.opcoes[0].id && A.g1.itens.length === 1);
+    setValor(A.e, A.it, A.cs.id, concl.id);
+    ok('mudar para o status da regra move o item', aplicarAutomacoes(A.e, hoje) === 1 && A.g2.itens.length === 1 && A.g1.itens.length === 0);
+    ok('registra a data de conclusão', A.it._conclEm === hoje);
+    ok('não dispara de novo sem mudança', aplicarAutomacoes(A.e, hoje) === 0 && A.g2.itens.length === 1);
+    setValor(A.e, A.it, A.cs.id, A.cs.opcoes[1].id); aplicarAutomacoes(A.e, hoje);
+    ok('reabrir o item apaga a data de conclusão', A.it._conclEm === undefined);
+
+    var B = estAut(); var alta = B.cpr.opcoes[0];
+    B.q.automacoes = [{ id: 'b1', ativa: true, quando: { opcaoId: B.cs.opcoes[1].id }, acao: { tipo: 'definir', colId: B.cpr.id, opcaoId: alta.id } }];
+    aplicarAutomacoes(B.e, hoje); setValor(B.e, B.it, B.cs.id, B.cs.opcoes[1].id);
+    ok('automação de definir coluna', aplicarAutomacoes(B.e, hoje) === 1 && B.it.valores[B.cpr.id] === alta.id);
+
+    var C = estAut();
+    C.q.automacoes = [{ id: 'c1', ativa: true, quando: { opcaoId: C.cs.opcoes[1].id }, acao: { tipo: 'atribuir', pessoa: 'Ana' } }];
+    aplicarAutomacoes(C.e, hoje); setValor(C.e, C.it, C.cs.id, C.cs.opcoes[1].id); aplicarAutomacoes(C.e, hoje);
+    ok('automação de atribuir pessoa', C.it.valores[C.cpe.id] === 'Ana');
+
+    var D = estAut();
+    D.q.automacoes = [{ id: 'd1', ativa: true, quando: { opcaoId: D.cs.opcoes[4].id }, acao: { tipo: 'data', colId: D.cdt.id } }];
+    aplicarAutomacoes(D.e, hoje); setValor(D.e, D.it, D.cs.id, D.cs.opcoes[4].id); aplicarAutomacoes(D.e, hoje);
+    ok('automação de registrar a data de hoje', D.it.valores[D.cdt.id] === hoje);
+
+    var E = estAut();
+    E.q.automacoes = [{ id: 'e1', ativa: true, quando: { opcaoId: E.cs.opcoes[3].id }, acao: { tipo: 'criar', grupoId: E.g2.id, titulo: 'Publicar: {nome}', copiarResp: true } }];
+    aplicarAutomacoes(E.e, hoje); setValor(E.e, E.it, E.cs.id, E.cs.opcoes[3].id);
+    ok('automação de criar item usa o nome e copia o responsável', aplicarAutomacoes(E.e, hoje) === 1 && E.g2.itens.length === 1 && E.g2.itens[0].nome === 'Publicar: Reel Boreal' && E.g2.itens[0].valores[E.cpe.id] === 'Bia');
+    ok('o item criado não dispara nada depois', aplicarAutomacoes(E.e, hoje) === 0 && E.g2.itens.length === 1);
+
+    var F = estAut();
+    F.q.automacoes = [
+      { id: 'f1', ativa: true, quando: { opcaoId: F.cs.opcoes[1].id }, acao: { tipo: 'definir', colId: F.cs.id, opcaoId: F.cs.opcoes[2].id } },
+      { id: 'f2', ativa: true, quando: { opcaoId: F.cs.opcoes[2].id }, acao: { tipo: 'atribuir', pessoa: 'Ana' } }
+    ];
+    aplicarAutomacoes(F.e, hoje); setValor(F.e, F.it, F.cs.id, F.cs.opcoes[1].id);
+    ok('uma automação não dispara a outra na mesma passada', aplicarAutomacoes(F.e, hoje) === 1 && F.it.valores[F.cs.id] === F.cs.opcoes[2].id && F.it.valores[F.cpe.id] === 'Bia');
+    ok('e a mudança feita pela automação também não dispara depois', aplicarAutomacoes(F.e, hoje) === 0 && F.it.valores[F.cpe.id] === 'Bia');
+
+    var G = estAut();
+    G.q.automacoes = [{ id: 'g1', ativa: false, quando: { opcaoId: G.cs.opcoes[1].id }, acao: { tipo: 'atribuir', pessoa: 'Ana' } }];
+    aplicarAutomacoes(G.e, hoje); setValor(G.e, G.it, G.cs.id, G.cs.opcoes[1].id);
+    ok('automação desligada não dispara', aplicarAutomacoes(G.e, hoje) === 0 && G.it.valores[G.cpe.id] === 'Bia');
+    G.q.automacoes[0].ativa = true; G.it.arquivado = true;
+    ok('item arquivado é ignorado', aplicarAutomacoes(G.e, hoje) === 0);
+    ok('item que mudou de quadro (etiqueta inexistente) não dispara', (function () {
+      var H = estAut(); H.it._ult = 'etiqueta-de-outro-quadro';
+      H.q.automacoes = [{ id: 'h1', ativa: true, quando: { opcaoId: H.cs.opcoes[0].id }, acao: { tipo: 'atribuir', pessoa: 'Ana' } }];
+      return aplicarAutomacoes(H.e, hoje) === 0 && H.it._ult === H.cs.opcoes[0].id;
+    })());
+    ok('descrição da automação em português', descreverAutomacao(A.q, A.q.automacoes[0]).indexOf('Quando o status virar \u201CConcluído\u201D, mover o item para \u201CPublicado\u201D') === 0);
+    ok('SISTEMA: automações instaladas no salvamento', DB.set._qdAut === true);
+
+    ok('início da semana é segunda', inicioDaSemana('2026-11-12') === '2026-11-09' && inicioDaSemana('2026-11-15') === '2026-11-09' && inicioDaSemana('2026-11-16') === '2026-11-16');
+    ok('diferença de dias', diasEntre('2026-10-26', '2026-11-10') === 15);
+    var T = novoEstado(); var qt = criarQuadro(T, 'Linha', ['Ana']); var gt = qt.grupos[0]; var cdt = qt.colunas[3];
+    var t1 = criarItem(T, qt, gt, 'Dentro'); setValor(T, t1, cdt.id, '2026-11-12');
+    var t2 = criarItem(T, qt, gt, 'Fora'); setValor(T, t2, cdt.id, '2026-12-30');
+    criarItem(T, qt, gt, 'Sem data');
+    var ht = htmlLinhaTempo(T, qt, hoje);
+    ok('linha do tempo: 1 barra, 1 fora da janela, 1 sem data', (ht.match(/class="qdl-barra/g) || []).length === 1 && ht.indexOf('(fora desta janela)') > -1 && ht.indexOf('sem data') > -1);
+    ok('linha do tempo marca o dia de hoje', ht.indexOf('qdl-hojelinha') > -1);
+    var c2 = adicionarColuna(T, qt, 'Entrega', 'data'); setValor(T, t1, c2.id, '2026-11-14'); setValor(T, t1, cdt.id, '2026-11-10');
+    var ht2 = htmlLinhaTempo(T, qt, hoje);
+    ok('com duas datas a barra vai da primeira à segunda (5 dias)', ht2.indexOf('left:330px;width:110px') > -1);
+    tlOff = 14; var ht3 = htmlLinhaTempo(T, qt, hoje); tlOff = 0;
+    ok('o botão Depois desloca a janela em 14 dias', ht3.indexOf('09/11/2026 a 03/01/2027') > -1 && (ht3.match(/class="qdl-barra/g) || []).length === 2 && ht3.indexOf('(fora desta janela)') < 0);
+    var qs = criarQuadro(T, 'SemData', ['Ana']); qs.colunas = qs.colunas.filter(function (c) { return c.tipo !== 'data'; });
+    ok('sem coluna de data, avisa como resolver', htmlLinhaTempo(T, qs, hoje).indexOf('Linha do tempo indisponível') > -1);
+
+    var P = novoEstado(); var qp = criarQuadro(P, 'Painel', ['Ana', 'Bia']); var gp = qp.grupos[0];
+    var cspl = qp.colunas[0], cpe = qp.colunas[2], cdp = qp.colunas[3];
+    function novoP(nome, st, dt, pe) { var x = criarItem(P, qp, gp, nome); setValor(P, x, cspl.id, cspl.opcoes[st].id); if (dt) setValor(P, x, cdp.id, dt); if (pe) setValor(P, x, cpe.id, pe); return x; }
+    novoP('Atrasado', 1, '2026-11-10', 'Ana');
+    novoP('Hoje', 0, '2026-11-12', 'Ana');
+    novoP('Daqui a 10 dias', 0, '2026-11-22', 'Bia');
+    var feito = novoP('Concluído', 4, '2026-11-01', 'Bia'); feito._conclEm = '2026-11-11';
+    novoP('Sem data', 0, '', '');
+    var m = metricasPainel(P, qp, hoje);
+    ok('painel: totais', m.total === 5 && m.concluidos === 1 && m.atrasados === 1 && m.proximos === 1 && m.semPrazo === 1);
+    ok('painel: prazos por faixa', m.prazos[0] === 1 && m.prazos[1] === 1 && m.prazos[2] === 1 && m.prazos[5] === 1);
+    ok('painel: por status e por responsável', m.porStatus[0].n === 3 && m.porStatus[1].n === 1 && m.porPessoa[0].n === 2);
+    ok('painel: conclusões da semana atual', m.semanas.length === 8 && m.semanas[7].n === 1 && m.semanas[6].n === 0);
+    var hp = htmlPainel(P, qp, hoje);
+    ok('painel: gera os cartões', hp.indexOf('Por status') > -1 && hp.indexOf('Prazos dos itens em aberto') > -1 && hp.indexOf('Conclusões por semana') > -1);
+    ok('painel vazio avisa', htmlPainel(novoEstado(), criarQuadro(novoEstado(), 'Vazio', ['Ana']), hoje).indexOf('Sem itens para o painel') > -1);
+    ok('SISTEMA: o botão Automações e as visões existem', typeof abrirAutomacoes === 'function' && typeof htmlLinhaTempo === 'function' && typeof htmlPainel === 'function');
+    var falhas = r.filter(function (x) { return !x.ok; });
+    if (console.table) console.table(r);
+    console.log(falhas.length === 0 ? 'QUADROS-FASE3: ' + r.length + ' testes, 0 falhas' : 'QUADROS-FASE3: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
+    return { total: r.length, falhas: falhas.length, resultados: r };
+  }
+
+  window.QuadrosFase3Teste = testeFase3;
+  ligarFase3();
   window.QuadrosDetalheTeste = testeDetalhe;
   window.QuadrosTeste = teste;
   window.Quadros = { estado: Q, abrir: function () { go('quadros'); } };
