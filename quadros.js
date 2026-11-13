@@ -26,7 +26,7 @@
     data:   { nome: 'Data',               w: '134px' },
     status: { nome: 'Status',             w: '134px' },
     lista:  { nome: 'Lista de opções',    w: '134px' },
-    pessoa: { nome: 'Pessoa',             w: '72px'  },
+    pessoa: { nome: 'Pessoa',             w: '110px' },
     check:  { nome: 'Caixa de marcação',  w: '64px'  },
     link:   { nome: 'Link',               w: '160px' }
   };
@@ -559,10 +559,10 @@
       '#qd-root .qd-cnt{font-size:12px;color:var(--text-muted)}',
       '#qd-root .qd-barra{margin-left:auto;display:flex;height:7px;width:120px;border-radius:4px;overflow:hidden;background:var(--border-light)}',
       '#qd-root .qd-scroll{overflow-x:auto}',
-      '#qd-root .qd-tbl{border-left:4px solid var(--rosa-antigo);padding-left:8px;min-width:max-content}',
+      '#qd-root .qd-tbl{border-left:4px solid var(--rosa-antigo);padding-left:8px}',
       '#qd-root .qd-hr,#qd-root .qd-r,#qd-root .qd-ar{display:grid;grid-template-columns:var(--qd-cols);gap:6px;align-items:center;border-bottom:1px solid var(--border-light)}',
       '#qd-root .qd-hr{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);font-weight:700;padding:6px 0}',
-      '#qd-root .qd-hc{cursor:pointer;user-select:none}',
+      '#qd-root .qd-hc{cursor:pointer;user-select:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '#qd-root .qd-r{padding:3px 0;transition:background .12s}',
       '#qd-root .qd-r:hover{background:var(--bg-warm)}',
       '#qd-root .qd-c{min-width:0;display:flex;align-items:center;gap:4px}',
