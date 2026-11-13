@@ -649,7 +649,7 @@
       sub = esc(q.nome) + ' \u00B7 ' + r.total + (r.total === 1 ? ' item' : ' itens') + (r.temStatus ? ' \u00B7 ' + r.feitos + ' concluídos (' + r.pct + '%)' : '') + (r.atrasados ? ' \u00B7 ' + r.atrasados + (r.atrasados > 1 ? ' atrasados' : ' atrasado') : '');
     }
     return '<div class="page-header anim"><div class="page-header-left"><h2>Quadros</h2><p id="qd-resumo">' + sub + '</p></div><div class="page-header-actions">' +
-      (q ? '<button class="btn btn-secondary btn-sm" data-qd="colunas">Colunas</button>' +
+      (q ? '<button class="btn btn-secondary btn-sm" data-qd="rotinas">Rotinas</button>' + '<button class="btn btn-secondary btn-sm" data-qd="colunas">Colunas</button>' +
         '<button class="btn btn-secondary btn-sm" data-qd="arquivados">Arquivados</button>' +
         '<button class="btn btn-secondary btn-sm" data-qd="csv">' + (IC.download || '') + ' CSV</button>' +
         '<button class="btn btn-secondary btn-sm" data-qd="pdf">' + (IC.file || '') + ' PDF</button>' +
@@ -792,6 +792,7 @@
   /* --- render --- */
   function rQuadros() {
     carregar();
+    if (gerarRotinas(Q, hojeISO()) > 0) salvar();
     var el = $('content'); if (!el) return;
     el.innerHTML = '<div id="qd-root"><div id="qd-head"></div><div class="qd-boards" id="qd-boards"></div><div class="qd-tools" id="qd-tools"></div><div id="qd-corpo"></div></div>';
     renderTudo();
@@ -1689,6 +1690,399 @@
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
 
+  /* ---------------- rotinas e modelos de quadro (Fase 2C) ---------------- */
+  var NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  var rotEdit = null;
+  var ultimaGer = 0;
+
+  function isoDe(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function dataDe(iso) { var p = String(iso).split('-'); return new Date(+p[0], +p[1] - 1, +p[2], 12, 0, 0); }
+  function somarDias(iso, n) { var d = dataDe(iso); d.setDate(d.getDate() + n); return isoDe(d); }
+  function ultimoDiaMes(ano, mes) { return new Date(ano, mes + 1, 0).getDate(); }
+  function dataMensal(ano, mes, dia) { return isoDe(new Date(ano, mes, Math.min(dia, ultimoDiaMes(ano, mes)), 12, 0, 0)); }
+
+  function primeiraOcorrencia(r) {
+    var ini = r.inicio || hojeISO();
+    if (r.freq === 'semanal') {
+      var d = dataDe(ini);
+      for (var i = 0; i < 7; i++) { if (d.getDay() === (r.diaSemana || 0)) break; d.setDate(d.getDate() + 1); }
+      return isoDe(d);
+    }
+    if (r.freq === 'mensal') {
+      var di = dataDe(ini);
+      var cand = dataMensal(di.getFullYear(), di.getMonth(), r.diaMes || 1);
+      if (cand < ini) cand = dataMensal(di.getFullYear(), di.getMonth() + 1, r.diaMes || 1);
+      return cand;
+    }
+    return ini;
+  }
+  function proximaApos(r, iso) {
+    var n = Math.max(1, r.intervalo || 1);
+    if (r.freq === 'semanal') return somarDias(iso, 7 * n);
+    if (r.freq === 'mensal') { var d = dataDe(iso); return dataMensal(d.getFullYear(), d.getMonth() + n, r.diaMes || 1); }
+    return somarDias(iso, n);
+  }
+  function proximaDesde(r, hoje) {
+    var p = primeiraOcorrencia(r); var guarda = 0;
+    while (p < hoje && guarda < 2000) { p = proximaApos(r, p); guarda++; }
+    return p;
+  }
+  function descreverRotina(r) {
+    var n = r.intervalo || 1;
+    if (r.freq === 'dias') return n === 1 ? 'Todo dia' : 'A cada ' + n + ' dias';
+    if (r.freq === 'semanal') {
+      var d = NOMES_DIA[r.diaSemana || 0];
+      var art = (r.diaSemana === 0 || r.diaSemana === 6) ? 'Todo ' : 'Toda ';
+      return n === 1 ? art + d : 'A cada ' + n + ' semanas, ' + d;
+    }
+    return n === 1 ? 'Todo mês, dia ' + r.diaMes : 'A cada ' + n + ' meses, dia ' + r.diaMes;
+  }
+
+  function criarDaRotina(s, q, r, data) {
+    var marca = r.id + '@' + data;
+    var existe = false;
+    q.grupos.forEach(function (g) { g.itens.forEach(function (it) { if (it._rot === marca) existe = true; }); });
+    if (existe) return false;
+    var g = null;
+    q.grupos.forEach(function (x) { if (x.id === r.grupoId && !x.arquivado) g = x; });
+    if (!g) q.grupos.forEach(function (x) { if (!g && !x.arquivado) g = x; });
+    if (!g) g = criarGrupo(s, q, 'Rotinas');
+    var it = criarItem(s, q, g, r.titulo);
+    it._rot = marca;
+    var cd = null, cp = null;
+    q.colunas.forEach(function (c) { if (!cd && c.tipo === 'data') cd = c; if (!cp && c.tipo === 'pessoa') cp = c; });
+    if (cd) it.valores[cd.id] = data;
+    if (cp && r.responsavel) it.valores[cp.id] = r.responsavel;
+    (r.subitens || []).forEach(function (n) { addSub(it, n); });
+    return true;
+  }
+  function gerarRotinas(est, hoje) {
+    var total = 0;
+    (est.quadros || []).forEach(function (q) {
+      if (q.arquivado || !q.rotinas || !q.rotinas.length) return;
+      q.rotinas.forEach(function (r) {
+        if (!r.ativa) return;
+        if (!r.proxima) r.proxima = primeiraOcorrencia(r);
+        var devidas = []; var guarda = 0;
+        while (r.proxima && somarDias(r.proxima, -(r.antecedencia || 0)) <= hoje && guarda < 400) {
+          devidas.push(r.proxima); r.proxima = proximaApos(r, r.proxima); guarda++;
+        }
+        devidas.slice(-3).forEach(function (data) { if (criarDaRotina(est, q, r, data)) total++; });
+      });
+    });
+    return total;
+  }
+  /* Gera direto no banco (usado pelo Modo Dia e pelo Dashboard, mesmo sem abrir Quadros). */
+  function gerarNoBanco(forcar) {
+    if (pendente) return;
+    if (!forcar && Date.now() - ultimaGer < 30000) return;
+    ultimaGer = Date.now();
+    var d = null;
+    try { d = DB.get(CHAVE); } catch (e) { d = null; }
+    if (!d || Array.isArray(d) || !Array.isArray(d.quadros)) return;
+    var n = gerarRotinas(d, hojeISO());
+    if (n > 0) {
+      try { DB.set(CHAVE, { versao: 1, atual: d.atual || null, quadros: d.quadros }); } catch (e) { console.error('quadros: rotinas', e); }
+    }
+  }
+  function envolverGeracao() {
+    ['getModoDiaTasks', 'rDash'].forEach(function (nome) {
+      var orig = window[nome];
+      if (typeof orig !== 'function' || orig._qdGer) return;
+      var novo = function () {
+        try { gerarNoBanco(false); } catch (e) { console.error('quadros: rotinas', e); }
+        return orig.apply(this, arguments);
+      };
+      novo._qdGer = true; window[nome] = novo;
+    });
+  }
+
+  /* --- modelos prontos --- */
+  var MODELOS = [
+    { id: 'branco', nome: 'Em branco', desc: 'Status, prioridade, responsável e prazo, com um grupo vazio.', grupos: [{ nome: 'Grupo 1', itens: [] }] },
+    { id: 'lancamento', nome: 'Lançamento de produto', desc: 'Da fórmula à divulgação, com as etapas já listadas.', grupos: [
+      { nome: 'Fórmula e testes', itens: ['Definir conceito e fragrância', 'Testes de estabilidade', 'Aprovar lote piloto'] },
+      { nome: 'Produção e embalagem', itens: ['Cotar frascos e rótulos', 'Produzir o primeiro lote', 'Conferir lote e validade'] },
+      { nome: 'Conteúdo e divulgação', itens: ['Fotografar o produto', 'Roteiro do Reel de lançamento', 'Publicar nas redes', 'Avisar a lista de leads'] },
+      { nome: 'Lançamento', itens: ['Cadastrar na loja e definir o preço', 'Dia do lançamento'] }
+    ] },
+    { id: 'conteudo', nome: 'Calendário de conteúdo', desc: 'Das ideias ao publicado, com formato, canal e link.',
+      colunas: [
+        { nome: 'Status', tipo: 'status' },
+        { nome: 'Formato', tipo: 'lista', opcoes: ['Reel', 'Feed', 'Carrossel', 'Stories'] },
+        { nome: 'Canal', tipo: 'lista', opcoes: ['Instagram', 'TikTok', 'E-mail'] },
+        { nome: 'Responsável', tipo: 'pessoa' },
+        { nome: 'Publicação', tipo: 'data' },
+        { nome: 'Link', tipo: 'link' }
+      ],
+      grupos: [{ nome: 'Ideias', itens: [] }, { nome: 'Em produção', itens: [] }, { nome: 'Aprovado', itens: [] }, { nome: 'Publicado', itens: [] }] },
+    { id: 'producao', nome: 'Produção do mês', desc: 'Lotes planejados, em produção e concluídos.',
+      colunas: [
+        { nome: 'Status', tipo: 'status' },
+        { nome: 'Produto', tipo: 'texto' },
+        { nome: 'Quantidade', tipo: 'numero' },
+        { nome: 'Responsável', tipo: 'pessoa' },
+        { nome: 'Data', tipo: 'data' }
+      ],
+      grupos: [{ nome: 'Planejados', itens: [] }, { nome: 'Em produção', itens: [] }, { nome: 'Concluídos', itens: [] }] },
+    { id: 'rotina', nome: 'Rotinas de gestão', desc: 'Conferências semanais e mensais, prontas para virarem Rotinas.', grupos: [
+      { nome: 'Toda semana', itens: ['Conferir estoque de matérias-primas', 'Conferir contas a pagar da semana', 'Responder leads do quiz'] },
+      { nome: 'Todo mês', itens: ['Fechar o financeiro do mês', 'Revisar preços e margens', 'Planejar o conteúdo do próximo mês'] }
+    ] }
+  ];
+  function criarDeModelo(s, modelo, nome, pessoas) {
+    var q = criarQuadro(s, nome || modelo.nome, pessoas);
+    if (modelo.colunas) {
+      q.colunas = modelo.colunas.map(function (c) {
+        var col = { id: uid(), nome: c.nome, tipo: c.tipo };
+        if (c.tipo === 'status') col.opcoes = opcoesStatusPadrao();
+        else if (c.tipo === 'lista') col.opcoes = (c.opcoes || ['Opção 1', 'Opção 2']).map(function (n, i) { return { id: uid(), nome: n, cor: CORES[(i + 1) % CORES.length] }; });
+        return col;
+      });
+    }
+    q.grupos = [];
+    (modelo.grupos || [{ nome: 'Grupo 1', itens: [] }]).forEach(function (gm) {
+      var g = criarGrupo(s, q, gm.nome);
+      (gm.itens || []).forEach(function (n) { criarItem(s, q, g, n); });
+    });
+    return q;
+  }
+
+  /* --- interface: rotinas e novo quadro --- */
+  function injetarCSSRot() {
+    if ($('qdr-css')) return;
+    var css = [
+      '.qdr-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border-light);border-radius:var(--radius-md);margin-bottom:8px}',
+      '.qdr-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--oliva);cursor:pointer;flex-shrink:0}',
+      '.qdr-row .info{flex:1;min-width:0}',
+      '.qdr-row .info .sub{font-size:11px;color:var(--text-muted);margin-top:2px}',
+      '.qdr-linha{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}',
+      '.qdr-linha>div{flex:1;min-width:130px}',
+      '.qdn-mod{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid var(--border-light);border-radius:var(--radius-md);margin-bottom:8px;cursor:pointer}',
+      '.qdn-mod:hover{border-color:var(--rosa-antigo)}',
+      '.qdn-mod:has(input:checked){border-color:var(--rosa-antigo);background:var(--rose-pale)}',
+      '.qdn-mod input{margin-top:3px;accent-color:var(--rosa-antigo)}',
+      '.qdn-mod .sub{font-size:11.5px;color:var(--text-muted);margin-top:2px}'
+    ].join('\n');
+    var st = document.createElement('style'); st.id = 'qdr-css'; st.textContent = css; document.head.appendChild(st);
+  }
+  function opcSel(v, t, sel) { return '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(t) + '</option>'; }
+
+  function corpoNovoQuadro() {
+    var h = '<div id="qdn-root"><label class="form-label">Nome do quadro</label><input class="form-input" id="qdn-nome" placeholder="Ex.: Lançamento Caramel Nut" style="margin-bottom:14px"><div class="qdt-sec" style="margin-top:6px">Começar com</div>';
+    MODELOS.forEach(function (m, i) {
+      h += '<label class="qdn-mod"><input type="radio" name="qdn-mod" value="' + esc(m.id) + '"' + (i === 0 ? ' checked' : '') + '><div><strong>' + esc(m.nome) + '</strong><div class="sub">' + esc(m.desc) + '</div></div></label>';
+    });
+    return h + '<button class="btn btn-primary" data-qr="nq-criar" style="margin-top:8px">Criar quadro</button></div>';
+  }
+  function abrirNovoQuadro() {
+    openModal('Novo quadro', corpoNovoQuadro(), '<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>', false);
+    setTimeout(function () { var e = $('qdn-nome'); if (e) e.focus(); }, 50);
+  }
+  function criarQuadroDoModal() {
+    if (!$('qdn-root')) return;
+    var nome = ($('qdn-nome').value || '').trim();
+    var sel = document.querySelector('input[name="qdn-mod"]:checked');
+    var modelo = MODELOS[0];
+    MODELOS.forEach(function (m) { if (sel && m.id === sel.value) modelo = m; });
+    var q = criarDeModelo(Q, modelo, nome || modelo.nome, pessoasPadrao());
+    trocarQuadro(q.id); salvar(); closeModal(); renderTudo();
+    aviso('Quadro criado');
+  }
+
+  function corpoRotinas(q) {
+    var lista = q.rotinas || [];
+    var ed = null;
+    if (rotEdit) lista.forEach(function (x) { if (x.id === rotEdit) ed = x; });
+    var h = '<div id="qdr-root"><p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Rotinas criam itens sozinhas no grupo escolhido, na data certa. Os itens aparecem no Modo Dia e no Dashboard.</p>';
+    if (!lista.length) h += '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--bg-warm);border-radius:var(--radius-md);margin-bottom:8px">Nenhuma rotina ainda.</div>';
+    lista.forEach(function (r) {
+      var g = null; q.grupos.forEach(function (x) { if (x.id === r.grupoId) g = x; });
+      h += '<div class="qdr-row"><input type="checkbox" class="qdr-ativa" data-id="' + esc(r.id) + '"' + (r.ativa ? ' checked' : '') + ' title="Ativa"><div class="info"><strong>' + esc(r.titulo) + '</strong><div class="sub">' + esc(descreverRotina(r)) + ' \u00B7 ' + esc(g ? g.nome : 'sem grupo') + (r.ativa && r.proxima ? ' \u00B7 próxima em ' + esc(fmtData(r.proxima)) : ' \u00B7 pausada') + ((r.subitens || []).length ? ' \u00B7 ' + r.subitens.length + ' subitens' : '') + '</div></div>' +
+        '<button class="btn btn-secondary btn-sm" data-qr="rot-edit" data-id="' + esc(r.id) + '">Editar</button><button class="btn btn-ghost btn-sm" style="color:var(--rosa-antigo)" data-qr="rot-del" data-id="' + esc(r.id) + '">Excluir</button></div>';
+    });
+    var v = ed || { titulo: '', grupoId: '', responsavel: '', freq: 'semanal', intervalo: 1, diaSemana: 1, diaMes: 1, inicio: hojeISO(), antecedencia: 0, subitens: [] };
+    h += '<div class="qdt-sec">' + (ed ? 'Editar rotina' : 'Nova rotina') + '</div>';
+    h += '<input class="form-input" id="qdr-titulo" placeholder="Título do item (ex.: Conferir estoque de matérias-primas)" value="' + esc(v.titulo) + '" style="margin-bottom:10px">';
+    h += '<div class="qdr-linha"><div><label class="form-label">Criar no grupo</label><select class="form-select" id="qdr-grupo">' +
+      q.grupos.filter(function (g) { return !g.arquivado; }).map(function (g) { return opcSel(g.id, g.nome, g.id === v.grupoId); }).join('') + '</select></div>' +
+      '<div><label class="form-label">Responsável</label><select class="form-select" id="qdr-resp">' + opcSel('', 'Sem responsável', !v.responsavel) +
+      (q.pessoas || []).map(function (p) { return opcSel(p, p, p === v.responsavel); }).join('') + '</select></div></div>';
+    h += '<div class="qdr-linha"><div><label class="form-label">Repetir</label><select class="form-select" id="qdr-freq">' + opcSel('dias', 'Por dias', v.freq === 'dias') + opcSel('semanal', 'Por semanas', v.freq === 'semanal') + opcSel('mensal', 'Por meses', v.freq === 'mensal') + '</select></div>' +
+      '<div><label class="form-label">A cada</label><input class="form-input" id="qdr-intervalo" type="number" min="1" max="365" value="' + esc(v.intervalo || 1) + '"></div>' +
+      '<div id="qdr-box-semana"><label class="form-label">Dia da semana</label><select class="form-select" id="qdr-dsemana">' + NOMES_DIA.map(function (n, i) { return opcSel(String(i), n, i === (v.diaSemana || 0)); }).join('') + '</select></div>' +
+      '<div id="qdr-box-mes"><label class="form-label">Dia do mês</label><input class="form-input" id="qdr-dmes" type="number" min="1" max="31" value="' + esc(v.diaMes || 1) + '"></div></div>';
+    h += '<div class="qdr-linha"><div><label class="form-label">Começa em</label><input class="form-input" id="qdr-inicio" type="date" value="' + esc(v.inicio || hojeISO()) + '"></div>' +
+      '<div><label class="form-label">Criar com antecedência (dias)</label><input class="form-input" id="qdr-ant" type="number" min="0" max="30" value="' + esc(v.antecedencia || 0) + '"></div></div>';
+    h += '<label class="form-label">Subitens (um por linha, opcional)</label><textarea class="form-textarea" id="qdr-subs" rows="3" placeholder="Contar frascos&#10;Contar matérias-primas">' + esc((v.subitens || []).join('\n')) + '</textarea>';
+    h += '<div class="qdr-linha" style="margin-top:12px"><button class="btn btn-primary" data-qr="rot-salvar">Salvar rotina</button>' + (ed ? '<button class="btn btn-secondary" data-qr="rot-cancelar">Cancelar edição</button>' : '') + '</div></div>';
+    return h;
+  }
+  function ajustarCamposRotina() {
+    var f = $('qdr-freq'); if (!f) return;
+    var s = $('qdr-box-semana'), m = $('qdr-box-mes');
+    if (s) s.style.display = f.value === 'semanal' ? '' : 'none';
+    if (m) m.style.display = f.value === 'mensal' ? '' : 'none';
+  }
+  function abrirRotinas(editId) {
+    var q = quadroAtual(); if (!q) return;
+    rotEdit = editId || null;
+    openModal('Rotinas \u00B7 ' + q.nome, corpoRotinas(q), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', true);
+    ajustarCamposRotina();
+  }
+  function lerFormRotina() {
+    function v(id) { var el = $(id); return el ? el.value : ''; }
+    return {
+      titulo: v('qdr-titulo').trim(), grupoId: v('qdr-grupo'), responsavel: v('qdr-resp'),
+      freq: v('qdr-freq') || 'semanal', intervalo: Math.max(1, parseInt(v('qdr-intervalo'), 10) || 1),
+      diaSemana: parseInt(v('qdr-dsemana'), 10) || 0,
+      diaMes: Math.min(31, Math.max(1, parseInt(v('qdr-dmes'), 10) || 1)),
+      inicio: v('qdr-inicio') || hojeISO(),
+      antecedencia: Math.min(30, Math.max(0, parseInt(v('qdr-ant'), 10) || 0)),
+      subitens: v('qdr-subs').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)
+    };
+  }
+  function assinaturaRotina(r) { return [r.freq, r.intervalo, r.diaSemana, r.diaMes, r.inicio].join('|'); }
+  function salvarRotinaDoModal() {
+    var q = quadroAtual(); if (!q || !$('qdr-root')) return;
+    var f = lerFormRotina();
+    if (!f.titulo) { aviso('Dê um título para a rotina'); return; }
+    if (!q.rotinas) q.rotinas = [];
+    var r = null;
+    if (rotEdit) q.rotinas.forEach(function (x) { if (x.id === rotEdit) r = x; });
+    var antes = r ? assinaturaRotina(r) : '';
+    if (!r) { r = { id: uid(), ativa: true }; q.rotinas.push(r); }
+    var k;
+    for (k in f) { if (Object.prototype.hasOwnProperty.call(f, k)) r[k] = f[k]; }
+    if (!r.proxima || assinaturaRotina(r) !== antes) r.proxima = primeiraOcorrencia(r);
+    var n = gerarRotinas(Q, hojeISO());
+    rotEdit = null; salvar(); renderTudo();
+    aviso(n > 0 ? 'Rotina salva: ' + n + ' item' + (n > 1 ? 'ns' : '') + ' criado' + (n > 1 ? 's' : '') : 'Rotina salva');
+    abrirRotinas();
+  }
+  function onRotClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qr]') : null; if (!t) return;
+    var q = quadroAtual();
+    var acao = t.dataset.qr;
+    if (acao === 'nq-criar') { criarQuadroDoModal(); return; }
+    if (!q || !$('qdr-root')) return;
+    if (acao === 'rot-salvar') salvarRotinaDoModal();
+    else if (acao === 'rot-edit') abrirRotinas(t.dataset.id);
+    else if (acao === 'rot-cancelar') abrirRotinas();
+    else if (acao === 'rot-del') {
+      if (window.confirm('Excluir esta rotina? Os itens já criados continuam nos quadros.')) {
+        q.rotinas = (q.rotinas || []).filter(function (x) { return x.id !== t.dataset.id; });
+        salvar(); abrirRotinas();
+      }
+    }
+  }
+  function onRotChange(e) {
+    var el = e.target; if (!el.classList && !el.id) return;
+    if (el.id === 'qdr-freq') { ajustarCamposRotina(); return; }
+    if (el.classList && el.classList.contains('qdr-ativa')) {
+      var q = quadroAtual(); if (!q) return;
+      var r = null; (q.rotinas || []).forEach(function (x) { if (x.id === el.dataset.id) r = x; });
+      if (!r) return;
+      r.ativa = el.checked;
+      if (r.ativa) r.proxima = proximaDesde(r, hojeISO());
+      salvar(); abrirRotinas(rotEdit);
+    }
+  }
+  function onRotKeydown(e) {
+    var el = e.target;
+    if (e.key === 'Enter' && el && el.id === 'qdn-nome') { e.preventDefault(); criarQuadroDoModal(); }
+  }
+  function ligarRotinas() {
+    injetarCSSRot();
+    var c = $('content');
+    c.addEventListener('click', function (e) {
+      if (!ativo()) return;
+      var t = e.target.closest ? e.target.closest('[data-qd="novo-quadro"]') : null;
+      if (!t) return;
+      e.stopPropagation(); e.preventDefault();
+      abrirNovoQuadro();
+    }, true);
+    c.addEventListener('click', function (e) {
+      if (!ativo()) return;
+      var t = e.target.closest ? e.target.closest('[data-qd="rotinas"]') : null;
+      if (t) abrirRotinas();
+    });
+    var mb = $('modalBody');
+    if (mb) { mb.addEventListener('click', onRotClick); mb.addEventListener('change', onRotChange); mb.addEventListener('keydown', onRotKeydown); }
+  }
+
+  function testeRotinas() {
+    var r = [];
+    function ok(nome, cond) { r.push({ teste: nome, ok: !!cond }); }
+    ok('somar dias atravessa o mês', somarDias('2026-11-30', 1) === '2026-12-01' && somarDias('2026-03-01', -1) === '2026-02-28');
+    ok('mensal dia 31 em fevereiro cai no último dia', dataMensal(2026, 1, 31) === '2026-02-28' && dataMensal(2028, 1, 31) === '2028-02-29');
+    ok('mensal passa de dezembro para janeiro', dataMensal(2026, 12, 15) === '2027-01-15');
+    var sem = { freq: 'semanal', intervalo: 1, diaSemana: 1, inicio: '2026-11-12' };
+    ok('semanal: a primeira segunda depois de quinta 12/11 é 16/11', primeiraOcorrencia(sem) === '2026-11-16');
+    ok('semanal: a próxima é 7 dias depois', proximaApos(sem, '2026-11-16') === '2026-11-23');
+    ok('semanal a cada 2 semanas', proximaApos({ freq: 'semanal', intervalo: 2, diaSemana: 1 }, '2026-11-16') === '2026-11-30');
+    var men = { freq: 'mensal', intervalo: 1, diaMes: 31, inicio: '2026-01-15' };
+    ok('mensal: a primeira ocorrência é 31/01', primeiraOcorrencia(men) === '2026-01-31');
+    ok('mensal: fevereiro usa o último dia e março volta ao 31', proximaApos(men, '2026-01-31') === '2026-02-28' && proximaApos(men, '2026-02-28') === '2026-03-31');
+    ok('mensal: se o dia já passou, vai para o mês seguinte', primeiraOcorrencia({ freq: 'mensal', intervalo: 1, diaMes: 5, inicio: '2026-11-12' }) === '2026-12-05');
+    ok('a cada N dias', proximaApos({ freq: 'dias', intervalo: 10 }, '2026-11-12') === '2026-11-22' && primeiraOcorrencia({ freq: 'dias', inicio: '2026-11-12' }) === '2026-11-12');
+    ok('descrições em português', descreverRotina(sem) === 'Toda segunda' && descreverRotina({ freq: 'semanal', intervalo: 1, diaSemana: 6 }) === 'Todo sábado' && descreverRotina({ freq: 'mensal', intervalo: 2, diaMes: 5 }) === 'A cada 2 meses, dia 5' && descreverRotina({ freq: 'dias', intervalo: 1 }) === 'Todo dia');
+    var s = novoEstado(); var q = criarQuadro(s, 'Rot', ['Ana', 'Bia']); var g = q.grupos[0];
+    var rot = { id: 'r1', titulo: 'Conferir estoque', grupoId: g.id, freq: 'semanal', intervalo: 1, diaSemana: 1, inicio: '2026-11-02', antecedencia: 0, ativa: true, responsavel: 'Bia', subitens: ['Contar frascos', 'Contar MP'] };
+    q.rotinas = [rot];
+    ok('cria as ocorrências devidas (02/11 e 09/11)', gerarRotinas(s, '2026-11-12') === 2 && g.itens.length === 2);
+    ok('a próxima fica em 16/11', rot.proxima === '2026-11-16');
+    var cdt = null, cpe = null; q.colunas.forEach(function (c) { if (c.tipo === 'data') cdt = c; if (c.tipo === 'pessoa') cpe = c; });
+    var datas = g.itens.map(function (i) { return i.valores[cdt.id]; }).sort();
+    ok('o prazo é a data da ocorrência', datas[0] === '2026-11-02' && datas[1] === '2026-11-09');
+    ok('responsável e subitens são copiados', g.itens[0].valores[cpe.id] === 'Bia' && g.itens[0].subitens.length === 2);
+    ok('os itens nascem com o status inicial', g.itens[0].valores[q.colunas[0].id] === q.colunas[0].opcoes[0].id);
+    ok('rodar de novo no mesmo dia não duplica', gerarRotinas(s, '2026-11-12') === 0 && g.itens.length === 2);
+    ok('chegando 16/11 cria mais um e avança para 23/11', gerarRotinas(s, '2026-11-16') === 1 && g.itens.length === 3 && rot.proxima === '2026-11-23');
+    rot.proxima = '2026-11-16';
+    ok('a marca de cada item evita duplicar mesmo se a data voltar', gerarRotinas(s, '2026-11-16') === 0 && g.itens.length === 3);
+    var s2 = novoEstado(); var q2 = criarQuadro(s2, 'Ant', ['Ana']);
+    q2.rotinas = [{ id: 'r2', titulo: 'Fechar o mês', grupoId: q2.grupos[0].id, freq: 'mensal', intervalo: 1, diaMes: 20, inicio: '2026-11-01', antecedencia: 3, ativa: true, subitens: [] }];
+    ok('antes da antecedência não cria', gerarRotinas(s2, '2026-11-16') === 0);
+    ok('com 3 dias de antecedência cria em 17/11', gerarRotinas(s2, '2026-11-17') === 1);
+    var cd2 = null; q2.colunas.forEach(function (c) { if (c.tipo === 'data') cd2 = c; });
+    ok('o prazo continua sendo o dia 20', q2.grupos[0].itens[0].valores[cd2.id] === '2026-11-20');
+    var s3 = novoEstado(); var q3 = criarQuadro(s3, 'Cap', ['Ana']);
+    q3.rotinas = [{ id: 'r3', titulo: 'Diária', grupoId: q3.grupos[0].id, freq: 'dias', intervalo: 1, inicio: '2026-01-01', antecedencia: 0, ativa: true, subitens: [] }];
+    ok('depois de muito tempo, só cria as 3 últimas', gerarRotinas(s3, '2026-11-12') === 3 && q3.grupos[0].itens.length === 3);
+    q3.rotinas[0].ativa = false; q3.rotinas[0].proxima = '2026-11-13';
+    ok('rotina pausada não gera', gerarRotinas(s3, '2026-11-20') === 0);
+    q3.rotinas[0].ativa = true; q3.arquivado = true;
+    ok('quadro arquivado não gera', gerarRotinas(s3, '2026-11-20') === 0);
+    q3.arquivado = false;
+    ok('reativar pula o atraso', proximaDesde({ freq: 'dias', intervalo: 7, inicio: '2026-11-01' }, '2026-11-12') === '2026-11-15');
+    var s4 = novoEstado(); var q4 = criarQuadro(s4, 'SemGrupo', ['Ana']);
+    q4.rotinas = [{ id: 'r4', titulo: 'Órfã', grupoId: 'inexistente', freq: 'dias', intervalo: 1, inicio: '2026-11-12', antecedencia: 0, ativa: true, subitens: [] }];
+    ok('se o grupo foi apagado, cai no primeiro grupo', gerarRotinas(s4, '2026-11-12') === 1 && q4.grupos[0].itens.length === 1);
+    MODELOS.forEach(function (m) {
+      var sx = novoEstado(); var qx = criarDeModelo(sx, m, 'X', ['Ana']);
+      var tiposOk = qx.colunas.every(function (c) { return !!TIPOS[c.tipo]; });
+      var nItens = 0; qx.grupos.forEach(function (gx) { nItens += gx.itens.length; });
+      var esperado = 0; (m.grupos || []).forEach(function (gm) { esperado += (gm.itens || []).length; });
+      var idsUnicos = {}; var unico = true;
+      qx.colunas.forEach(function (c) { if (idsUnicos[c.id]) unico = false; idsUnicos[c.id] = 1; });
+      ok('modelo "' + m.nome + '": colunas válidas, ' + (m.grupos || []).length + ' grupos, ' + esperado + ' itens', tiposOk && unico && qx.grupos.length === (m.grupos || []).length && nItens === esperado);
+    });
+    var sl = novoEstado(); var ql = criarDeModelo(sl, MODELOS[1], 'Lanç', ['Ana']);
+    ok('itens do modelo nascem com o status inicial', ql.grupos[0].itens[0].valores[ql.colunas[0].id] === ql.colunas[0].opcoes[0].id);
+    var sc = novoEstado(); var qc = criarDeModelo(sc, MODELOS[2], 'Cont', ['Ana']);
+    ok('modelo de conteúdo tem as colunas Formato, Canal e Link', ['Formato', 'Canal', 'Link'].every(function (n) { return qc.colunas.some(function (c) { return c.nome === n; }); }));
+    ok('SISTEMA: estilos de rotinas injetados', !!$('qdr-css'));
+    ok('SISTEMA: Modo Dia gera rotinas', typeof window.getModoDiaTasks !== 'function' || window.getModoDiaTasks._qdGer === true || window.getModoDiaTasks._qdx === true);
+    var falhas = r.filter(function (x) { return !x.ok; });
+    if (console.table) console.table(r);
+    console.log(falhas.length === 0 ? 'QUADROS-ROTINAS: ' + r.length + ' testes, 0 falhas' : 'QUADROS-ROTINAS: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
+    return { total: r.length, falhas: falhas.length, resultados: r };
+  }
+
+  window.QuadrosRotinasTeste = testeRotinas;
+  ligarRotinas();
+  envolverGeracao();
   window.QuadrosDetalheTeste = testeDetalhe;
   window.QuadrosTeste = teste;
   window.Quadros = { estado: Q, abrir: function () { go('quadros'); } };
