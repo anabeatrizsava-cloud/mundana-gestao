@@ -204,7 +204,11 @@
     if (ajustado !== path && !Array.isArray(res)) res = await fn.call(ctx, path, opts);
     return res;
   }
-  window.sbFetch = function (path, opts) { return chamarComFallback(sbFetchAnterior, this, path, opts); };
+  function completarOpcoes(opts) {
+    /* chamadas sem método (como a carga inicial) são leituras; sem isto o sbFetch devolve "true" em vez dos dados */
+    return (opts && opts.method) ? opts : Object.assign({}, opts || {}, { method: 'GET' });
+  }
+  window.sbFetch = function (path, opts) { return chamarComFallback(sbFetchAnterior, this, path, completarOpcoes(opts)); };
 
   /* ---------------- C1: documentos com o arquivo em linha própria ---------------- */
   var LIMITE_ARQUIVO = 3 * 1024 * 1024;
@@ -781,6 +785,8 @@
       ok('se o servidor recusar o filtro da carga inicial, refaz sem filtro e continua carregando', Array.isArray(rf) && rf[0].key === 'a');
       var rg = await chamarComFallback(async function () { return [{ key: 'b', value: 2 }]; }, null, 'app_data?select=key,value');
       ok('com o filtro aceito, usa o resultado filtrado', Array.isArray(rg) && rg[0].key === 'b');
+      ok('chamada sem método vira leitura (a carga inicial passa a receber os dados)', completarOpcoes(undefined).method === 'GET' && completarOpcoes({ headers: { a: 1 } }).method === 'GET' && completarOpcoes({ headers: { a: 1 } }).headers.a === 1);
+      ok('chamada com método explícito não muda', completarOpcoes({ method: 'POST' }).method === 'POST' && completarOpcoes({ method: 'DELETE' }).method === 'DELETE');
       var KD = 'zz_docs_' + Date.now(); criadas.push(KD);
       mock();
       DB.set(KD, [{ id: 'd1', name: 'N', fileName: 'a.txt', data: 'data:text/plain;base64,QUJD' }, { id: 'd2', name: 'Perdido', fileName: 'b.txt', data: '' }]);
@@ -813,5 +819,15 @@
     console.log(falhas.length === 0 ? 'CORRECOES: ' + r.length + ' testes, 0 falhas' : 'CORRECOES: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
+  /* A carga inicial original rodou antes deste arquivo e recebia "true" em vez dos dados (por isso nunca baixou nada).
+     Agora que o sbFetch devolve os dados, repete a carga uma vez. */
+  setTimeout(function () {
+    try {
+      if (typeof loadFromSupabase === 'function') {
+        var p = loadFromSupabase();
+        if (p && p.catch) p.catch(function (e) { console.warn('correcoes: carga', e); });
+      }
+    } catch (e) { console.warn('correcoes: carga', e); }
+  }, 0);
   window.CorrecoesTeste = teste;
 })();
