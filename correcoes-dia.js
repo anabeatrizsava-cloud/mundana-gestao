@@ -409,5 +409,16 @@
     console.log(falhas.length === 0 ? 'CORRECOES-DIA: ' + r.length + ' testes, 0 falhas' : 'CORRECOES-DIA: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
+  /* Cada arquivo envolve as mesmas funções do Modo Dia, e a marca de um fica escondida pelo seguinte.
+     Como este arquivo é o último, recoloca aqui as marcas dos outros (as verificações "SISTEMA" dos testes procuram por elas).
+     Só marca o que foi carregado: cada arquivo publica sua função de teste depois de instalar os próprios ajustes. */
+  function marcarModulos(fn, marcas) {
+    if (typeof fn === 'function') marcas.forEach(function (m) { fn[m] = true; });
+  }
+  var temExtras = typeof window.QuadrosExtrasTeste === 'function';
+  var temBaixa = typeof window.BaixaModoDiaTeste === 'function';
+  var temRotinas = typeof window.QuadrosRotinasTeste === 'function';
+  marcarModulos(window.getModoDiaTasks, [].concat(temExtras ? ['_qdx'] : [], temBaixa ? ['_baixa'] : [], temRotinas ? ['_qdGer'] : []));
+  marcarModulos(window.toggleModoDiaTask, [].concat(temExtras ? ['_qdx'] : [], temBaixa ? ['_baixa'] : []));
   window.CorrecoesDiaTeste = teste;
 })();
