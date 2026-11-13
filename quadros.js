@@ -729,7 +729,7 @@
     var atr = atrasado(q, it, hoje);
     return '<div class="qd-r' + (atr ? ' atrasado' : '') + '" data-i="' + it.id + '" data-g="' + g.id + '">' +
       '<span class="qd-grip" ' + (s.ordem ? '' : 'draggable="true" ') + 'data-idrag="' + it.id + '" title="Arrastar">&#8942;&#8942;</span>' +
-      '<div class="qd-c qd-cn" data-label="Item"><input class="qd-nome" data-i="' + it.id + '" value="' + esc(it.nome) + '"></div>' +
+      '<div class="qd-c qd-cn" data-label="Item"><input class="qd-nome" data-i="' + it.id + '" value="' + esc(it.nome) + '">' + htmlDetalheBtn(it) + '</div>' +
       q.colunas.map(function (c) { return '<div class="qd-c" data-label="' + esc(c.nome) + '">' + htmlCelula(q, c, it) + '</div>'; }).join('') +
       '<button class="qd-ic" data-qd="i-menu" data-i="' + it.id + '" aria-label="Opções do item">&#8943;</button></div>';
   }
@@ -1430,11 +1430,272 @@
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
 
+  /* ---------------- detalhe do item: subitens, links e comentários (Fase 2B) ---------------- */
+  function normalizarUrl(u) {
+    u = String(u || '').trim();
+    if (!u) return '';
+    if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) return /^https?:\/\//i.test(u) ? u : '';
+    return 'https://' + u;
+  }
+  function dominio(u) {
+    try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; }
+  }
+  function addSub(it, nome) {
+    nome = String(nome || '').trim(); if (!nome) return null;
+    if (!it.subitens) it.subitens = [];
+    var s = { id: uid(), nome: nome, feito: false };
+    it.subitens.push(s); return s;
+  }
+  function achaSub(it, id) {
+    var r = null;
+    (it.subitens || []).forEach(function (s) { if (s.id === id) r = s; });
+    return r;
+  }
+  function toggleSub(it, id) { var s = achaSub(it, id); if (!s) return false; s.feito = !s.feito; return true; }
+  function renameSub(it, id, nome) {
+    var s = achaSub(it, id); nome = String(nome || '').trim();
+    if (!s || !nome) return false;
+    s.nome = nome; return true;
+  }
+  function delSub(it, id) {
+    var s = achaSub(it, id); if (!s) return false;
+    it.subitens.splice(it.subitens.indexOf(s), 1); return true;
+  }
+  function progressoSub(it) {
+    var subs = it.subitens || [];
+    var feitos = subs.filter(function (s) { return s.feito; }).length;
+    return { total: subs.length, feitos: feitos, pct: subs.length ? Math.round(feitos / subs.length * 100) : 0 };
+  }
+  function addComentario(it, texto, autor, em) {
+    texto = String(texto || '').trim(); if (!texto) return null;
+    if (!it.comentarios) it.comentarios = [];
+    var c = { id: uid(), autor: String(autor || 'Ana'), texto: texto, em: em || new Date().toISOString() };
+    it.comentarios.push(c); return c;
+  }
+  function delComentario(it, id) {
+    var lista = it.comentarios || [];
+    for (var i = 0; i < lista.length; i++) { if (lista[i].id === id) { lista.splice(i, 1); return true; } }
+    return false;
+  }
+  function addLink(it, titulo, url) {
+    var u = normalizarUrl(url); if (!u) return null;
+    if (!it.links) it.links = [];
+    var l = { id: uid(), titulo: String(titulo || '').trim() || dominio(u), url: u };
+    it.links.push(l); return l;
+  }
+  function delLink(it, id) {
+    var lista = it.links || [];
+    for (var i = 0; i < lista.length; i++) { if (lista[i].id === id) { lista.splice(i, 1); return true; } }
+    return false;
+  }
+  function contagensItem(it) {
+    var p = progressoSub(it);
+    return { subs: p.total, feitos: p.feitos, coms: (it.comentarios || []).length, links: (it.links || []).length };
+  }
+  function htmlDetalheBtn(it) {
+    var c = contagensItem(it); var p = [];
+    if (c.subs) p.push('<span class="i">' + (IC.list || '') + c.feitos + '/' + c.subs + '</span>');
+    if (c.coms) p.push('<span class="i">' + (IC.chat || '') + c.coms + '</span>');
+    if (c.links) p.push('<span class="i">' + (IC.link || '') + c.links + '</span>');
+    if (!p.length) p.push('<span class="i">&#8250;</span>');
+    return '<button class="qd-det" data-qd="det" data-i="' + esc(it.id) + '" title="Abrir detalhes" aria-label="Abrir detalhes do item">' + p.join('') + '</button>';
+  }
+
+  function injetarCSSDet() {
+    if ($('qdt-css')) return;
+    var css = [
+      '#qd-root .qd-cn input.qd-nome{flex:1 1 auto;width:auto;min-width:0}',
+      '#qd-root .qd-det{display:inline-flex;align-items:center;gap:8px;border:none;background:transparent;cursor:pointer;color:var(--text-muted);font-size:11px;font-family:inherit;padding:4px 6px;border-radius:8px;flex-shrink:0;white-space:nowrap}',
+      '#qd-root .qd-det:hover{background:var(--bg-warm);color:var(--rosa-antigo)}',
+      '#qd-root .qd-det svg{width:12px;height:12px}',
+      '#qd-root .qd-det .i{display:inline-flex;align-items:center;gap:3px}',
+      '.qdt-meta{font-size:12px;color:var(--text-muted);margin-bottom:6px}',
+      '.qdt-sec{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 8px;display:flex;align-items:center;gap:8px}',
+      '.qdt-cnt{font-weight:700;color:var(--rosa-antigo);letter-spacing:0}',
+      '.qdt-sub{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-light)}',
+      '.qdt-sub input[type=checkbox]{width:18px;height:18px;flex-shrink:0;cursor:pointer;accent-color:var(--oliva)}',
+      '.qdt-sub input.qdt-subnome{flex:1;min-width:0;border:1.5px solid transparent;background:transparent;font-family:inherit;font-size:13px;padding:6px 8px;border-radius:8px;outline:none;color:var(--text-primary)}',
+      '.qdt-sub input.qdt-subnome:focus{background:var(--surface);border-color:var(--rosa-antigo)}',
+      '.qdt-sub.feito input.qdt-subnome{text-decoration:line-through;color:var(--text-muted)}',
+      '.qdt-x{border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 8px;border-radius:8px;font-family:inherit}',
+      '.qdt-x:hover{background:var(--rose-pale);color:var(--rosa-antigo)}',
+      '.qdt-link{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:13px}',
+      '.qdt-link a{color:var(--rosa-antigo);font-weight:600;text-decoration:none;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.qdt-link .url{font-size:11px;color:var(--text-muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.qdt-com{background:var(--bg-warm);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:8px}',
+      '.qdt-com-h{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px}',
+      '.qdt-com-h .quando{color:var(--text-muted);font-size:11px;flex:1}',
+      '.qdt-com-t{font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}',
+      '.qdt-linha{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}'
+    ].join('\n');
+    var st = document.createElement('style'); st.id = 'qdt-css'; st.textContent = css; document.head.appendChild(st);
+  }
+
+  function corpoDetalhe(a) {
+    var it = a.it, q = a.q, g = a.g;
+    var cs = colPrincipal(q); var op = cs ? opcaoPorId(cs, it.valores[cs.id]) : null;
+    var pr = progressoSub(it);
+    var coms = it.comentarios || []; var links = it.links || [];
+    var h = '<div id="qdt-root" data-item="' + esc(it.id) + '">';
+    h += '<div class="qdt-meta">' + esc(q.nome) + ' \u00B7 ' + esc(g.nome) + (op ? ' \u00B7 <span style="color:' + esc(op.cor) + ';font-weight:700">' + esc(op.nome) + '</span>' : '') + '</div>';
+    h += '<div class="qdt-sec">Descrição</div><textarea class="form-textarea qdt-desc" rows="3" placeholder="Contexto, objetivo, observações...">' + esc(it.descricao || '') + '</textarea>';
+    h += '<div class="qdt-sec">Subitens' + (pr.total ? ' <span class="qdt-cnt">' + pr.feitos + '/' + pr.total + '</span>' : '') + '</div>';
+    if (pr.total) h += '<div class="progress-bar"><div class="progress-fill" style="width:' + pr.pct + '%"></div></div>';
+    (it.subitens || []).forEach(function (s) {
+      h += '<div class="qdt-sub' + (s.feito ? ' feito' : '') + '"><input type="checkbox" class="qdt-chk" data-id="' + esc(s.id) + '"' + (s.feito ? ' checked' : '') + '><input class="qdt-subnome" data-id="' + esc(s.id) + '" value="' + esc(s.nome) + '"><button class="qdt-x" data-qdt="sub-del" data-id="' + esc(s.id) + '" aria-label="Excluir subitem">&times;</button></div>';
+    });
+    h += '<input class="form-input" id="qdt-sub-add" placeholder="+ Adicionar subitem (Enter)" style="margin-top:8px">';
+    h += '<div class="qdt-sec">Links e referências' + (links.length ? ' <span class="qdt-cnt">' + links.length + '</span>' : '') + '</div>';
+    links.forEach(function (l) {
+      h += '<div class="qdt-link"><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.titulo) + '</a><span class="url">' + esc(dominio(l.url)) + '</span><button class="qdt-x" data-qdt="lnk-del" data-id="' + esc(l.id) + '" aria-label="Excluir link">&times;</button></div>';
+    });
+    h += '<div class="qdt-linha"><input class="form-input" id="qdt-lnk-tit" placeholder="Título (opcional)" style="flex:1;min-width:120px;width:auto"><input class="form-input" id="qdt-lnk-url" placeholder="Endereço (https://...)" style="flex:2;min-width:160px;width:auto"><button class="btn btn-secondary btn-sm" data-qdt="lnk-add">Adicionar link</button></div>';
+    h += '<div class="qdt-sec">Comentários' + (coms.length ? ' <span class="qdt-cnt">' + coms.length + '</span>' : '') + '</div>';
+    coms.forEach(function (c) {
+      h += '<div class="qdt-com"><div class="qdt-com-h"><strong>' + esc(c.autor) + '</strong><span class="quando">' + esc(fmtDataHora(new Date(c.em))) + '</span><button class="qdt-x" data-qdt="com-del" data-id="' + esc(c.id) + '" aria-label="Excluir comentário">&times;</button></div><div class="qdt-com-t">' + esc(c.texto) + '</div></div>';
+    });
+    var autores = (q.pessoas || []).slice(); if (!autores.length) autores = ['Ana'];
+    var ultimo = ''; try { ultimo = localStorage.getItem('qd_autor') || ''; } catch (e) { ultimo = ''; }
+    if (autores.indexOf(ultimo) < 0) ultimo = autores[0];
+    h += '<textarea class="form-textarea" id="qdt-com-txt" rows="2" placeholder="Escreva um comentário (Cmd+Enter para enviar)" style="margin-top:8px"></textarea>';
+    h += '<div class="qdt-linha"><select class="form-select" id="qdt-com-aut" style="width:auto">' + autores.map(function (p) { return '<option value="' + esc(p) + '"' + (p === ultimo ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select><button class="btn btn-primary btn-sm" data-qdt="com-add">Comentar</button></div>';
+    return h + '</div>';
+  }
+  function abrirDetalhe(itemId) {
+    var a = achar(Q, itemId); if (!a) return;
+    openModal(a.it.nome, corpoDetalhe(a), '<button class="btn btn-secondary" onclick="closeModal()">Fechar</button>', false);
+  }
+  function pintarDetalhe(itemId, focoId) {
+    var a = achar(Q, itemId); var mb = $('modalBody'); if (!a || !mb) return;
+    var m = $('modal'); var st = m ? m.scrollTop : 0;
+    mb.innerHTML = corpoDetalhe(a);
+    if (m) m.scrollTop = st;
+    if (focoId) { var f = $(focoId); if (f) f.focus(); }
+  }
+  function depoisDet(itemId, focoId) { salvar(); renderTudo(); pintarDetalhe(itemId, focoId); }
+  function ctxDetalhe() {
+    var raiz = $('qdt-root'); if (!raiz) return null;
+    var a = achar(Q, raiz.dataset.item);
+    return a ? { id: raiz.dataset.item, it: a.it, q: a.q } : null;
+  }
+  function comentarDoModal(ctx) {
+    var txt = $('qdt-com-txt'), aut = $('qdt-com-aut');
+    if (!txt) return;
+    var autor = aut ? aut.value : 'Ana';
+    try { localStorage.setItem('qd_autor', autor); } catch (e) { /* ignorar */ }
+    if (!addComentario(ctx.it, txt.value, autor)) { aviso('Escreva o comentário antes de enviar'); return; }
+    depoisDet(ctx.id, 'qdt-com-txt');
+  }
+  function linkDoModal(ctx) {
+    var tit = $('qdt-lnk-tit'), url = $('qdt-lnk-url');
+    if (!addLink(ctx.it, tit ? tit.value : '', url ? url.value : '')) { aviso('Informe um endereço válido (http:// ou https://)'); return; }
+    depoisDet(ctx.id, 'qdt-lnk-url');
+  }
+  function onDetClick(e) {
+    var t = e.target.closest ? e.target.closest('[data-qdt]') : null; if (!t) return;
+    var ctx = ctxDetalhe(); if (!ctx) return;
+    switch (t.dataset.qdt) {
+      case 'sub-del': delSub(ctx.it, t.dataset.id); depoisDet(ctx.id); break;
+      case 'lnk-del': delLink(ctx.it, t.dataset.id); depoisDet(ctx.id); break;
+      case 'lnk-add': linkDoModal(ctx); break;
+      case 'com-del': if (window.confirm('Excluir este comentário?')) { delComentario(ctx.it, t.dataset.id); depoisDet(ctx.id); } break;
+      case 'com-add': comentarDoModal(ctx); break;
+      default: break;
+    }
+  }
+  function onDetChange(e) {
+    var el = e.target; if (!el.classList) return;
+    var ctx = ctxDetalhe(); if (!ctx) return;
+    if (el.classList.contains('qdt-desc')) { ctx.it.descricao = el.value; salvar(); return; }
+    if (el.classList.contains('qdt-chk')) { toggleSub(ctx.it, el.dataset.id); depoisDet(ctx.id); return; }
+    if (el.classList.contains('qdt-subnome')) {
+      if (!renameSub(ctx.it, el.dataset.id, el.value)) { var s = achaSub(ctx.it, el.dataset.id); el.value = s ? s.nome : ''; }
+      else salvar();
+      return;
+    }
+    if (el.id === 'qdt-com-aut') { try { localStorage.setItem('qd_autor', el.value); } catch (err) { /* ignorar */ } }
+  }
+  function onDetKeydown(e) {
+    var el = e.target; if (!el || !el.id) return;
+    var ctx = ctxDetalhe(); if (!ctx) return;
+    if (e.key === 'Enter' && el.id === 'qdt-sub-add') {
+      e.preventDefault();
+      if (addSub(ctx.it, el.value)) depoisDet(ctx.id, 'qdt-sub-add');
+    } else if (e.key === 'Enter' && (el.id === 'qdt-lnk-url' || el.id === 'qdt-lnk-tit')) {
+      e.preventDefault(); linkDoModal(ctx);
+    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && el.id === 'qdt-com-txt') {
+      e.preventDefault(); comentarDoModal(ctx);
+    }
+  }
+  function onContentDet(e) {
+    if (!ativo()) return;
+    var t = e.target.closest ? e.target.closest('[data-qd="det"]') : null; if (!t) return;
+    abrirDetalhe(t.dataset.i);
+  }
+  function ligarDetalhe() {
+    injetarCSSDet();
+    $('content').addEventListener('click', onContentDet);
+    var mb = $('modalBody');
+    if (mb) { mb.addEventListener('click', onDetClick); mb.addEventListener('change', onDetChange); mb.addEventListener('keydown', onDetKeydown); }
+  }
+
+  function testeDetalhe() {
+    var r = [];
+    function ok(nome, cond) { r.push({ teste: nome, ok: !!cond }); }
+    var it = { id: 'i1', nome: 'Item', valores: {} };
+    ok('subitem vazio é ignorado', addSub(it, '   ') === null && !(it.subitens && it.subitens.length));
+    var s1 = addSub(it, ' Comprar frascos ');
+    ok('adiciona subitem com trim', !!s1 && it.subitens[0].nome === 'Comprar frascos' && it.subitens[0].feito === false);
+    addSub(it, 'Gravar vídeo'); addSub(it, 'Postar');
+    ok('progresso 0 de 3', progressoSub(it).total === 3 && progressoSub(it).feitos === 0 && progressoSub(it).pct === 0);
+    toggleSub(it, s1.id);
+    ok('marcar um subitem dá 33%', progressoSub(it).feitos === 1 && progressoSub(it).pct === 33);
+    toggleSub(it, s1.id);
+    ok('desmarcar volta a 0', progressoSub(it).feitos === 0);
+    ok('renomear subitem', renameSub(it, s1.id, 'Comprar frascos âmbar') && achaSub(it, s1.id).nome === 'Comprar frascos âmbar');
+    ok('renomear para vazio é recusado', renameSub(it, s1.id, '  ') === false && achaSub(it, s1.id).nome === 'Comprar frascos âmbar');
+    ok('excluir subitem', delSub(it, s1.id) && it.subitens.length === 2 && delSub(it, 'zzz') === false);
+    ok('comentário vazio é ignorado', addComentario(it, '  ', 'Ana') === null && !(it.comentarios && it.comentarios.length));
+    var c1 = addComentario(it, ' Aprovado pela Ana ', 'Ana', '2026-11-12T10:30:00.000Z');
+    ok('adiciona comentário com autor e data', !!c1 && it.comentarios[0].autor === 'Ana' && it.comentarios[0].texto === 'Aprovado pela Ana' && it.comentarios[0].em === '2026-11-12T10:30:00.000Z');
+    ok('excluir comentário', delComentario(it, c1.id) && it.comentarios.length === 0);
+    var l1 = addLink(it, 'Pasta', 'drive.google.com/abc');
+    ok('link sem protocolo ganha https', !!l1 && l1.url === 'https://drive.google.com/abc' && l1.titulo === 'Pasta');
+    ok('link javascript é recusado', addLink(it, 'x', 'javascript:alert(1)') === null);
+    ok('link com outro protocolo é recusado', addLink(it, 'x', 'ftp://a.com') === null);
+    var l2 = addLink(it, '', 'https://www.canva.com/design/1');
+    ok('título vazio usa o domínio', !!l2 && l2.titulo === 'canva.com');
+    ok('excluir link', delLink(it, l1.id) && it.links.length === 1);
+    var cont = contagensItem(it);
+    ok('contagens do item', cont.subs === 2 && cont.feitos === 0 && cont.coms === 0 && cont.links === 1);
+    var b = htmlDetalheBtn(it);
+    ok('botão mostra subitens e links', b.indexOf('0/2') > -1 && b.indexOf('data-i="i1"') > -1);
+    ok('botão sem detalhes mostra a seta', htmlDetalheBtn({ id: 'x', valores: {} }).indexOf('&#8250;') > -1);
+    var s = novoEstado(); var q = criarQuadro(s, 'T', ['Ana']); var g = q.grupos[0];
+    var item = criarItem(s, q, g, '<b>x</b>');
+    addSub(item, '<img src=x onerror=alert(1)>'); addComentario(item, '<script>alert(1)<\/script>', 'Ana'); addLink(item, '<i>t</i>', 'a.com');
+    var html = corpoDetalhe({ q: q, g: g, it: item });
+    ok('o painel é gerado', html.indexOf('qdt-root') > -1 && html.indexOf('Subitens') > -1 && html.indexOf('Comentários') > -1);
+    ok('o painel escapa HTML digitado pelo usuário', html.indexOf('<img') < 0 && html.indexOf('<script') < 0 && html.indexOf('<i>') < 0);
+    var copia = JSON.parse(JSON.stringify(item));
+    ok('subitens, links e comentários sobrevivem ao JSON', copia.subitens.length === 1 && copia.comentarios.length === 1 && copia.links.length === 1);
+    var q2 = criarQuadro(s, 'Outro', ['Ana']);
+    ok('mover para outro quadro mantém os detalhes', moverItemParaQuadro(s, item.id, q2.id) && achar(s, item.id).it.subitens.length === 1);
+    ok('SISTEMA: estilos do painel injetados', !!$('qdt-css'));
+    ok('SISTEMA: painel disponível', typeof abrirDetalhe === 'function');
+    var falhas = r.filter(function (x) { return !x.ok; });
+    if (console.table) console.table(r);
+    console.log(falhas.length === 0 ? 'QUADROS-DETALHE: ' + r.length + ' testes, 0 falhas' : 'QUADROS-DETALHE: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
+    return { total: r.length, falhas: falhas.length, resultados: r };
+  }
+
+  window.QuadrosDetalheTeste = testeDetalhe;
   window.QuadrosTeste = teste;
   window.Quadros = { estado: Q, abrir: function () { go('quadros'); } };
 
   injetarCSS();
   ligarEventos();
   instalarMenu();
+  ligarDetalhe();
   envolverRender();
 })();
