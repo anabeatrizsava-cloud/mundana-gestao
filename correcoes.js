@@ -197,7 +197,14 @@
     return path;
   }
   var sbFetchAnterior = window.sbFetch;
-  window.sbFetch = function (path, opts) { return sbFetchAnterior.call(this, ajustarCaminhoCarga(path), opts); };
+  async function chamarComFallback(fn, ctx, path, opts) {
+    var ajustado = ajustarCaminhoCarga(path);
+    var res = await fn.call(ctx, ajustado, opts);
+    /* se o servidor recusar o filtro, refaz do jeito antigo para nunca deixar o sistema sem dados */
+    if (ajustado !== path && !Array.isArray(res)) res = await fn.call(ctx, path, opts);
+    return res;
+  }
+  window.sbFetch = function (path, opts) { return chamarComFallback(sbFetchAnterior, this, path, opts); };
 
   /* ---------------- C1: documentos com o arquivo em linha própria ---------------- */
   var LIMITE_ARQUIVO = 3 * 1024 * 1024;
@@ -769,6 +776,11 @@
       var hs = htmlLinhaDoc({ id: 'z', name: 'Velho', fileName: 'v.pdf', data: '' });
       ok('documento sem arquivo avisa e não oferece abrir', hs.indexOf('indisponível') > -1 && hs.indexOf('previewDoc') < 0);
       ok('a carga inicial não baixa os arquivos', ajustarCaminhoCarga('app_data?select=key,value') === 'app_data?select=key,value&key=not.like.docfile_*' && ajustarCaminhoCarga('pagar?select=*') === 'pagar?select=*');
+      var falsa = async function (p) { return p.indexOf('not.like') > -1 ? { message: 'erro' } : [{ key: 'a', value: 1 }]; };
+      var rf = await chamarComFallback(falsa, null, 'app_data?select=key,value');
+      ok('se o servidor recusar o filtro da carga inicial, refaz sem filtro e continua carregando', Array.isArray(rf) && rf[0].key === 'a');
+      var rg = await chamarComFallback(async function () { return [{ key: 'b', value: 2 }]; }, null, 'app_data?select=key,value');
+      ok('com o filtro aceito, usa o resultado filtrado', Array.isArray(rg) && rg[0].key === 'b');
       var KD = 'zz_docs_' + Date.now(); criadas.push(KD);
       mock();
       DB.set(KD, [{ id: 'd1', name: 'N', fileName: 'a.txt', data: 'data:text/plain;base64,QUJD' }, { id: 'd2', name: 'Perdido', fileName: 'b.txt', data: '' }]);
