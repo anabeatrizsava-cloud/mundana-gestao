@@ -46,6 +46,15 @@
   function norm(s) { return String(s == null ? '' : s).toLowerCase().trim(); }
   function slug(s) { return norm(s).replace(/[^a-z0-9]+/g, '-'); }
   function fmtNum(n) { return String(Math.round((parseFloat(n) || 0) * 100) / 100); }
+  var ALIAS_U = { g: 'g', gr: 'g', grama: 'g', gramas: 'g', kg: 'kg', quilo: 'kg', quilos: 'kg', mg: 'mg', ml: 'ml', l: 'l', lt: 'l', litro: 'l', litros: 'l', un: 'un', und: 'un', unid: 'un', unidade: 'un', unidades: 'un' };
+  var BASE_U = { g: ['m', 1], kg: ['m', 1000], mg: ['m', 0.001], ml: ['v', 1], l: ['v', 1000], un: ['u', 1] };
+  function infoU(u) { var k = ALIAS_U[norm(u).replace(/\./g, '')]; return k ? BASE_U[k] : null; }
+  /* quanto vale 1 unidade "de" na unidade "para" (1 g = 0,001 kg); null se não der para converter */
+  function fatorEntre(de, para) {
+    var a = infoU(de), b = infoU(para);
+    if (!a || !b || a[0] !== b[0]) return null;
+    return a[1] / b[1];
+  }
   function achar(lista, id) { var r = null; (lista || []).forEach(function (x) { if (x && x.id === id) r = x; }); return r; }
   function envolver(nome, fabrica) {
     var antes = window[nome];
@@ -324,14 +333,16 @@
   }
 
   /* ---------------- A3: produção desconta de todas as compras ---------------- */
-  function baixarMPFifo(stock, nomeMin, consumo) {
+  /* o consumo vem na unidade do ingrediente (unidadeConsumo, ex.: g); cada compra pode estar em outra unidade (ex.: kg) */
+  function baixarMPFifo(stock, nomeMin, consumo, unidadeConsumo) {
     var restante = consumo;
     stock.filter(function (s) { return norm(s.name) === nomeMin && (parseFloat(s.quantity) || 0) > 0; })
       .sort(function (a, b) { return String(a.purchaseDate || '').localeCompare(String(b.purchaseDate || '')); })
       .forEach(function (s) {
         if (restante <= 1e-9) return;
-        var disp = parseFloat(s.quantity) || 0, tira = Math.min(disp, restante);
-        s.quantity = String((disp - tira).toFixed(2));
+        var f = (unidadeConsumo ? fatorEntre(unidadeConsumo, s.unit) : null) || 1;
+        var disp = parseFloat(s.quantity) || 0, tira = Math.min(disp / f, restante);
+        s.quantity = String(Math.max(0, disp - tira * f).toFixed(f === 1 ? 2 : 4));
         restante -= tira;
       });
     return Math.max(0, restante);
@@ -353,7 +364,7 @@
       var ingName = norm(ing.name);
       var consumed = (parseFloat(ing.qtyLot) || 0) * ratio;
       if (!ingName || consumed <= 0) return;
-      var falta = baixarMPFifo(stock, ingName, consumed);
+      var falta = baixarMPFifo(stock, ingName, consumed, ing.unit);
       if (falta > 0.005) faltaMP.push(ing.name + ' (' + falta.toFixed(2) + ' ' + (ing.unit || '') + ')');
     });
     if (stock.length) DB.set('stockmp', stock);
@@ -387,12 +398,24 @@
     return m;
   }
   function estoqueCriticoAgregado(stock, formulas) {
-    var consumo = consumoPorMP(formulas), porNome = {};
+    var porNome = {};
     (stock || []).forEach(function (s) {
       var n = norm(s.name); if (!n) return;
-      var o = porNome[n] || (porNome[n] = { nome: s.name, unidade: s.unit || '', qtd: 0 });
-      o.qtd += parseFloat(s.quantity) || 0;
+      var o = porNome[n] || (porNome[n] = { nome: s.name, unidade: '', qtd: 0 });
       if (!o.unidade && s.unit) o.unidade = s.unit;
+    });
+    (stock || []).forEach(function (s) {
+      var n = norm(s.name); if (!n) return;
+      var o = porNome[n];
+      o.qtd += (parseFloat(s.quantity) || 0) * (fatorEntre(s.unit, o.unidade) || 1);
+    });
+    var consumo = {};
+    (formulas || []).forEach(function (f) {
+      (f.ingredients || []).forEach(function (ing) {
+        var n = norm(ing.name), o = porNome[n];
+        if (!n || !o) return;
+        consumo[n] = (consumo[n] || 0) + (parseFloat(ing.qtyLot) || 0) * (fatorEntre(ing.unit, o.unidade) || 1);
+      });
     });
     var out = [];
     Object.keys(porNome).forEach(function (n) {
@@ -743,6 +766,13 @@
     ok('o lançamento da compra no A Pagar segue o padrão do sistema', ld.descricao === 'Compra Karité' && ld.tipo === 'Matéria Prima' && ld.valor === '50' && ld.vencimento === '2026-11-10' && ld.status === 'pendente' && ld.parcelado === 'nao');
     ok('os custos de exemplo só voltam na primeira vez', deveSemearCustos([], false) === true && deveSemearCustos([], true) === false && deveSemearCustos([{ id: 1 }], false) === false);
     ok('o número do lote não repete', proximoNumeroLote([{ lotNumber: 'LOT-20261101-001' }, { lotNumber: 'LOT-20261105-004' }], '2026-11-13') === 'LOT-20261113-005' && proximoNumeroLote([], '2026-11-13') === 'LOT-20261113-001');
+    ok('a conversão entre unidades considera kg, g, l e ml', fatorEntre('g', 'kg') === 0.001 && fatorEntre('kg', 'g') === 1000 && fatorEntre('ml', 'l') === 0.001 && fatorEntre('g', 'ml') === null && fatorEntre('g', '') === null);
+    var stKg = [{ name: 'MP', quantity: '1', unit: 'kg', purchaseDate: '2026-01-01' }];
+    var fKg = baixarMPFifo(stKg, 'mp', 250, 'g');
+    ok('a produção desconta em g de uma compra guardada em kg', Math.abs(fKg) < 1e-6 && stKg[0].quantity === '0.7500' && Math.abs(baixarMPFifo(stKg, 'mp', 1000, 'g') - 250) < 1e-6 && parseFloat(stKg[0].quantity) === 0);
+    var fKgCrit = [{ ingredients: [{ name: 'manteiga', qtyLot: '1000', unit: 'g' }] }];
+    var crKg = estoqueCriticoAgregado([{ name: 'Manteiga', quantity: '0.2', unit: 'kg' }], fKgCrit);
+    ok('o estoque baixo compara kg com g corretamente', crKg.length === 1 && crKg[0].unidade === 'kg' && crKg[0].qtd === 0.2 && crKg[0].pct === 20 && estoqueCriticoAgregado([{ name: 'Manteiga', quantity: '2', unit: 'kg' }], fKgCrit).length === 0);
     ok('SISTEMA: pedidos e produção corrigidos instalados', window.savePedido === savePedidoNovo && window.advancePedido === advancePedidoNovo && window.delPedido === delPedidoNovo && window.finishProd === finishProdNovo && window.getModoDiaTasks._num === true);
     ok('SISTEMA: botão de menu do celular e rolagem das tabelas', !!document.getElementById('menuFab') && !!document.getElementById('num-css'));
     var falhas = r.filter(function (x) { return !x.ok; });
