@@ -15,7 +15,7 @@
    Cálculo     Configuração incompleta é completada (custos fixos pela soma da lista, cartão
                3%, 100 unidades por mês) e o preço nunca vira NaN ou infinito. Se imposto +
                cartão + margem chegarem perto de 100%, o sistema avisa em vez de mostrar
-               um preço absurdo.
+               um preço absurdo. Fórmula sem unidades por lote não mostra preço.
    ============================================================ */
 (function () {
   'use strict';
@@ -145,6 +145,11 @@
     if (out.configInvalida) {
       out.priceSuggested = 0; out.taxVal = 0; out.cardVal = 0; out.profit = 0; out.profitLot = 0; out.marginReal = 0;
     }
+    /* fórmula sem unidades por lote (tamanho por unidade vazio): o preço seria só o custo fixo rateado, o que engana */
+    out.incompleta = !(out.unitsLot > 0);
+    if (out.incompleta) {
+      out.priceSuggested = 0; out.priceMin = 0; out.taxVal = 0; out.cardVal = 0; out.profit = 0; out.profitLot = 0; out.marginReal = 0;
+    }
     return out;
   }
   var avisouConfig = false;
@@ -260,6 +265,8 @@
     var s1 = sanearCalculo({ priceSuggested: Infinity, priceMin: NaN, profit: -Infinity, unitsLot: 10 }, cfgOk);
     var s2 = sanearCalculo({ priceSuggested: -50, priceMin: 20, profit: 3, unitsLot: 10 }, { taxRate: 0.5, cardRate: 0.3, marginTarget: 0.3 });
     ok('o preço nunca fica infinito ou NaN, e parâmetros que somam 100% são apontados', s1.priceSuggested === 0 && s1.priceMin === 0 && s1.profit === 0 && s1.unitsLot === 10 && s1.configInvalida === false && s2.configInvalida === true && s2.priceSuggested === 0);
+    var s3 = sanearCalculo({ priceSuggested: 65.8, priceMin: 40, profit: 5, unitsLot: 0 }, cfgOk);
+    ok('fórmula sem unidades por lote não mostra preço feito só de custo fixo', s3.incompleta === true && s3.priceSuggested === 0 && s3.priceMin === 0 && s1.incompleta === false);
     ok('SISTEMA: extras instalados', window.rPagar._ext === true && window.getCfg._ext === true && window.calcFormula._ext === true && window.pickIngMP._ext === true);
     var falhas = r.filter(function (x) { return !x.ok; });
     if (console.table) console.table(r);
@@ -267,4 +274,5 @@
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
   window.CorrecoesExtrasTeste = teste;
+  window.__mundanaCustoPorUnidade = custoPorUnidade; /* usado pela tela de receitas */
 })();
