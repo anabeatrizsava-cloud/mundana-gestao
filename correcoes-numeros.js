@@ -95,6 +95,25 @@
     return 'LOT-' + dataStr.replace(/-/g, '') + '-' + String(max + 1).padStart(3, '0');
   }
 
+  /* validade do produto acabado: 1 ano depois da fabricação (29/02 vira 28/02) */
+  function validadeUmAno(dataStr) {
+    var p = String(dataStr).split('-');
+    var a = parseInt(p[0], 10) + 1, m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+    var ultimo = new Date(a, m, 0).getDate();
+    return a + '-' + String(m).padStart(2, '0') + '-' + String(Math.min(d, ultimo)).padStart(2, '0');
+  }
+  /* a tela de produção compara o estoque com o necessário na unidade do ingrediente: converte kg para g, etc. */
+  function estoqueNasUnidadesDaFormula(stock, f) {
+    var un = {};
+    ((f && f.ingredients) || []).forEach(function (ing) { var n = norm(ing.name); if (n && ing.unit && !un[n]) un[n] = ing.unit; });
+    return (stock || []).map(function (s) {
+      var alvo = un[norm(s.name)];
+      var fator = alvo ? fatorEntre(s.unit, alvo) : null;
+      if (!fator || fator === 1) return s;
+      return Object.assign({}, s, { quantity: String(Math.round((parseFloat(s.quantity) || 0) * fator * 1e6) / 1e6), unit: alvo });
+    });
+  }
+
   /* ---------------- A2: estoque de produto acabado ---------------- */
   function baixarEstoquePA(pa, pedido) {
     var baixas = [], faltas = [];
@@ -351,8 +370,8 @@
     var forms = DB.get('formulas'), f = achar(forms, S.prodFId);
     if (!f) return;
     var lots = DB.get('lots'), now = new Date();
-    var fab = localDateStr(now), val = new Date(now); val.setMonth(val.getMonth() + 24);
-    var valS = localDateStr(val);
+    var fab = localDateStr(now);
+    var valS = validadeUmAno(fab); /* validade: 1 ano */
     var numLote = proximoNumeroLote(lots, fab);
     lots.push({ id: uid(), lotNumber: numLote, formulaId: f.id, formulaName: f.name, line: f.line || '', quantity: S.prodQty, date: fab, validity: valS, status: 'em_estoque' });
     DB.set('lots', lots);
@@ -381,8 +400,9 @@
       '<div class="lot-number">' + esc(numLote) + '</div>' +
       '<div class="lot-dates"><div><strong>Fabricação:</strong> ' + fmtD(fab) + '</div><div><strong>Validade:</strong> ' + fmtD(valS) + '</div></div>' +
       '<div style="margin-top:12px;font-size:14px;color:var(--oliva)"><strong>' + esc(f.name) + '</strong> \u2014 ' + S.prodQty + 'g \u2014 ' + unitsProduced + ' unidade' + (unitsProduced !== 1 ? 's' : '') + '</div></div>' +
-      '<div style="margin-top:28px;display:flex;gap:12px;justify-content:center"><button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">Nova produção</button><button class="btn btn-primary" onclick="go(\'dashboard\')">Ir para Dashboard</button></div></div>';
+      '<div style="margin-top:28px;display:flex;gap:12px;justify-content:center"><button class="btn btn-secondary" onclick="S.prodFId=null;rProd()">Nova produção</button><button class="btn btn-secondary" onclick="S.stockTab=\'pa\';go(\'stockmp\')">Ver em Produto Acabado</button><button class="btn btn-primary" onclick="go(\'dashboard\')">Ir para Dashboard</button></div></div>';
     toast('Lote ' + numLote + ' registrado');
+    if (!(unitsProduced > 0)) setTimeout(function () { toast('Atenção: a fórmula está sem o tamanho por unidade, então o lote entrou em Produto Acabado com 0 unidades. Preencha na fórmula e ajuste a quantidade em Estoque.'); }, 1400);
     if (faltaMP.length) setTimeout(function () { toast('Matéria-prima insuficiente em estoque: ' + faltaMP.join(', ')); }, 600);
   }
 
@@ -645,6 +665,18 @@
       return r;
     };
   });
+  envolver('rProdExec', function (antes) {
+    return function () {
+      var f = achar(DB.get('formulas'), S.prodFId);
+      var original = DB.get;
+      /* só enquanto a tela de produção desenha: o estoque aparece na mesma unidade do ingrediente (ex.: 0,8 kg vira 800 g) */
+      DB.get = function (k) {
+        var v = original.apply(DB, arguments);
+        return (k === 'stockmp' && f) ? estoqueNasUnidadesDaFormula(v, f) : v;
+      };
+      try { return antes.apply(this, arguments); } finally { DB.get = original; }
+    };
+  });
   envolver('rProds', function (antes) {
     return function () {
       var r = antes.apply(this, arguments);
@@ -773,6 +805,9 @@
     var fKgCrit = [{ ingredients: [{ name: 'manteiga', qtyLot: '1000', unit: 'g' }] }];
     var crKg = estoqueCriticoAgregado([{ name: 'Manteiga', quantity: '0.2', unit: 'kg' }], fKgCrit);
     ok('o estoque baixo compara kg com g corretamente', crKg.length === 1 && crKg[0].unidade === 'kg' && crKg[0].qtd === 0.2 && crKg[0].pct === 20 && estoqueCriticoAgregado([{ name: 'Manteiga', quantity: '2', unit: 'kg' }], fKgCrit).length === 0);
+    ok('a validade é de 1 ano depois da fabricação', validadeUmAno('2026-11-17') === '2027-11-17' && validadeUmAno('2028-02-29') === '2029-02-28' && validadeUmAno('2026-01-31') === '2027-01-31');
+    var stProd = estoqueNasUnidadesDaFormula([{ name: 'MP', quantity: '0.8', unit: 'kg' }, { name: 'Outra', quantity: '5', unit: 'kg' }, { name: 'Igual', quantity: '7', unit: 'g' }], { ingredients: [{ name: 'mp', unit: 'g' }, { name: 'igual', unit: 'g' }] });
+    ok('a tela de produção mostra o estoque na unidade do ingrediente', stProd[0].quantity === '800' && stProd[0].unit === 'g' && stProd[1].unit === 'kg' && stProd[1].quantity === '5' && stProd[2].quantity === '7');
     ok('SISTEMA: pedidos e produção corrigidos instalados', window.savePedido === savePedidoNovo && window.advancePedido === advancePedidoNovo && window.delPedido === delPedidoNovo && window.finishProd === finishProdNovo && window.getModoDiaTasks._num === true);
     ok('SISTEMA: botão de menu do celular e rolagem das tabelas', !!document.getElementById('menuFab') && !!document.getElementById('num-css'));
     var falhas = r.filter(function (x) { return !x.ok; });
