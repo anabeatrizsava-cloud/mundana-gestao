@@ -260,7 +260,7 @@
     if (typeof calc !== 'function') return;
     var hist = DB.get('mp_price_hist');
     rc.ing.forEach(function (g) {
-      if (!g.name || parseFloat(g.price) > 0) return;
+      if (!g.name || String(g.price).trim() !== '') return;
       var un = 'kg', c = calc(hist, g.name, 'kg');
       if (!c) { c = calc(hist, g.name, 'l'); un = 'l'; }
       if (!c) return;
@@ -343,14 +343,15 @@
       if (!String(g.name).trim()) return;
       var gramas = lot * (parseFloat(g.pct) || 0) / 100;
       var perG = precoPorGrama(g.price, g.pu);
+      var temPreco = String(g.price).trim() !== ''; /* "0" digitado vale: água, por exemplo, custa zero */
       total += gramas * perG;
-      if ((parseFloat(g.pct) || 0) > 0 && !perG) faltam++;
+      if ((parseFloat(g.pct) || 0) > 0 && !temPreco) faltam++;
       setTxt('rcQ' + i, gramas > 0 ? fmt3(gramas) + ' g' : '-');
-      setTxt('rcC' + i, perG && gramas > 0 ? fmtR(gramas * perG) : '-');
+      setTxt('rcC' + i, temPreco && gramas > 0 ? fmtR(gramas * perG) : '-');
       setTxt('rcA' + i, g.autoVal && g.price === g.autoVal ? 'da última compra' : '');
     });
-    setTxt('rcTot', fmtR(total));
     var c = calcFormula(formulaTemp(rc));
+    setTxt('rcTot', fmtR(c.totalMP)); /* mesmo número do resumo */
     var aviso = '';
     if (!(lot > 0) || !(parseFloat(rc.uni) > 0)) aviso = 'Preencha o tamanho do lote e o tamanho por unidade para calcular o preço.';
     else if (faltam) aviso = faltam + ' ingrediente' + (faltam > 1 ? 's' : '') + ' ainda sem preço.';
