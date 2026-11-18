@@ -454,6 +454,10 @@
       action: "go('stockmp')", btnLabel: 'Ver Estoque', id: 'stock_' + slug(c.chave)
     };
   }
+  /* o Modo Dia não sugere mais "Produzir X" (sugestões automáticas de produção); alertas de MP, validade e pagamentos seguem */
+  function ehSugestaoDeProducao(t) {
+    return /^produ/i.test(String((t && t.cat) || '')) && (t.type === 'sugestao' || /^produzir\s/i.test(String(t.text || '')));
+  }
   function recompraValida(pid, pedidos) {
     var p = achar(pedidos, pid);
     if (!p) return true;
@@ -592,6 +596,7 @@
           var id = String(t.id);
           if (id.indexOf('stock_') === 0) return false;
           if (id.indexOf('recompra_') === 0) return recompraValida(id.slice(9), pedidos);
+          if (ehSugestaoDeProducao(t)) return false;
           return true;
         });
         var hist = DB.get('mp_price_hist');
@@ -665,9 +670,22 @@
       return r;
     };
   });
+  /* o lote de produção começa com o tamanho do lote da fórmula (antes o campo ficava vazio, com o valor só como sugestão em cinza) */
+  function loteInicial(f, qtdAtual) {
+    var q = parseFloat(qtdAtual);
+    return q > 0 ? q : (parseFloat(f && f.lotSize) || 0);
+  }
+  var qtdPadraoPara = null;
+  envolver('rProd', function (antes) {
+    return function () {
+      if (!S.prodFId) qtdPadraoPara = null;
+      return antes.apply(this, arguments);
+    };
+  });
   envolver('rProdExec', function (antes) {
     return function () {
       var f = achar(DB.get('formulas'), S.prodFId);
+      if (f && qtdPadraoPara !== f.id) { qtdPadraoPara = f.id; S.prodQty = loteInicial(f, S.prodQty); }
       var original = DB.get;
       /* só enquanto a tela de produção desenha: o estoque aparece na mesma unidade do ingrediente (ex.: 0,8 kg vira 800 g) */
       DB.get = function (k) {
@@ -808,6 +826,8 @@
     ok('a validade é de 1 ano depois da fabricação', validadeUmAno('2026-11-17') === '2027-11-17' && validadeUmAno('2028-02-29') === '2029-02-28' && validadeUmAno('2026-01-31') === '2027-01-31');
     var stProd = estoqueNasUnidadesDaFormula([{ name: 'MP', quantity: '0.8', unit: 'kg' }, { name: 'Outra', quantity: '5', unit: 'kg' }, { name: 'Igual', quantity: '7', unit: 'g' }], { ingredients: [{ name: 'mp', unit: 'g' }, { name: 'igual', unit: 'g' }] });
     ok('a tela de produção mostra o estoque na unidade do ingrediente', stProd[0].quantity === '800' && stProd[0].unit === 'g' && stProd[1].unit === 'kg' && stProd[1].quantity === '5' && stProd[2].quantity === '7');
+    ok('o lote de produção começa com o tamanho do lote da fórmula', loteInicial({ lotSize: '3000' }, 0) === 3000 && loteInicial({ lotSize: '3000' }, 500) === 500 && loteInicial({}, 0) === 0);
+    ok('sugestões automáticas de produção são reconhecidas e as demais tarefas não', ehSugestaoDeProducao({ cat: 'Produção', type: 'sugestao', text: 'Produzir Oleo corporal' }) === true && ehSugestaoDeProducao({ cat: 'Produção', type: 'outro', text: 'Produzir X' }) === true && ehSugestaoDeProducao({ cat: 'Estoque', type: 'hoje', text: 'Repor Karité' }) === false && ehSugestaoDeProducao({ cat: 'Quadros', type: 'hoje', text: 'Produzir kits' }) === false && ehSugestaoDeProducao({ cat: 'Lembrete', type: 'hoje', text: 'Ajustes' }) === false);
     ok('SISTEMA: pedidos e produção corrigidos instalados', window.savePedido === savePedidoNovo && window.advancePedido === advancePedidoNovo && window.delPedido === delPedidoNovo && window.finishProd === finishProdNovo && window.getModoDiaTasks._num === true);
     ok('SISTEMA: botão de menu do celular e rolagem das tabelas', !!document.getElementById('menuFab') && !!document.getElementById('num-css'));
     var falhas = r.filter(function (x) { return !x.ok; });
