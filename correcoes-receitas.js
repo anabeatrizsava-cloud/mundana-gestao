@@ -35,6 +35,8 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function norm(s) { return String(s == null ? '' : s).toLowerCase().trim(); }
+  /* chave para comparar nomes: sem acento, sem maiúscula ("Uréia" e "Ureia" são a mesma matéria-prima) */
+  function chave(s) { return norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   function achar(lista, id) { var r = null; (lista || []).forEach(function (x) { if (x && x.id === id) r = x; }); return r; }
   function el(id) { return document.getElementById(id); }
   function val(id) { var e = el(id); return e ? e.value : ''; }
