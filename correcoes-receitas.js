@@ -23,6 +23,12 @@
    Nomes: "Uréia" e "Ureia" contam como a mesma matéria-prima, e o nome do estoque é o usado.
    Estoque: ao editar uma entrada aparece "Quantidade comprada". Ela não diminui na produção
    e é com ela que o preço por kg sai exato (sem ela, o preço é estimado pelo saldo).
+
+   Custo de produção (sem custos fixos): matéria-prima + embalagem + outros, com perdas, por
+   unidade. Aparece (1) na tela de custos da receita, com a margem de contribuição no Preço
+   Final, (2) na lista de Fórmulas, nas colunas "Custo prod. un." e "Contrib. un.", e
+   (3) ao abrir uma fórmula, no bloco "Custo de produção (sem custos fixos)".
+   Margem de contribuição = preço - imposto - cartão - custo de produção (antes dos fixos).
    ============================================================ */
 (function () {
   'use strict';
@@ -93,6 +99,22 @@
   function formulaTemp(s) {
     return { lotSize: s.lot, unitSize: s.uni, packagingCost: s.pack, otherCosts: s.out, ingredients: montarIngredientes(s) };
   }
+
+  /* custo de produção por unidade, sem custos fixos: matéria-prima, embalagem e outros (todos com a perda aplicada) */
+  function partesProducao(c) {
+    var n = c.unitsLot > 0 ? c.unitsLot : 0;
+    if (!n) return { mp: 0, emb: 0, outros: 0, total: 0 };
+    var k = c.subtotalVar > 0 ? c.adjustedLot / c.subtotalVar : 1;
+    return { mp: c.totalMP * k / n, emb: c.packagingLot * k / n, outros: ((c.otherLot || 0) + (c.laborLot || 0)) * k / n, total: c.costVarUnit };
+  }
+  /* o que sobra de cada unidade vendida depois de imposto, taxa de cartão e custo de produção (antes dos custos fixos) */
+  function contribuicao(c, preco) {
+    var cfg = getCfg(), p = parseFloat(preco) || 0;
+    if (!(p > 0) || !(c.unitsLot > 0)) return null;
+    var v = p * (1 - (cfg.taxRate || 0) - (cfg.cardRate || 0)) - c.costVarUnit;
+    return { valor: v, pct: v / p };
+  }
+  function fmtPctCurto(x) { return (x * 100).toFixed(1).replace('.', ',') + '%'; }
 
   function linhaVazia() { return { name: '', pct: '', obs: '', price: '', pu: 'kg', autoVal: '', nota: '' }; }
   function estadoDe(f) {
@@ -378,8 +400,11 @@
     }
     var h = '<div style="background:var(--bg-warm);border-radius:var(--radius-md);padding:14px 16px;margin-top:16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:700;margin-bottom:6px">Resumo do cálculo</div>';
     if (aviso) h += '<div style="font-size:12px;color:var(--rosa-antigo);margin-bottom:8px">' + aviso + '</div>';
+    var pp = partesProducao(c);
     h += lin('Unidades por lote', c.unitsLot) + lin('Matéria-prima (lote)', fmtR(c.totalMP)) +
-      lin('Custo variável por un. (com perdas)', fmtR(c.costVarUnit)) + lin('Rateio dos custos fixos por un.', fmtR(c.fixedPerUnit)) +
+      lin('&nbsp;&nbsp;Matéria-prima por un.', fmtR(pp.mp)) + lin('&nbsp;&nbsp;Embalagem por un.', fmtR(pp.emb)) + lin('&nbsp;&nbsp;Outros custos por un.', fmtR(pp.outros)) +
+      lin('Custo de produção por un. (sem custos fixos)', fmtR(c.costVarUnit), true) +
+      lin('Rateio dos custos fixos por un.', fmtR(c.fixedPerUnit)) +
       lin('Custo total por un.', fmtR(c.costTotalUnit));
     if (incompleta) h += lin('Preço sugerido', '-');
     else {
@@ -387,7 +412,9 @@
         lin('Lucro por un. (no sugerido)', fmtR(c.profit) + ' (' + (c.marginReal * 100).toFixed(1) + '%)');
       if (final > 0) {
         var lucro = final * (1 - cfg.taxRate - cfg.cardRate) - c.costTotalUnit;
-        h += lin('Lucro por un. no Preço Final', fmtR(lucro) + ' (' + (lucro / final * 100).toFixed(1) + '%)');
+        var ct = contribuicao(c, final);
+        if (ct) h += lin('Margem de contribuição por un. no Preço Final (antes dos fixos)', fmtR(ct.valor) + ' (' + fmtPctCurto(ct.pct) + ')');
+        h += lin('Lucro por un. no Preço Final (depois dos fixos)', fmtR(lucro) + ' (' + (lucro / final * 100).toFixed(1) + '%)');
       }
     }
     return h + '</div>';
@@ -541,10 +568,82 @@
       return r;
     };
   });
+  /* Fórmulas (lista): acrescenta "Custo prod. un." (sem custos fixos) e "Contrib. un." (sobra antes dos fixos) */
+  function colunasDeCusto() {
+    var tabela = document.querySelector('#content table');
+    var head = tabela && tabela.querySelector('thead tr');
+    if (!head || head.querySelector('[data-cp]')) return;
+    var iCusto = -1, iMargem = -1;
+    [].slice.call(head.children).forEach(function (th, i) {
+      var t = th.textContent.trim();
+      if (/^Custo Un/i.test(t)) iCusto = i;
+      if (/^Margem/i.test(t)) iMargem = i;
+    });
+    if (iCusto < 0 || iMargem < 0 || iCusto > iMargem) return;
+    var forms = DB.get('formulas');
+    function th(txt, dica) { var e = document.createElement('th'); e.setAttribute('data-cp', '1'); e.textContent = txt; e.title = dica; return e; }
+    /* de trás para frente, para os índices não mudarem */
+    head.insertBefore(th('Contrib. un.', 'Sobra por unidade no preço praticado, depois de imposto, cartão e custo de produção, antes dos custos fixos'), head.children[iMargem + 1] || null);
+    head.insertBefore(th('Custo prod. un.', 'Matéria-prima + embalagem + outros, com perdas, sem custos fixos'), head.children[iCusto + 1] || null);
+    head.children[iCusto].textContent = 'Custo total un.';
+    [].slice.call(tabela.querySelectorAll('tbody tr')).forEach(function (tr) {
+      var m = /viewFormula\('([^']+)'\)/.exec(tr.getAttribute('onclick') || '');
+      var f = m ? achar(forms, m[1]) : null;
+      var td1 = document.createElement('td'), td2 = document.createElement('td');
+      td1.setAttribute('data-cp', '1'); td2.setAttribute('data-cp', '1');
+      if (f) {
+        var c = calcFormula(f);
+        td1.innerHTML = c.unitsLot > 0 ? '<strong>' + fmtR(c.costVarUnit) + '</strong>' : '-';
+        var fp = parseFloat(f.finalPrice) > 0 ? parseFloat(f.finalPrice) : 0;
+        var ct = contribuicao(c, fp || c.priceSuggested);
+        td2.innerHTML = ct ? '<span style="color:' + (ct.valor < 0 ? 'var(--rosa-antigo)' : 'inherit') + '">' + fmtR(ct.valor) + ' (' + fmtPctCurto(ct.pct) + ')' + (fp ? '' : '*') + '</span>' : '-';
+        if (ct && !fp) td2.title = '* calculado no preço sugerido (a fórmula ainda não tem Preço Final)';
+      } else { td1.textContent = '-'; td2.textContent = '-'; }
+      var cels = tr.children;
+      tr.insertBefore(td2, cels[iMargem + 1] || null);
+      tr.insertBefore(td1, cels[iCusto + 1] || null);
+    });
+  }
+  /* Fórmula aberta: bloco "Custo de produção (sem custos fixos)" depois dos Cálculos */
+  function blocoCustoNaVisualizacao(id) {
+    var f = achar(DB.get('formulas'), id);
+    if (!f || el('cpBloco')) return;
+    var alvo = null;
+    [].slice.call(document.querySelectorAll('#modalBody h4')).forEach(function (h) { if (/^Cálculos/i.test(h.textContent.trim())) alvo = h; });
+    if (!alvo || !alvo.nextElementSibling) return;
+    var c = calcFormula(f);
+    if (!(c.unitsLot > 0)) return;
+    var pp = partesProducao(c);
+    var fp = parseFloat(f.finalPrice) > 0 ? parseFloat(f.finalPrice) : 0;
+    var cF = fp ? contribuicao(c, fp) : null, cS = contribuicao(c, c.priceSuggested);
+    function lin(rot, v, forte) {
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span>' + rot + '</span><strong' + (forte ? ' style="color:var(--oliva)"' : '') + '>' + v + '</strong></div>';
+    }
+    function txtCt(ct) { return ct ? fmtR(ct.valor) + ' (' + fmtPctCurto(ct.pct) + ')' : '-'; }
+    var bloco = document.createElement('div');
+    bloco.id = 'cpBloco';
+    bloco.innerHTML = '<h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:18px 0 10px">Custo de produção (sem custos fixos)</h4>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+      lin('Matéria-prima por un.', fmtR(pp.mp)) + lin('Embalagem por un.', fmtR(pp.emb)) + lin('Outros custos por un.', fmtR(pp.outros)) +
+      lin('Custo de produção por un.', fmtR(c.costVarUnit), true) +
+      lin('Preço Final', fp ? fmtR(fp) : '-') + lin('Margem de contribuição por un. (Preço Final)', txtCt(cF)) +
+      lin('Preço sugerido', fmtR(c.priceSuggested)) + lin('Margem de contribuição por un. (sugerido)', txtCt(cS)) +
+      lin('Margem de contribuição por lote (Preço Final)', cF ? fmtR(cF.valor * c.unitsLot) : '-') +
+      '</div><p style="font-size:11px;color:var(--text-muted);margin-top:6px">Margem de contribuição é o que sobra de cada unidade vendida depois de imposto, taxa de cartão e custo de produção, antes de pagar os custos fixos.</p>';
+    alvo.nextElementSibling.parentNode.insertBefore(bloco, alvo.nextElementSibling.nextSibling);
+  }
+  envolver('rForms', function (antes) {
+    return function () {
+      var r = antes.apply(this, arguments);
+      try { colunasDeCusto(); } catch (e) { console.warn('correcoes-receitas: colunas de custo', e); }
+      return r;
+    };
+  });
   envolver('viewFormula', function (antes) {
     return function (id) {
       var r = antes.apply(this, arguments);
       try { polirVisualizacao(id); } catch (e) { console.warn('correcoes-receitas: visualização', e); }
+      try { blocoCustoNaVisualizacao(id); } catch (e2) { console.warn('correcoes-receitas: custo de produção', e2); }
       return r;
     };
   });
@@ -583,7 +682,13 @@
     ], 'X');
     ok('vale a compra mais recente que tenha preço e quantidade; unidade desconhecida ou zerada não gera preço',
       cE5.valor === 60 && custoDoEstoque([{ name: 'Y', unit: 'un', quantity: '10', price: '5' }], 'Y') === null && custoDoEstoque([{ name: 'Z', unit: 'g', quantity: '0', price: '5' }], 'Z') === null && custoDoEstoque([], 'Q') === null);
-    ok('SISTEMA: telas de receita instaladas', window.openFormModal === openFormModalNovo && typeof window.rcSeguir === 'function' && typeof window.rcAtualizarPrecos === 'function' && window.viewFormula._rec === true && window.closeModal._rec === true);
+    var cP = calcFormula(formulaTemp(s)), pP = partesProducao(cP), cfgT = getCfg();
+    ok('o custo de produção por unidade soma matéria-prima, embalagem e outros (sem custos fixos)',
+      Math.abs(pP.mp + pP.emb + pP.outros - cP.costVarUnit) < 1e-9 && Math.abs(pP.total - cP.costVarUnit) < 1e-9 && pP.mp > 0 && pP.emb > 0 && pP.outros > 0 && partesProducao({ unitsLot: 0 }).total === 0);
+    var ctT = contribuicao(cP, 20);
+    ok('a margem de contribuição é o preço menos imposto, cartão e custo de produção, antes dos custos fixos',
+      Math.abs(ctT.valor - (20 * (1 - cfgT.taxRate - cfgT.cardRate) - cP.costVarUnit)) < 1e-9 && Math.abs(ctT.pct - ctT.valor / 20) < 1e-9 && contribuicao(cP, 0) === null && contribuicao({ unitsLot: 0 }, 20) === null);
+    ok('SISTEMA: telas de receita instaladas', window.openFormModal === openFormModalNovo && typeof window.rcSeguir === 'function' && typeof window.rcAtualizarPrecos === 'function' && window.viewFormula._rec === true && window.rForms._rec === true && window.closeModal._rec === true);
     var falhas = r.filter(function (x) { return !x.ok; });
     if (console.table) console.table(r);
     console.log(falhas.length === 0 ? 'CORRECOES-RECEITAS: ' + r.length + ' testes, 0 falhas' : 'CORRECOES-RECEITAS: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
