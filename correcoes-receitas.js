@@ -30,6 +30,8 @@
    (3) ao abrir uma fórmula, no bloco "Custo de produção (sem custos fixos)".
    Margem de contribuição = preço - imposto - cartão - custo de produção (antes dos fixos).
 
+   Também carrega o módulo Faturamento (faturamento.js), se o arquivo estiver no site.
+
    Estoque de matéria-prima (Estoques > Matérias-Primas):
    - "Por matéria-prima": uma linha por MP com o total em estoque (kg com g, L com ml), o nível
      em relação à última compra, o último preço por kg ou L, em quantas fórmulas é usada, quantos
@@ -1067,4 +1069,15 @@
     return { total: r.length, falhas: falhas.length, resultados: r };
   }
   window.CorrecoesReceitasTeste = teste;
+
+  /* módulo Faturamento (Financeiro): arquivo à parte, carregado daqui para não precisar mexer no index.html.
+     Se o faturamento.js não existir no site, nada acontece. */
+  try {
+    if (!window.__faturamento && document.body) {
+      var sc = document.createElement('script');
+      sc.src = 'faturamento.js';
+      sc.charset = 'utf-8';
+      document.body.appendChild(sc);
+    }
+  } catch (eFat) { console.warn('correcoes-receitas: faturamento', eFat); }
 })();
