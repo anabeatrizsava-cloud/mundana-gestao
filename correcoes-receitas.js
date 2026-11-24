@@ -9,13 +9,20 @@
                      modo de preparo. A soma das porcentagens aparece ao vivo. Botão Seguir.
    Tela 2 (Custos):  você preenche o tamanho do lote, o tamanho por unidade, a embalagem e
                      outros custos por unidade, e o preço de cada ingrediente (R$/kg, R$/g ou
-                     R$/L; já vem preenchido pela última compra, quando existe). O sistema
-                     calcula a quantidade por lote, o custo de cada ingrediente e todo o
-                     resto (custo por unidade, rateio dos custos fixos, preço mínimo,
-                     preço sugerido, lucro e margem) com a mesma conta de sempre.
+                     R$/L). O sistema calcula a quantidade por lote, o custo de cada
+                     ingrediente e todo o resto (custo por unidade, rateio dos custos fixos,
+                     preço mínimo, preço sugerido, lucro e margem) com a mesma conta de sempre.
    A fórmula salva continua no mesmo formato de antes (mais a porcentagem), então
    Produção, Pedidos, Estoque, Precificação e Produtos seguem funcionando.
    Litro conta como 1 kg (densidade 1) e ml como g.
+
+   Preços pelo estoque: ao seguir para a tela 2, o preço de cada ingrediente vem da compra
+   mais recente registrada em Estoques (por kg, ou por L para líquidos). Só fica em branco
+   o que ainda não tem compra registrada. O botão "Atualizar preços pelo estoque" refaz isso
+   quando quiser. Sem compra no estoque, usa o histórico de preços do fornecedor.
+   Nomes: "Uréia" e "Ureia" contam como a mesma matéria-prima, e o nome do estoque é o usado.
+   Estoque: ao editar uma entrada aparece "Quantidade comprada". Ela não diminui na produção
+   e é com ela que o preço por kg sai exato (sem ela, o preço é estimado pelo saldo).
    ============================================================ */
 (function () {
   'use strict';
@@ -35,6 +42,8 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function norm(s) { return String(s == null ? '' : s).toLowerCase().trim(); }
+  /* chave para comparar nomes: sem acento e sem maiúscula ("Uréia" e "Ureia" são a mesma matéria-prima) */
+  function chave(s) { return norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   function achar(lista, id) { var r = null; (lista || []).forEach(function (x) { if (x && x.id === id) r = x; }); return r; }
   function el(id) { return document.getElementById(id); }
   function val(id) { var e = el(id); return e ? e.value : ''; }
@@ -85,7 +94,7 @@
     return { lotSize: s.lot, unitSize: s.uni, packagingCost: s.pack, otherCosts: s.out, ingredients: montarIngredientes(s) };
   }
 
-  function linhaVazia() { return { name: '', pct: '', obs: '', price: '', pu: 'kg', autoVal: '' }; }
+  function linhaVazia() { return { name: '', pct: '', obs: '', price: '', pu: 'kg', autoVal: '', nota: '' }; }
   function estadoDe(f) {
     var s = {
       id: f ? f.id : '', name: f ? (f.name || '') : '', type: f ? (f.productType || '') : '',
@@ -108,7 +117,7 @@
         var perG = parseFloat(g.unitCost) / fatorGramas(g.unit || 'g');
         price = String(Math.round(perG * 1000 * 100) / 100);
       }
-      s.ing.push({ name: g.name || '', pct: pct == null ? '' : String(pct), obs: g.obs || '', price: price, pu: pu, autoVal: '' });
+      s.ing.push({ name: g.name || '', pct: pct == null ? '' : String(pct), obs: g.obs || '', price: price, pu: pu, autoVal: '', nota: '' });
     });
     if (!f) { while (s.ing.length < 3) s.ing.push(linhaVazia()); }
     if (!s.ing.length) s.ing.push(linhaVazia());
@@ -117,10 +126,16 @@
 
   function nomesConhecidos() {
     var vistos = {}, out = [];
-    function add(n) { n = String(n || '').trim(); var k = norm(n); if (n && !vistos[k]) { vistos[k] = 1; out.push(n); } }
+    function add(n) { n = String(n || '').trim(); var k = chave(n); if (n && !vistos[k]) { vistos[k] = 1; out.push(n); } }
     DB.get('stockmp').forEach(function (s) { add(s.name); });
     DB.get('formulas').forEach(function (f) { (f.ingredients || []).forEach(function (g) { add(g.name); }); });
     return out.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+  }
+  /* se o estoque já tem essa matéria-prima (mesmo sem acento ou com outra maiúscula), usa o nome do estoque */
+  function nomeCanonico(nome) {
+    var k = chave(nome), achado = null;
+    DB.get('stockmp').forEach(function (s) { if (!achado && String(s.name || '').trim() && chave(s.name) === k) achado = String(s.name).trim(); });
+    return achado || String(nome).trim();
   }
 
   /* ---------------- tela 1: receita ---------------- */
@@ -214,7 +229,8 @@
     if (!rc || !d) return;
     var n = norm(q);
     if (!n) { d.style.display = 'none'; return; }
-    var nomes = nomesConhecidos().filter(function (x) { return norm(x).indexOf(n) > -1 && norm(x) !== n; }).slice(0, 6);
+    var nk = chave(q);
+    var nomes = nomesConhecidos().filter(function (x) { return chave(x).indexOf(nk) > -1 && x !== String(q).trim(); }).slice(0, 6);
     rc.sug[i] = nomes;
     if (!nomes.length) { d.style.display = 'none'; return; }
     d.style.display = 'block';
@@ -250,22 +266,63 @@
     var soma = somaPct(rc.ing);
     if (Math.abs(soma - 100) > 0.05 && !window.confirm('A soma das porcentagens é ' + fmtPct(soma) + '%, e não 100%. Seguir mesmo assim?')) return;
     rc.ing = rc.ing.filter(function (g) { return String(g.name).trim(); });
-    preencherPrecos();
+    rc.ing.forEach(function (g) { g.name = nomeCanonico(g.name); });
+    preencherPrecos(false);
     abrirPasso2();
   };
 
   /* ---------------- tela 2: custos ---------------- */
-  function preencherPrecos() {
-    var calc = window.__mundanaCustoPorUnidade;
-    if (typeof calc !== 'function') return;
-    var hist = DB.get('mp_price_hist');
-    rc.ing.forEach(function (g) {
-      if (!g.name || String(g.price).trim() !== '') return;
-      var un = 'kg', c = calc(hist, g.name, 'kg');
-      if (!c) { c = calc(hist, g.name, 'l'); un = 'l'; }
-      if (!c) return;
-      g.price = String(Math.round(c.valor * 100) / 100); g.pu = un; g.autoVal = g.price;
+  /* unidade do estoque: [unidade-base do preço, quanto 1 unidade vale nela]; massa em kg, líquido em L */
+  var UNID_ESTOQUE = {
+    g: ['kg', 0.001], gr: ['kg', 0.001], grama: ['kg', 0.001], gramas: ['kg', 0.001], mg: ['kg', 0.000001],
+    kg: ['kg', 1], quilo: ['kg', 1], quilos: ['kg', 1],
+    ml: ['l', 0.001], l: ['l', 1], lt: ['l', 1], litro: ['l', 1], litros: ['l', 1]
+  };
+  /* preço da compra mais recente registrada em Estoques para essa matéria-prima (por kg ou por L) */
+  function custoDoEstoque(stock, nome) {
+    var k = chave(nome), melhor = null;
+    (stock || []).forEach(function (s, i) {
+      if (chave(s.name) !== k) return;
+      var u = UNID_ESTOQUE[norm(s.unit).replace(/\./g, '')];
+      var preco = parseFloat(s.price);
+      var exato = parseFloat(s.qtdComprada) > 0;
+      var qtd = exato ? parseFloat(s.qtdComprada) : parseFloat(s.quantity);
+      if (!u || !(preco > 0) || !(qtd > 0)) return;
+      var data = String(s.purchaseDate || '');
+      if (!melhor || data > melhor.data || (data === melhor.data && i > melhor.i)) {
+        melhor = { i: i, data: data, base: u[0], valor: preco / (qtd * u[1]), exato: exato };
+      }
     });
+    if (!melhor) return null;
+    melhor.valor = Math.round(melhor.valor * 100) / 100;
+    return melhor;
+  }
+  /* preenche o preço de cada ingrediente pela compra mais recente do estoque (ou, se não houver, do histórico do fornecedor).
+     sobrescrever = false: só os que estão em branco; true: também troca o que já estava preenchido. Devolve quantos preencheu. */
+  function preencherPrecos(sobrescrever) {
+    var stock = DB.get('stockmp'), hist = DB.get('mp_price_hist'), calcHist = window.__mundanaCustoPorUnidade;
+    var n = 0;
+    rc.ing.forEach(function (g) {
+      if (!g.name) return;
+      if (!sobrescrever && String(g.price).trim() !== '') return;
+      var c = custoDoEstoque(stock, g.name);
+      if (c) {
+        g.price = String(c.valor); g.pu = c.base; g.autoVal = g.price;
+        g.nota = 'do estoque' + (c.data ? ' (' + fmtD(c.data) + ')' : '') + (c.exato ? '' : ', estimado pelo saldo: confira');
+        n++;
+        return;
+      }
+      if (typeof calcHist === 'function') {
+        var un = 'kg', h = calcHist(hist, g.name, 'kg');
+        if (!h) { h = calcHist(hist, g.name, 'l'); un = 'l'; }
+        if (h) {
+          g.price = String(Math.round(h.valor * 100) / 100); g.pu = un; g.autoVal = g.price;
+          g.nota = 'do histórico do fornecedor';
+          n++;
+        }
+      }
+    });
+    return n;
   }
   function campo(rotulo, id, valor, ph, step) {
     return '<div class="form-group"><label class="form-label">' + rotulo + '</label><input class="form-input" id="' + id + '" type="number" step="' + step + '" min="0" value="' + esc(valor) + '" placeholder="' + ph + '" oninput="rcCalc()"></div>';
@@ -288,7 +345,7 @@
       '<div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr">' +
       campo('Tamanho do lote (g)', 'rcLot', rc.lot, 'Ex: 3000', '1') + campo('Tam. por unidade (g)', 'rcUni', rc.uni, 'Ex: 300', '1') +
       campo('Embalagem/un. (R$)', 'rcPack', rc.pack, 'Ex: 15.37', '0.01') + campo('Outros custos/un. (R$)', 'rcOut', rc.out, 'Ex: 2.00', '0.01') + '</div>' +
-      '<h4 style="' + H4 + '">Matérias-primas (por lote)</h4>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between"><h4 style="' + H4 + '">Matérias-primas (por lote)</h4><button class="btn btn-secondary btn-sm" onclick="rcAtualizarPrecos()" style="margin-top:6px">Atualizar preços pelo estoque</button></div>' +
       '<div style="overflow-x:auto"><div style="min-width:640px">' +
       '<div style="' + CAB + ';grid-template-columns:2.2fr 0.7fr 1fr 1.9fr 1fr"><span>Ingrediente</span><span>%</span><span>Qtd/lote</span><span>Preço pago</span><span>Custo total</span></div>' +
       linhas + '</div></div>' +
@@ -348,7 +405,7 @@
       if ((parseFloat(g.pct) || 0) > 0 && !temPreco) faltam++;
       setTxt('rcQ' + i, gramas > 0 ? fmt3(gramas) + ' g' : '-');
       setTxt('rcC' + i, temPreco && gramas > 0 ? fmtR(gramas * perG) : '-');
-      setTxt('rcA' + i, g.autoVal && g.price === g.autoVal ? 'da última compra' : '');
+      setTxt('rcA' + i, g.autoVal && g.price === g.autoVal ? (g.nota || 'da última compra') : '');
     });
     var c = calcFormula(formulaTemp(rc));
     setTxt('rcTot', fmtR(c.totalMP)); /* mesmo número do resumo */
@@ -359,6 +416,14 @@
     if (box) box.innerHTML = htmlResumo(c, aviso, parseFloat(rc.final) || 0);
   };
   window.rcVoltar = function () { if (!rc) return; lerPasso2(); abrirPasso1(); };
+  window.rcAtualizarPrecos = function () {
+    if (!rc) return;
+    lerPasso2();
+    if (!window.confirm('Substituir os preços pelos da compra mais recente registrada em Estoques? Só mudam os ingredientes que têm compra registrada.')) return;
+    var n = preencherPrecos(true);
+    abrirPasso2();
+    toast(n ? n + ' preço' + (n > 1 ? 's' : '') + ' atualizado' + (n > 1 ? 's' : '') + ' pelo estoque' : 'Nenhum ingrediente com compra registrada em Estoques');
+  };
   window.rcSalvar = function () {
     if (!rc) return;
     lerPasso2();
@@ -441,6 +506,41 @@
       return r;
     };
   });
+  /* Estoque de MP: ao editar uma entrada, mostra "Quantidade comprada" (não diminui na produção) */
+  envolver('openStockModal', function (antes) {
+    return function (id) {
+      var r = antes.apply(this, arguments);
+      try {
+        var q = el('sQty');
+        if (q && id && !el('sQtyBuy')) {
+          var s = achar(DB.get('stockmp'), id) || {};
+          var linha = q.closest('.form-row');
+          var bloco = document.createElement('div');
+          bloco.className = 'form-group';
+          bloco.innerHTML = '<label class="form-label">Quantidade comprada (para o preço por kg)</label>' +
+            '<input class="form-input" id="sQtyBuy" type="number" step="0.1" value="' + esc(s.qtdComprada || '') + '" placeholder="Ex: 1000 (o que veio na compra)">' +
+            '<p style="font-size:11px;color:var(--text-muted);margin-top:4px">A quantidade acima é o saldo e diminui a cada produção. Esta fica fixa e serve para calcular o preço por kg.</p>';
+          if (linha && linha.parentNode) linha.parentNode.insertBefore(bloco, linha.nextSibling);
+        }
+      } catch (e) { console.warn('correcoes-receitas: estoque', e); }
+      return r;
+    };
+  });
+  envolver('saveStock', function (antes) {
+    return function (id) {
+      var comprada = val('sQtyBuy'), saldo = val('sQty'), antesQtd = DB.get('stockmp').length;
+      var r = antes.apply(this, arguments);
+      try {
+        var lista = DB.get('stockmp');
+        var e = id ? achar(lista, id) : (lista.length === antesQtd + 1 ? lista[lista.length - 1] : null);
+        if (e) {
+          var q = parseFloat(comprada) > 0 ? comprada : (id ? '' : saldo); /* entrada nova: a quantidade comprada é a quantidade registrada */
+          if (q !== '' && parseFloat(q) > 0) { e.qtdComprada = String(q); DB.set('stockmp', lista); }
+        }
+      } catch (err) { console.warn('correcoes-receitas: quantidade comprada', err); }
+      return r;
+    };
+  });
   envolver('viewFormula', function (antes) {
     return function (id) {
       var r = antes.apply(this, arguments);
@@ -469,7 +569,21 @@
     ok('fórmula salva pela receita reabre com o que foi digitado', salva.ing[0].pct === '12.5' && salva.ing[0].price === '30' && salva.ing[0].pu === 'g');
     var res = htmlResumo(calcFormula(formulaTemp(s)), 'Aviso de teste', 0);
     ok('o resumo mostra o cálculo e o aviso', res.indexOf('Aviso de teste') > -1 && res.indexOf('Preço sugerido') > -1 && res.indexOf('Custo total por un.') > -1);
-    ok('SISTEMA: telas de receita instaladas', window.openFormModal === openFormModalNovo && typeof window.rcSeguir === 'function' && window.viewFormula._rec === true && window.closeModal._rec === true);
+    ok('nomes com acento ou maiúscula são a mesma matéria-prima', chave('Uréia') === 'ureia' && chave('  ÓLEO Vegetal ') === 'oleo vegetal' && chave('Karité') === chave('karite'));
+    var cE1 = custoDoEstoque([{ name: 'Uréia', unit: 'g', quantity: '1000', price: '24', purchaseDate: '2026-02-02' }], 'Ureia');
+    var cE2 = custoDoEstoque([{ name: 'Manteiga Vegetal', unit: 'g', quantity: '847', qtdComprada: '1000', price: '135', purchaseDate: '2026-04-10' }], 'manteiga vegetal');
+    var cE3 = custoDoEstoque([{ name: 'Manteiga Vegetal', unit: 'g', quantity: '847', price: '135', purchaseDate: '2026-04-10' }], 'Manteiga Vegetal');
+    var cE4 = custoDoEstoque([{ name: 'Vitamina E', unit: 'ml', quantity: '1000', price: '250', purchaseDate: '2026-11-17' }], 'vitamina e');
+    ok('o preço vem do estoque por kg (massa) ou por L (líquido): exato com a quantidade comprada, estimado pelo saldo sem ela',
+      cE1.valor === 24 && cE1.base === 'kg' && cE1.exato === false && cE2.valor === 135 && cE2.exato === true && cE3.valor === 159.39 && cE3.exato === false && cE4.valor === 250 && cE4.base === 'l');
+    var cE5 = custoDoEstoque([
+      { name: 'X', unit: 'kg', quantity: '1', price: '40', purchaseDate: '2026-01-01' },
+      { name: 'x', unit: 'kg', quantity: '1', price: '60', purchaseDate: '2026-03-01' },
+      { name: 'X', unit: 'kg', quantity: '1', price: '', purchaseDate: '2026-05-01' }
+    ], 'X');
+    ok('vale a compra mais recente que tenha preço e quantidade; unidade desconhecida ou zerada não gera preço',
+      cE5.valor === 60 && custoDoEstoque([{ name: 'Y', unit: 'un', quantity: '10', price: '5' }], 'Y') === null && custoDoEstoque([{ name: 'Z', unit: 'g', quantity: '0', price: '5' }], 'Z') === null && custoDoEstoque([], 'Q') === null);
+    ok('SISTEMA: telas de receita instaladas', window.openFormModal === openFormModalNovo && typeof window.rcSeguir === 'function' && typeof window.rcAtualizarPrecos === 'function' && window.viewFormula._rec === true && window.closeModal._rec === true);
     var falhas = r.filter(function (x) { return !x.ok; });
     if (console.table) console.table(r);
     console.log(falhas.length === 0 ? 'CORRECOES-RECEITAS: ' + r.length + ' testes, 0 falhas' : 'CORRECOES-RECEITAS: ' + falhas.length + ' FALHA(S): ' + falhas.map(function (f) { return f.teste; }).join(' | '));
