@@ -29,6 +29,17 @@
    Final, (2) na lista de Fórmulas, nas colunas "Custo prod. un." e "Contrib. un.", e
    (3) ao abrir uma fórmula, no bloco "Custo de produção (sem custos fixos)".
    Margem de contribuição = preço - imposto - cartão - custo de produção (antes dos fixos).
+
+   Estoque de matéria-prima (Estoques > Matérias-Primas):
+   - "Por matéria-prima": uma linha por MP com o total em estoque (kg com g, L com ml), o nível
+     em relação à última compra, o último preço por kg ou L, em quantas fórmulas é usada, quantos
+     lotes dá para produzir e a situação (OK, Baixo, Zerado). "Compras (entradas)" mostra a lista
+     de antes.
+   - Nova Entrada: uma compra com várias matérias-primas de uma vez (fornecedor e data uma só
+     vez), com preço por kg/L e estoque depois da entrada na hora, e aviso se o preço fugir do
+     último registrado (pega unidade trocada). Pode criar um lançamento no A Pagar.
+   - Aviso quando restar 30% ou menos da última compra (sino, Modo Dia e Dashboard). Precisa da
+     "quantidade comprada" da última compra; sem ela, usa 30% do necessário por lote.
    ============================================================ */
 (function () {
   'use strict';
@@ -520,7 +531,7 @@
   envolver('closeModal', function (antes) {
     return function () {
       var r = antes.apply(this, arguments);
-      if (!window.__rcTrocando) rc = null;
+      if (!window.__rcTrocando) { rc = null; en = null; }
       return r;
     };
   });
@@ -533,9 +544,350 @@
       return r;
     };
   });
-  /* Estoque de MP: ao editar uma entrada, mostra "Quantidade comprada" (não diminui na produção) */
+  /* ================= ESTOQUE DE MATÉRIA-PRIMA: visão por MP, entrada com várias MP e aviso de 30% ================= */
+  var UNID_QTD = Object.assign({}, UNID_ESTOQUE, { un: ['un', 1], und: ['un', 1], unid: ['un', 1], unidade: ['un', 1], unidades: ['un', 1] });
+  function infoQtd(unit) { return UNID_QTD[norm(unit).replace(/\./g, '')] || null; }
+  function fmtNumBR(n, casas) { var f = Math.pow(10, casas); return (Math.round(n * f) / f).toLocaleString('pt-BR', { maximumFractionDigits: casas }); }
+  /* quantidade em unidade legível: 0,25 kg vira 250 g; 1,5 kg continua 1,5 kg */
+  function fmtQtd(base, v) {
+    if (base === 'kg') return v >= 1 ? fmtNumBR(v, 2) + ' kg' : fmtNumBR(v * 1000, 1) + ' g';
+    if (base === 'l') return v >= 1 ? fmtNumBR(v, 2) + ' L' : fmtNumBR(v * 1000, 1) + ' ml';
+    return fmtNumBR(v, 2) + ' un';
+  }
+  function slugKey(s) { return chave(s).replace(/[^a-z0-9]+/g, '-'); }
+  function valorUnidade(u) {
+    var m = { g: 'g', gr: 'g', grama: 'g', gramas: 'g', kg: 'kg', quilo: 'kg', quilos: 'kg', ml: 'ml', l: 'L', lt: 'L', litro: 'L', litros: 'L', un: 'un', und: 'un', unid: 'un', unidade: 'un', unidades: 'un' };
+    return m[norm(u).replace(/\./g, '')] || 'kg';
+  }
+  var LIMITE_BAIXO = 0.30; /* avisa quando restar 30% ou menos da última compra */
+
+  /* uma linha por matéria-prima: total em estoque (soma das compras, kg com g e L com ml), nível em relação à última compra,
+     último preço, fórmulas que usam e quantos lotes dá para produzir */
+  function resumoPorMP(stock, formulas) {
+    var grupos = {};
+    (stock || []).forEach(function (s, i) {
+      var k = chave(s.name);
+      if (!k) return;
+      (grupos[k] = grupos[k] || []).push({ s: s, i: i, d: String(s.purchaseDate || '') });
+    });
+    function maisRecente(a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : b.i - a.i; }
+    return Object.keys(grupos).map(function (k) {
+      var ent = grupos[k].slice().sort(maisRecente);
+      var nome = String(ent[0].s.name).trim();
+      var fam = null;
+      ent.forEach(function (e) { var u = infoQtd(e.s.unit); if (!fam && u) fam = u[0]; });
+      var total = 0, misturadas = 0, ref = null;
+      ent.forEach(function (e) {
+        var u = infoQtd(e.s.unit), saldo = parseFloat(e.s.quantity) || 0;
+        if (!u || u[0] !== fam) { if (saldo > 0) misturadas++; return; }
+        total += saldo * u[1];
+      });
+      /* referência dos 30%: a última compra, se ela tem a quantidade comprada registrada */
+      var u0 = infoQtd(ent[0].s.unit), qc = parseFloat(ent[0].s.qtdComprada);
+      if (fam && u0 && u0[0] === fam && qc > 0) ref = qc * u0[1];
+      var usos = [], somaNeed = 0;
+      (formulas || []).forEach(function (f) {
+        (f.ingredients || []).forEach(function (ing) {
+          if (chave(ing.name) !== k) return;
+          var ui = infoQtd(ing.unit || 'g');
+          var need = ui && ui[0] === fam ? (parseFloat(ing.qtyLot) || 0) * ui[1] : 0;
+          usos.push({ formula: f.name, need: need });
+          somaNeed += need;
+        });
+      });
+      var comNeed = usos.filter(function (u) { return u.need > 0; });
+      var lotes = comNeed.length ? Math.min.apply(null, comNeed.map(function (u) { return Math.floor(total / u.need); })) : null;
+      var detalhe = comNeed.map(function (u) { return u.formula + ': ' + Math.floor(total / u.need) + ' lote(s)'; }).join('\n');
+      var pct = ref > 0 ? total / ref : null, regra = null, status;
+      if (!fam) status = 'semref';
+      else if (!(total > 0)) status = 'zerado';
+      else if (pct !== null) { regra = 'compra'; status = pct <= LIMITE_BAIXO ? 'baixo' : 'ok'; }
+      else if (somaNeed > 0) { regra = 'lote'; status = total <= LIMITE_BAIXO * somaNeed ? 'baixo' : 'ok'; }
+      else status = 'semref';
+      return { chave: k, nome: nome, fam: fam, total: total, ref: ref, pct: pct, regra: regra, status: status, preco: custoDoEstoque(stock, nome), usos: usos, lotes: lotes, detalhe: detalhe, somaNeed: somaNeed, misturadas: misturadas };
+    });
+  }
+  /* o que gera aviso: abaixo de 30% (ou zerado, se alguma fórmula usa a matéria-prima) */
+  function filtrarCriticos(res) {
+    return res.filter(function (r) { return (r.status === 'baixo' && r.total > 0) || (r.status === 'zerado' && r.usos.length > 0); });
+  }
+  function criticosAgora() { return filtrarCriticos(resumoPorMP(DB.get('stockmp'), DB.get('formulas'))); }
+  function textoPct(r) {
+    if (r.regra === 'compra') return Math.round(r.pct * 100) + '% da última compra';
+    if (r.regra === 'lote' && r.somaNeed > 0) return Math.round(r.total / r.somaNeed * 100) + '% do necessário por lote';
+    return '';
+  }
+
+  var ultimoResumo = [];
+  function htmlResumoMP() {
+    var res = resumoPorMP(DB.get('stockmp'), DB.get('formulas'));
+    var ordem = { zerado: 0, baixo: 1, semref: 2, ok: 3 };
+    res.sort(function (a, b) { return (ordem[a.status] - ordem[b.status]) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+    ultimoResumo = res;
+    if (!res.length) {
+      return '<div class="empty-state"><div class="empty-icon">' + I.stock + '</div><h3>Nenhuma matéria-prima registrada</h3><p>Registre suas compras de insumos</p><button class="btn btn-primary" onclick="openStockModal()">' + I.plus + ' Nova Entrada</button></div>';
+    }
+    var nBaixo = res.filter(function (r) { return r.status === 'baixo'; }).length, nZero = res.filter(function (r) { return r.status === 'zerado'; }).length;
+    function badge(r) {
+      if (r.status === 'zerado') return '<span class="badge badge-rose">Zerado</span>';
+      if (r.status === 'baixo') return '<span class="badge badge-rose">Baixo</span>';
+      if (r.status === 'semref') return '<span class="badge badge-lavanda" title="Informe a quantidade comprada na última compra (lápis, em Compras) para o sistema avisar quando restar 30%">Sem referência</span>';
+      return '<span class="badge badge-oliva">OK</span>';
+    }
+    function nivel(r) {
+      if (r.pct === null) return '<span style="font-size:11px;color:var(--text-muted)">-</span>';
+      var w = Math.max(0, Math.min(100, Math.round(r.pct * 100))), cor = r.pct <= LIMITE_BAIXO ? 'var(--rosa-antigo)' : 'var(--oliva)';
+      return '<div title="' + Math.round(r.pct * 100) + '% da última compra (' + fmtQtd(r.fam, r.ref) + ')" style="min-width:110px"><div style="height:6px;border-radius:3px;background:var(--border-light);overflow:hidden"><div style="height:100%;width:' + w + '%;background:' + cor + '"></div></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">' + Math.round(r.pct * 100) + '% da última compra</div></div>';
+    }
+    var linhas = res.map(function (r, idx) {
+      return '<tr><td><strong>' + esc(r.nome) + '</strong>' + (r.misturadas ? '<div style="font-size:10px;color:var(--rosa-antigo)">há compras em outra unidade que não foram somadas</div>' : '') + '</td>' +
+        '<td><strong>' + (r.fam ? fmtQtd(r.fam, r.total) : '-') + '</strong></td><td>' + nivel(r) + '</td>' +
+        '<td>' + (r.preco ? fmtR(r.preco.valor) + '/' + (r.preco.base === 'l' ? 'L' : 'kg') + (r.preco.exato ? '' : '<span title="estimado pelo saldo; informe a quantidade comprada">*</span>') : '-') + '</td>' +
+        '<td>' + (r.usos.length ? r.usos.length + ' fórmula' + (r.usos.length > 1 ? 's' : '') : '-') + '</td>' +
+        '<td' + (r.detalhe ? ' title="' + esc(r.detalhe) + '"' : '') + '>' + (r.lotes === null ? '-' : r.lotes) + '</td>' +
+        '<td>' + badge(r) + '</td>' +
+        '<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="mpEntrada(' + idx + ')">' + I.plus + ' Entrada</button></td></tr>';
+    }).join('');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">' +
+      '<div style="font-size:12px;color:var(--text-muted)">' + res.length + ' matéria' + (res.length > 1 ? 's' : '') + '-prima' + (res.length > 1 ? 's' : '') +
+      (nBaixo ? ' &middot; <strong style="color:var(--rosa-antigo)">' + nBaixo + ' baixo' + (nBaixo > 1 ? 's' : '') + '</strong>' : '') + (nZero ? ' &middot; <strong style="color:var(--rosa-antigo)">' + nZero + ' zerado' + (nZero > 1 ? 's' : '') + '</strong>' : '') + '</div>' +
+      '<div style="display:flex;gap:10px"><div class="search-box">' + I.search + '<input class="form-input" placeholder="Buscar..." oninput="mpFiltrar(this.value)" style="width:180px"></div><button class="btn btn-primary" onclick="openStockModal()">' + I.plus + ' Nova Entrada</button></div></div>' +
+      '<div class="card"><div class="table-wrapper"><table id="mpTabela"><thead><tr><th>Matéria-prima</th><th>Em estoque</th><th>Nível</th><th>Último preço</th><th>Usada em</th><th title="Quantos lotes dá para produzir com o que há em estoque (o menor entre as fórmulas)">Lotes possíveis</th><th>Situação</th><th></th></tr></thead><tbody>' + linhas + '</tbody></table></div></div>' +
+      '<p style="font-size:11px;color:var(--text-muted);margin-top:8px">O aviso aparece quando restar 30% ou menos da última compra. * Preço estimado pelo saldo: edite a compra e informe a quantidade comprada para ficar exato.</p>';
+  }
+  function subAbasMP(sub) {
+    function pill(id, rot) { return '<button class="btn btn-sm ' + (sub === id ? 'btn-primary' : 'btn-secondary') + '" onclick="S._mpSub=\'' + id + '\';rStockMP()">' + rot + '</button>'; }
+    return '<div style="display:flex;gap:8px;margin-bottom:14px">' + pill('resumo', 'Por matéria-prima') + pill('compras', 'Compras (entradas)') + '</div>';
+  }
+  window.mpFiltrar = function (q) {
+    var k = chave(q);
+    [].slice.call(document.querySelectorAll('#mpTabela tbody tr')).forEach(function (tr) { tr.style.display = chave(tr.textContent).indexOf(k) > -1 ? '' : 'none'; });
+  };
+  window.mpEntrada = function (i) { if (ultimoResumo[i]) abrirEntradaMultipla(ultimoResumo[i].nome); };
+
+  /* ---- nova entrada: várias matérias-primas da mesma compra ---- */
+  var en = null;
+  function linhaEntrada(nome) { return { nome: nome || '', qtd: '', un: 'kg', valor: '', sug: [] }; }
+  function ultimaUnidade(nome) {
+    var k = chave(nome), melhor = null;
+    DB.get('stockmp').forEach(function (s, i) {
+      if (chave(s.name) !== k || !infoQtd(s.unit)) return;
+      var d = String(s.purchaseDate || '');
+      if (!melhor || d > melhor.d || (d === melhor.d && i > melhor.i)) melhor = { d: d, i: i, u: s.unit };
+    });
+    return melhor ? valorUnidade(melhor.u) : '';
+  }
+  /* preço por kg ou por L da linha e comparação com o último preço registrado (pega unidade trocada, como 1000 kg no lugar de 1000 g) */
+  function analisarLinha(g, res) {
+    var nome = String(g.nome).trim();
+    if (!nome) return { html: '', aviso: '', precoBase: null };
+    var q = parseFloat(g.qtd) || 0, v = parseFloat(g.valor) || 0, u = infoQtd(g.un), r = null, partes = [], aviso = '', precoBase = null;
+    res.forEach(function (x) { if (x.chave === chave(nome)) r = x; });
+    if (!r) partes.push('nova matéria-prima');
+    if (q > 0 && v > 0 && u && u[0] !== 'un') {
+      precoBase = v / (q * u[1]);
+      var rot = u[0] === 'l' ? 'L' : 'kg';
+      partes.push('<strong>' + fmtR(precoBase) + '/' + rot + '</strong>');
+      if (r && r.preco && r.preco.base === u[0]) {
+        var razao = precoBase / r.preco.valor;
+        if (razao > 3 || razao < 1 / 3) aviso = 'Confira a quantidade e a unidade: o último preço registrado foi ' + fmtR(r.preco.valor) + '/' + rot + '.';
+      }
+    }
+    if (q > 0 && u) {
+      var depois = q * u[1];
+      if (r && r.fam === u[0]) depois += r.total;
+      partes.push('estoque depois: ' + fmtQtd(u[0], depois));
+    }
+    return { html: partes.join(' &middot; ') + (aviso ? '<div style="color:var(--rosa-antigo);margin-top:2px">' + esc(aviso) + '</div>' : ''), aviso: aviso, precoBase: precoBase };
+  }
+  function htmlEntrada() {
+    var forns = DB.get('suppliers');
+    return '<div class="form-row form-row-2">' +
+      '<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-input" id="enForn" list="enFornList" value="' + esc(en.forn) + '" placeholder="Escolha ou digite" autocomplete="off"><datalist id="enFornList">' + forns.map(function (s) { return '<option value="' + esc(s.name) + '"></option>'; }).join('') + '</datalist></div>' +
+      '<div class="form-group"><label class="form-label">Data da compra</label><input class="form-input" id="enData" type="date" value="' + esc(en.data) + '"></div></div>' +
+      '<h4 style="' + H4 + '">Matérias-primas desta compra</h4>' +
+      '<div id="enList"></div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><button class="btn btn-secondary btn-sm" onclick="enAddLinha()">' + I.plus + ' Adicionar outra matéria-prima</button><div style="font-size:13px;color:var(--text-muted)">Total da compra: <strong id="enTotal" style="color:var(--oliva)">R$ 0,00</strong></div></div>';
+  }
+  function enRender() {
+    var l = el('enList');
+    if (!l) return;
+    l.innerHTML = '<div style="' + CAB + ';grid-template-columns:2.4fr 1fr 0.9fr 1fr 36px"><span>Matéria-prima</span><span>Quantidade</span><span>Unidade</span><span>Valor pago (R$)</span><span></span></div>' +
+      en.linhas.map(function (g, i) {
+        return '<div style="display:grid;grid-template-columns:2.4fr 1fr 0.9fr 1fr 36px;gap:6px;align-items:start;margin-bottom:2px">' +
+          '<div style="position:relative"><input class="form-input" id="enN' + i + '" value="' + esc(g.nome) + '" placeholder="Nome da matéria-prima" oninput="enNome(' + i + ',this.value)" onfocus="enBusca(' + i + ',this.value)" onblur="enFecha(' + i + ')" autocomplete="off" style="padding:7px 8px;font-size:12px">' +
+          '<div id="enDrop' + i + '" style="position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);z-index:10;display:none;max-height:140px;overflow-y:auto"></div></div>' +
+          '<input class="form-input" id="enQ' + i + '" type="number" step="any" min="0" value="' + esc(g.qtd) + '" placeholder="0" oninput="enCalc()" style="padding:7px 8px;font-size:12px">' +
+          '<select class="form-select" id="enU' + i + '" onchange="enCalc()" style="padding:7px 6px;font-size:12px">' + ['kg', 'g', 'L', 'ml', 'un'].map(function (o) { return '<option value="' + o + '"' + (g.un === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select>' +
+          '<input class="form-input" id="enV' + i + '" type="number" step="0.01" min="0" value="' + esc(g.valor) + '" placeholder="0,00" oninput="enCalc()" style="padding:7px 8px;font-size:12px">' +
+          '<button class="remove-btn" onclick="enDelLinha(' + i + ')">' + I.trash + '</button></div>' +
+          '<div id="enC' + i + '" style="font-size:11px;color:var(--text-muted);margin:0 0 10px 2px;min-height:14px"></div>';
+      }).join('');
+  }
+  function lerEntrada() {
+    if (!en || !el('enForn')) return;
+    en.forn = val('enForn'); en.data = val('enData');
+    en.linhas.forEach(function (g, i) {
+      var q = el('enQ' + i), u = el('enU' + i), v = el('enV' + i);
+      if (q) g.qtd = q.value;
+      if (u) g.un = u.value;
+      if (v) g.valor = v.value;
+    });
+  }
+  function abrirEntradaMultipla(nome) {
+    en = { forn: '', data: localDateStr(), linhas: [linhaEntrada(nome)] };
+    if (nome) en.linhas[0].un = ultimaUnidade(nome) || 'kg';
+    window.__rcTrocando = true;
+    try {
+      openModal('Nova entrada de matérias-primas', htmlEntrada(),
+        '<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="enSalvar()">Salvar entrada</button>', true);
+    } finally { window.__rcTrocando = false; }
+    enRender(); window.enCalc();
+  }
+  window.enCalc = function () {
+    if (!en || !el('enList')) return;
+    lerEntrada();
+    var res = resumoPorMP(DB.get('stockmp'), DB.get('formulas')), total = 0;
+    en.linhas.forEach(function (g, i) {
+      var box = el('enC' + i);
+      total += parseFloat(g.valor) || 0;
+      if (box) box.innerHTML = analisarLinha(g, res).html;
+    });
+    setTxt('enTotal', fmtR(total));
+  };
+  window.enAddLinha = function () {
+    if (!en) return;
+    lerEntrada(); en.linhas.push(linhaEntrada('')); enRender(); window.enCalc();
+    var inp = el('enN' + (en.linhas.length - 1)); if (inp) inp.focus();
+  };
+  window.enDelLinha = function (i) {
+    if (!en) return;
+    lerEntrada(); en.linhas.splice(i, 1);
+    if (!en.linhas.length) en.linhas.push(linhaEntrada(''));
+    enRender(); window.enCalc();
+  };
+  window.enNome = function (i, v) { if (!en) return; en.linhas[i].nome = v; window.enBusca(i, v); window.enCalc(); };
+  window.enBusca = function (i, q) {
+    var d = el('enDrop' + i);
+    if (!en || !d) return;
+    if (!norm(q)) { d.style.display = 'none'; return; }
+    var nk = chave(q);
+    var nomes = nomesConhecidos().filter(function (x) { return chave(x).indexOf(nk) > -1 && x !== String(q).trim(); }).slice(0, 6);
+    en.linhas[i].sug = nomes;
+    if (!nomes.length) { d.style.display = 'none'; return; }
+    d.style.display = 'block';
+    d.innerHTML = nomes.map(function (x, k) {
+      return '<div style="padding:6px 10px;cursor:pointer;font-size:12px" onmouseover="this.style.background=\'var(--bg-warm)\'" onmouseout="this.style.background=\'\'" onmousedown="enEscolhe(' + i + ',' + k + ')">' + esc(x) + '</div>';
+    }).join('');
+  };
+  window.enEscolhe = function (i, k) {
+    if (!en || !en.linhas[i].sug[k]) return;
+    var nome = en.linhas[i].sug[k];
+    en.linhas[i].nome = nome;
+    var inp = el('enN' + i); if (inp) inp.value = nome;
+    var d = el('enDrop' + i); if (d) d.style.display = 'none';
+    var un = ultimaUnidade(nome), sel = el('enU' + i);
+    if (un && sel) { sel.value = un; en.linhas[i].un = un; }
+    window.enCalc();
+    var q = el('enQ' + i); if (q) q.focus();
+  };
+  window.enFecha = function (i) {
+    setTimeout(function () { var d = el('enDrop' + i); if (d) d.style.display = 'none'; }, 150);
+  };
+  window.enSalvar = function () {
+    if (!en) return;
+    lerEntrada();
+    var validas = en.linhas.filter(function (g) { return String(g.nome).trim() && parseFloat(g.qtd) > 0; });
+    if (!validas.length) { toast('Adicione pelo menos uma matéria-prima com a quantidade'); return; }
+    if (validas.some(function (g) { return String(g.valor).trim() === ''; })) { toast('Preencha o valor pago de cada matéria-prima'); return; }
+    if (!en.data) { toast('Preencha a data da compra'); return; }
+    var res = resumoPorMP(DB.get('stockmp'), DB.get('formulas'));
+    var suspeitas = validas.filter(function (g) { return analisarLinha(g, res).aviso; });
+    if (suspeitas.length && !window.confirm('Confira estas linhas, o preço foge do último registrado:\n\n' +
+      suspeitas.map(function (g) { return '- ' + String(g.nome).trim() + ': ' + analisarLinha(g, res).aviso; }).join('\n') + '\n\nSalvar mesmo assim?')) return;
+    var lista = DB.get('stockmp'), hist = DB.get('mp_price_hist'), forn = String(en.forn || '').trim(), sup = null, novosHist = 0, total = 0, nomes = [];
+    DB.get('suppliers').forEach(function (s) { if (forn && norm(s.name) === norm(forn)) sup = s; });
+    validas.forEach(function (g) {
+      var nome = nomeCanonico(g.nome), q = parseFloat(g.qtd), v = parseFloat(g.valor) || 0;
+      lista.push({ id: uid(), name: nome, supplier: sup ? sup.name : forn, purchaseDate: en.data, quantity: String(q), unit: g.un, price: String(v), supplierLink: '', qtdComprada: String(q) });
+      if (sup && v > 0) { hist.push({ id: uid(), supplierId: sup.id, mpName: nome, qty: q, unit: g.un, price: v, date: en.data }); novosHist++; }
+      total += v; nomes.push(nome);
+    });
+    DB.set('stockmp', lista);
+    if (novosHist) DB.set('mp_price_hist', hist);
+    if (total > 0 && window.confirm('Criar um lançamento no A Pagar para esta compra (' + fmtR(total) + ')?')) {
+      var pagar = DB.get('pagar');
+      pagar.push({ id: uid(), descricao: 'Compra' + (forn ? ' ' + forn : ' de matérias-primas') + ' (' + validas.length + ' ite' + (validas.length > 1 ? 'ns' : 'm') + ')', fornecedor: forn, tipo: 'Matéria Prima', vencimento: en.data, valor: String(Math.round(total * 100) / 100), parcelado: 'nao', parcela: '', totalParcelas: '', recorrente: 'nao', recorrDias: '', obs: 'Compra registrada em Estoques: ' + nomes.join(', '), status: 'pendente' });
+      DB.set('pagar', pagar);
+    }
+    closeModal(); rStockMP();
+    toast(validas.length + ' entrada' + (validas.length > 1 ? 's' : '') + ' registrada' + (validas.length > 1 ? 's' : ''));
+  };
+
+  /* ---- aviso de 30%: sino, Modo Dia e Dashboard passam a usar a regra "restam 30% da última compra" ---- */
+  function tarefaEstoque(r) {
+    var preco = r.preco ? 'Último preço: ' + fmtR(r.preco.valor) + '/' + (r.preco.base === 'l' ? 'L' : 'kg') + (r.preco.data ? ' em ' + fmtD(r.preco.data) : '') : 'Sem preço registrado';
+    return {
+      priority: r.status === 'zerado' ? 2 : 3, type: 'hoje', cat: 'Estoque', catColor: 'green',
+      text: r.status === 'zerado' ? 'Repor ' + r.nome + ' \u2014 acabou' : 'Repor ' + r.nome + ' \u2014 restam ' + fmtQtd(r.fam, r.total) + ' (' + textoPct(r) + ')',
+      sub: preco, action: "S.stockTab='mp';S._mpSub='resumo';go('stockmp')", btnLabel: 'Ver Estoque', id: 'stock_' + slugKey(r.chave)
+    };
+  }
+  function corrigirCardEstoque() {
+    var alvo = null;
+    [].slice.call(document.querySelectorAll('#content .card-header h3')).forEach(function (h) { if (/Estoque MP crítico/i.test(h.textContent)) alvo = h; });
+    if (!alvo) return;
+    var card = alvo.closest('.card'), lista = criticosAgora();
+    if (!lista.length) { card.parentNode.removeChild(card); return; }
+    var cont = card.querySelector('.card-header span'); if (cont) cont.textContent = lista.length + ' ite' + (lista.length > 1 ? 'ns' : 'm');
+    var corpo = card.querySelector('.card-body');
+    if (corpo) corpo.innerHTML = lista.map(function (r) {
+      return '<div class="activity-item"><div class="activity-dot" style="background:var(--rosa-antigo)"></div><div class="activity-text"><strong>' + esc(r.nome) + '</strong> \u2014 ' + (r.status === 'zerado' ? 'acabou' : fmtQtd(r.fam, r.total) + ' <span style="color:var(--rosa-antigo);font-weight:600">(' + textoPct(r) + ')</span>') + '</div></div>';
+    }).join('');
+  }
+  envolver('renderStockMP', function (antes) {
+    return function () {
+      var sub = S._mpSub || 'resumo';
+      return subAbasMP(sub) + (sub === 'compras' ? antes.apply(this, arguments) : htmlResumoMP());
+    };
+  });
+  envolver('getAlerts', function (antes) {
+    return function () {
+      var a = antes.apply(this, arguments);
+      try {
+        a = a.filter(function (x) { return String(x.key).indexOf('stock_') !== 0; });
+        criticosAgora().forEach(function (r) {
+          a.push({ key: 'stock_' + slugKey(r.chave), type: 'rosa-antigo', text: (r.status === 'zerado' ? 'Estoque zerado: <strong>' + esc(r.nome) + '</strong>' : 'Estoque baixo: <strong>' + esc(r.nome) + '</strong> \u2014 restam ' + fmtQtd(r.fam, r.total) + ' (' + textoPct(r) + ')') });
+        });
+      } catch (e) { console.warn('correcoes-receitas: alertas de estoque', e); }
+      return a;
+    };
+  });
+  envolver('getModoDiaTasks', function (antes) {
+    return function () {
+      var tasks = antes.apply(this, arguments);
+      try {
+        tasks = tasks.filter(function (t) { return String(t.id).indexOf('stock_') !== 0; });
+        criticosAgora().slice(0, 4).forEach(function (r) { tasks.push(tarefaEstoque(r)); });
+        tasks.sort(function (a, b) { return a.priority - b.priority; });
+      } catch (e) { console.warn('correcoes-receitas: tarefas de estoque', e); }
+      return tasks;
+    };
+  });
+  envolver('rDash', function (antes) {
+    return function () {
+      var r = antes.apply(this, arguments);
+      try { corrigirCardEstoque(); } catch (e) { console.warn('correcoes-receitas: card de estoque', e); }
+      return r;
+    };
+  });
+
+  /* Estoque de MP: nova entrada abre a janela com várias matérias-primas; ao editar uma entrada, mostra "Quantidade comprada" (não diminui na produção) */
   envolver('openStockModal', function (antes) {
     return function (id) {
+      if (!id) {
+        try { abrirEntradaMultipla(); return; } catch (e0) { console.warn('correcoes-receitas: nova entrada', e0); }
+      }
       var r = antes.apply(this, arguments);
       try {
         var q = el('sQty');
@@ -688,6 +1040,26 @@
     var ctT = contribuicao(cP, 20);
     ok('a margem de contribuição é o preço menos imposto, cartão e custo de produção, antes dos custos fixos',
       Math.abs(ctT.valor - (20 * (1 - cfgT.taxRate - cfgT.cardRate) - cP.costVarUnit)) < 1e-9 && Math.abs(ctT.pct - ctT.valor / 20) < 1e-9 && contribuicao(cP, 0) === null && contribuicao({ unitsLot: 0 }, 20) === null);
+    var stT = [
+      { name: 'Manteiga Vegetal', unit: 'g', quantity: '0', qtdComprada: '1000', price: '135', purchaseDate: '2026-04-10' },
+      { name: 'manteiga vegetal', unit: 'kg', quantity: '0.25', qtdComprada: '1', price: '70', purchaseDate: '2026-11-21' },
+      { name: 'Uréia', unit: 'g', quantity: '1000', price: '24', purchaseDate: '2026-02-02' },
+      { name: 'Karité', unit: 'g', quantity: '0', qtdComprada: '500', price: '30', purchaseDate: '2026-10-01' }
+    ];
+    var fmT = [{ name: 'H', ingredients: [{ name: 'Manteiga vegetal', unit: 'g', qtyLot: '300' }, { name: 'Ureia', unit: 'g', qtyLot: '4.5' }] }];
+    var rsT = resumoPorMP(stT, fmT);
+    function achaR(k) { var x = null; rsT.forEach(function (r) { if (r.chave === k) x = r; }); return x; }
+    var mT = achaR('manteiga vegetal'), uT = achaR('ureia'), kT = achaR('karite');
+    ok('o estoque soma as compras da mesma matéria-prima (kg com g) e avisa quando restar 30% da última compra',
+      rsT.length === 3 && mT.fam === 'kg' && Math.abs(mT.total - 0.25) < 1e-9 && Math.abs(mT.ref - 1) < 1e-9 && mT.regra === 'compra' && mT.status === 'baixo' && mT.lotes === 0);
+    ok('sem a quantidade comprada usa o necessário por lote; sem saldo é zerado; zerado só avisa se alguma fórmula usa',
+      uT.status === 'ok' && uT.regra === 'lote' && uT.lotes === 222 && kT.status === 'zerado' && filtrarCriticos(rsT).length === 1 && filtrarCriticos(rsT)[0].chave === 'manteiga vegetal');
+    ok('quantidades aparecem na unidade legível', fmtQtd('kg', 0.25) === '250 g' && fmtQtd('kg', 1.5) === '1,5 kg' && fmtQtd('l', 0.05) === '50 ml' && fmtQtd('un', 3) === '3 un' && valorUnidade('L') === 'L' && valorUnidade('gramas') === 'g');
+    var aOk = analisarLinha({ nome: 'Manteiga vegetal', qtd: '1', un: 'kg', valor: '70' }, rsT);
+    var aErro = analisarLinha({ nome: 'Manteiga Vegetal', qtd: '1000', un: 'kg', valor: '70' }, rsT);
+    var aNova = analisarLinha({ nome: 'Cera nova', qtd: '500', un: 'g', valor: '20' }, rsT);
+    ok('a entrada mostra o preço por kg e o estoque depois, e avisa quando a unidade parece trocada',
+      aOk.aviso === '' && aOk.precoBase === 70 && aOk.html.indexOf('1,25 kg') > -1 && aErro.aviso.indexOf('Confira') === 0 && aNova.html.indexOf('nova matéria-prima') > -1 && aNova.html.indexOf('/kg') > -1 && aNova.html.indexOf('500 g') > -1);
     ok('SISTEMA: telas de receita instaladas', window.openFormModal === openFormModalNovo && typeof window.rcSeguir === 'function' && typeof window.rcAtualizarPrecos === 'function' && window.viewFormula._rec === true && window.rForms._rec === true && window.closeModal._rec === true);
     var falhas = r.filter(function (x) { return !x.ok; });
     if (console.table) console.table(r);
